@@ -5,7 +5,7 @@
 </a>
 &nbsp;
 <a href="https://tc-team-v2-landing.vercel.app/">
-  <img src="github-button.svg" height="60" alt="Learn More">
+  <img src="landing-button.svg" height="60" alt="Learn More">
 </a>
 
 An AI-powered Test Case automation pipeline **built entirely with [Claude Code](https://claude.ai/code)**.  
