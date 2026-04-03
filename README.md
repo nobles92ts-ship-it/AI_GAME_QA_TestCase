@@ -1,26 +1,26 @@
-# Game QA Testcase — TC 팀 v2
+# Game QA Testcase — TC Team v2
 
 **🔗 GitHub: https://github.com/nobles92ts-ship-it/Game_QA_Testcase**
 
-Claude Code 기반 TC 자동 생성 파이프라인.  
-기획서(Confluence)를 분석해 Google Sheets에 TC를 자동 생성·리뷰·수정한다.
+An AI-powered Test Case automation pipeline built on Claude Code.  
+Analyzes spec documents (Confluence) and automatically generates, reviews, and fixes TCs in Google Sheets.
 
-## 설치
+## Installation
 
-### 1. 레포 클론
+### 1. Clone the repo
 
 ```bash
 git clone https://github.com/nobles92ts-ship-it/Game_QA_Testcase.git
 cd Game_QA_Testcase
 ```
 
-### 2. pipeline_config.json 설정
+### 2. Configure pipeline_config.json
 
 ```bash
 cp pipeline_config.json.template pipeline_config.json
 ```
 
-`pipeline_config.json`을 열어 본인 환경에 맞게 경로 수정:
+Open `pipeline_config.json` and update the paths for your environment:
 
 ```json
 {
@@ -31,53 +31,53 @@ cp pipeline_config.json.template pipeline_config.json
 }
 ```
 
-### 3. 에이전트 설치
+### 3. Install agents and skills
 
 ```bash
-# agents/ → Claude agents 폴더로 복사
+# Copy agents to Claude agents folder
 cp agents/*.md ~/.claude/agents/
 
-# skills/ → Claude skills 폴더로 복사
+# Copy skills to Claude skills folder
 cp -r skills/* ~/.claude/skills/
 ```
 
-### 4. 에이전트 파일 경로 수정
+### 4. Update placeholders in agent files
 
-`agents/` 폴더의 각 `.md` 파일에서 아래 플레이스홀더를 본인 경로로 변경:
+Replace the placeholders in each `.md` file inside `agents/` with your actual paths:
 
-| 플레이스홀더 | 예시 |
+| Placeholder | Example |
 |---|---|
 | `{PROJECT_ROOT}` | `C:/Users/YourName/Game_QA_Testcase` |
 | `{NODE_PATH}` | `C:/Program Files/nodejs/node.exe` |
 | `{CLAUDE_SKILLS_DIR}` | `C:/Users/YourName/.claude/skills` |
 | `{CLAUDE_AGENTS_DIR}` | `C:/Users/YourName/.claude/agents` |
-| `{CLI_JS}` | Claude Code CLI 경로 |
+| `{CLI_JS}` | Path to Claude Code CLI |
 
-### 5. 인증 설정
+### 5. Authentication setup
 
-- **Google Sheets**: MCP 설정 (`~/.claude/.mcp.json`)에 Google OAuth 정보 입력
-- **Jira/Confluence**: `scripts/util/jira_config.json` 생성 (템플릿 참고)
+- **Google Sheets**: Add your Google OAuth credentials to `~/.claude/.mcp.json`
+- **Jira/Confluence**: Create `scripts/util/jira_config.json` (refer to the template)
 
-## 사용법
+## Usage
 
-Claude Code에서:
+In Claude Code:
 
 ```
-TC 팀 v2로 진행
-스프레드시트: https://docs.google.com/spreadsheets/d/...
+Start with TC Team v2
+Spreadsheet: https://docs.google.com/spreadsheets/d/...
 Confluence: https://your-site.atlassian.net/wiki/spaces/.../pages/...
 ```
 
-## 파이프라인 구조
+## Pipeline
 
 ```
-설계 → 설계검수 → TC 작성 → 리뷰1 → 수정1 → 리뷰2 → 수정2 → 리뷰3 → (수정3) → (간이검증)
+Design → Design Review → Write TC → Review 1 → Fix 1 → Review 2 → Fix 2 → Review 3 → (Fix 3) → (Quick Verify)
 ```
 
-## 구조
+## Repository Structure
 
 ```
-agents/       # Claude 에이전트 파일 (tc-팀-v2 외 6개)
-skills/       # 설계·생성·리뷰·수정·갱신·설계검수 스킬
-scripts/util/ # Google Sheets 연동 스크립트
+agents/       # Claude agent files (tc-team-v2 and 6 others)
+skills/       # Design / Write / Review / Fix / Update / Inspect skills
+scripts/util/ # Google Sheets integration scripts
 ```
