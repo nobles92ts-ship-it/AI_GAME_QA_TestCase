@@ -4,8 +4,8 @@
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40" alt="Built with Claude Code">
 </a>
 &nbsp;
-<a href="https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase">
-  <img src="github-button.svg" height="60" alt="View on GitHub">
+<a href="https://tc-team-v2-landing.vercel.app/">
+  <img src="github-button.svg" height="60" alt="Learn More">
 </a>
 
 An AI-powered Test Case automation pipeline **built entirely with [Claude Code](https://claude.ai/code)**.  
