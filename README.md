@@ -3,11 +3,9 @@
 <a href="https://claude.ai/code">
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40" alt="Built with Claude Code">
 </a>
+&nbsp;
 <a href="https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase">
-  <img src="https://img.shields.io/badge/GitHub-AI__GAME__QA__TestCase-181717?style=for-the-badge&logo=github&logoColor=white" height="40" alt="GitHub">
-</a>
-<a href="LICENSE">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" height="40" alt="MIT License">
+  <img src="github-button.svg" height="60" alt="View on GitHub">
 </a>
 
 An AI-powered Test Case automation pipeline **built entirely with [Claude Code](https://claude.ai/code)**.  
