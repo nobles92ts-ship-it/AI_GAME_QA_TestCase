@@ -1,4 +1,4 @@
-# Game QA Testcase — TC Team v2
+# AI_GAME_QA_TestCase — TC Team v2
 
 <a href="https://claude.ai/code">
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40" alt="Built with Claude Code">
