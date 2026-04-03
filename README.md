@@ -11,6 +11,8 @@
 An AI-powered Test Case automation pipeline **built entirely with [Claude Code](https://claude.ai/code)**.  
 Reads spec documents from Confluence and automatically generates, reviews, and fixes structured Test Cases in Google Sheets — with multi-round QA review built in.
 
+![TC Team v2 Pipeline](assets/pipeline-diagram.png)
+
 ---
 
 ## What It Does
