@@ -48,7 +48,7 @@ TC 작성 전 설계 단계를 책임져:
 > ⚠️ `confluence_raw.md`가 있으면 이 섹션 전체를 건너뛴다.
 
 - Atlassian MCP(`getConfluencePage`)로 **ADF 형식**으로 가져오기
-  - cloudId: `dexar.atlassian.net`
+  - cloudId: `your-site.atlassian.net`
   - pageId: URL 마지막 숫자
 - **취소선(`strike` mark) 포함 모든 서식 누락 없이 확인**
   - 취소선 텍스트는 반드시 `~~텍스트~~` 형식으로 변환
