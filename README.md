@@ -1,13 +1,13 @@
 # Game QA Testcase — TC Team v2
 
 <a href="https://claude.ai/code">
-  <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Built with Claude Code">
+  <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40" alt="Built with Claude Code">
 </a>
 <a href="https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase">
-  <img src="https://img.shields.io/badge/GitHub-AI__GAME__QA__TestCase-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
+  <img src="https://img.shields.io/badge/GitHub-AI__GAME__QA__TestCase-181717?style=for-the-badge&logo=github&logoColor=white" height="40" alt="GitHub">
 </a>
 <a href="LICENSE">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" height="40" alt="MIT License">
 </a>
 
 An AI-powered Test Case automation pipeline **built entirely with [Claude Code](https://claude.ai/code)**.  
