@@ -1,5 +1,7 @@
 # Game QA Testcase — TC 팀 v2
 
+**🔗 GitHub: https://github.com/nobles92ts-ship-it/Game_QA_Testcase**
+
 Claude Code 기반 TC 자동 생성 파이프라인.  
 기획서(Confluence)를 분석해 Google Sheets에 TC를 자동 생성·리뷰·수정한다.
 
