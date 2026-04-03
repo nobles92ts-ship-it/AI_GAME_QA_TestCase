@@ -8,8 +8,8 @@ const url = require('url');
 const open = require('child_process').exec;
 const fs = require('fs');
 
-const OAUTH_PATH = 'C:/Users/Admin/Downloads/AI_AntiGravity/구글 클라우드 API 키값/client_secret_143528055711-aheoa4a5qnj3g6eq7b0ch9bth84utpqu.apps.googleusercontent.com.json';
-const TOKEN_PATH = 'C:/Users/Admin/Downloads/AI_AntiGravity/구글 클라우드 API 키값/oauth_token.json';
+const OAUTH_PATH = process.env.GOOGLE_OAUTH_CLIENT_SECRET_PATH || './credentials/client_secret.json';
+const TOKEN_PATH = process.env.GOOGLE_OAUTH_TOKEN_PATH || './credentials/oauth_token.json';
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 
 async function getAuthClient() {

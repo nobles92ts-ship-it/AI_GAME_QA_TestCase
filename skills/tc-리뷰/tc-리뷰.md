@@ -20,7 +20,7 @@ TC 데이터는 **Google Sheets MCP로 직접 읽고, 기획서(tc_design.md)를
    - spreadsheet_id: SHEET_ID
    - range: "[TAB_NAME]!A:J"
 3. specs 폴더의 tc_design.md를 읽어 기획서 구조 파악:
-   - 경로: C:/Users/Admin/Downloads/AI_AntiGravity/team/specs/[기능명]/tc_design.md
+   - 경로: {PROJECT_ROOT}/team/specs/[기능명]/tc_design.md
    - 대/중/소분류 목록, 암묵적 요구사항, 리스크 레벨, 커버리지 매핑표 확인
 4. TC와 기획서를 병행 비교하며 리뷰 진행
    - "기획서의 이 항목이 TC에서 실제로 테스트되고 있는가?" 관점 유지

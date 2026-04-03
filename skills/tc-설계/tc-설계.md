@@ -22,12 +22,12 @@ TC 작성 전 설계 단계를 책임져:
 
 ## 핵심 파일 경로
 
-- MD 업로드 스크립트: `C:/Users/Admin/Downloads/AI_AntiGravity/scripts/util/upload_md_to_drive.js`
+- MD 업로드 스크립트: `{PROJECT_ROOT}/scripts/util/upload_md_to_drive.js`
 - 구글 드라이브 기획서 폴더 ID: `1YxK2WVH6nr-e0_2qjDb4DSxXgAffsA2q`
 - MD 파일 저장 위치: `C:\Users\Admin\Downloads\AI_AntiGravity\`
 - **로컬 specs 저장 위치**: `C:\Users\Admin\Downloads\AI_AntiGravity\team\specs\[기능명]\`
-- Node.js 경로: `C:/Users/Admin/Downloads/AI_AntiGravity/node-v20.11.1-win-x64/node.exe`
-- 상태 파일: `C:/Users/Admin/Downloads/AI_AntiGravity/team/status/tc-designer.txt`
+- Node.js 경로: `{NODE_PATH}`
+- 상태 파일: `{PROJECT_ROOT}/team/status/tc-designer.txt`
 
 ---
 
@@ -63,7 +63,7 @@ TC 작성 전 설계 단계를 책임져:
 ### Excel (xlsx/xls) 처리
 
 ```bash
-C:/Users/Admin/Downloads/AI_AntiGravity/node-v20.11.1-win-x64/node.exe -e "
+{NODE_PATH} -e "
 const XLSX = require('xlsx');
 const wb = XLSX.readFile('[파일경로]');
 wb.SheetNames.forEach(name => {
@@ -74,7 +74,7 @@ wb.SheetNames.forEach(name => {
 "
 ```
 
-> xlsx 모듈 없을 시: `cd C:/Users/Admin/Downloads/AI_AntiGravity && npm install xlsx` 후 재실행.
+> xlsx 모듈 없을 시: `cd "{PROJECT_ROOT}" && npm install xlsx` 후 재실행.
 
 ### 기능명 추출 규칙
 
