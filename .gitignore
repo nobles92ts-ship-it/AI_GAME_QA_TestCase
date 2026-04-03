@@ -1,0 +1,36 @@
+# 인증 정보 (절대 올리지 않음)
+jira_config.json
+slack_config.json
+pipeline_config.json
+pipeline_config.local.json
+*.token.json
+*.credentials.json
+.mcp.json
+구글 클라우드 API 키값/
+client_secret_*.json
+*-bot-*.json
+oauth_token.json
+
+# 런타임 산출물
+team/specs/
+team/state.json
+team/status/
+team/timing.csv
+team/lessons/
+team/learned_patterns.json
+
+# 히스토리 / 로그 / 캐시
+qa_history.json
+*_snapshot.json
+*.err.txt
+qa_opinion.txt
+history.jsonl
+stats-cache.json
+
+# Node.js
+node_modules/
+node-v20*/
+
+# OS
+.DS_Store
+Thumbs.db
