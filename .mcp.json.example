@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "google-sheets": {
+      "command": "node",
+      "args": ["PATH_TO_NODE_MODULES/mcp-google-sheets/dist/index.js"],
+      "env": {
+        "GOOGLE_SHEETS_CLIENT_ID": "YOUR_GOOGLE_CLIENT_ID",
+        "GOOGLE_SHEETS_CLIENT_SECRET": "YOUR_GOOGLE_CLIENT_SECRET",
+        "TOKEN_PATH": "PATH_TO_HOME/.mcp-google-sheets-token.json"
+      }
+    },
+    "claude_ai_Atlassian": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-server-atlassian"],
+      "env": {
+        "ATLASSIAN_SITE_URL": "https://YOUR_SITE.atlassian.net",
+        "ATLASSIAN_USER_EMAIL": "your@email.com",
+        "ATLASSIAN_API_TOKEN": "YOUR_ATLASSIAN_API_TOKEN"
+      }
+    }
+  }
+}
