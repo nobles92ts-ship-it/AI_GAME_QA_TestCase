@@ -203,8 +203,3 @@ Claude Code makes it possible to build sophisticated multi-agent workflows like 
 
 > Want to build something similar? Start at [claude.ai/code](https://claude.ai/code).
 
----
-
-## License
-
-MIT License
