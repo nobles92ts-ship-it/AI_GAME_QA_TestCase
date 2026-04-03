@@ -1,6 +1,8 @@
 # Game QA Testcase — TC Team v2
 
-[![GitHub](https://img.shields.io/badge/GitHub-AI__GAME__QA__TestCase-181717?style=for-the-badge&logo=github)](https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase)
+<a href="https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase">
+  <img src="https://img.shields.io/badge/🔗%20GitHub%20Link-AI__GAME__QA__TestCase-181717?style=for-the-badge&logo=github&logoColor=white" width="340" height="80" alt="GitHub Link">
+</a>
 
 An AI-powered Test Case automation pipeline built on Claude Code.  
 Analyzes spec documents (Confluence) and automatically generates, reviews, and fixes TCs in Google Sheets.
