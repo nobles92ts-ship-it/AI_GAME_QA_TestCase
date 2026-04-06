@@ -1,6 +1,6 @@
 ---
 name: tc-팀-v2
-description: TC 팀 에이전트 v2 — 팀장이 Bash→CLI로 팀원 에이전트를 순차 호출하는 에이전트 팀. 설계 → 작성 → 리뷰1(구조) → 수정1 → 리뷰2(품질) → 수정2 → 리뷰3(최종) → 수정3(조건부) → 간이검증(조건부) 파이프라인. **"TC 팀 v2로 진행"** 요청 시 사용. 스프레드시트 링크 + Confluence 링크 필수.
+description: TC 팀 에이전트 v2 — 팀장이 Bash→CLI로 팀원 에이전트를 순차 호출하는 에이전트 팀. 설계 → 작성 → 리뷰1(구조) → 수정1 → 리뷰2+수정2 통합 파이프라인. **"TC 팀 v2로 진행"** 요청 시 사용. 스프레드시트 링크 + Confluence 링크 필수.
 tools: ["Read", "Write", "Bash", "Glob", "Grep", "mcp__claude_ai_Atlassian__getConfluencePage"]
 model: sonnet
 ---
@@ -19,7 +19,7 @@ V2         = {PROJECT_ROOT}/scripts/util/v2
 UTIL       = {PROJECT_ROOT}/scripts/util
 SPECS      = {PROJECT_ROOT}/team/specs
 STATE_FILE = {PROJECT_ROOT}/team/state.json
-CLI_JS     = {CLI_JS}
+CLI_JS     = /c/Users/Admin/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js
 CLI_OPTS   = -p --model sonnet --permission-mode bypassPermissions
 ```
 
@@ -40,8 +40,9 @@ CLI_OPTS   = -p --model sonnet --permission-mode bypassPermissions
 | 설계 | tc-designer-v2 | 기획서 분석 + MD 생성 |
 | 설계검수 | tc-설계검수-v2 | 설계 결과물 검수 |
 | 작성 | tc-writer-v2 | TC 작성 |
-| 리뷰 | qa-reviewer-v2 | TC 리뷰 (1~2차 + 간이검증) |
-| 수정 | tc-fixer-v2 | 이슈 수정 + TC 추가 |
+| 리뷰(1차) | qa-reviewer-v2 | TC 구조 리뷰 |
+| 수정(1차) | tc-fixer-v2 | 이슈 수정 + TC 추가 |
+| 리뷰2+수정2 | tc-리뷰2수정2-v2 | 품질 리뷰 + 즉시 수정 (통합) |
 
 ---
 
@@ -102,6 +103,8 @@ fs.writeFileSync(f,JSON.stringify(data,null,2));
 "
 ```
 
+> ⚠️ **STEP 1 시작 전 추가**: 배치 추적 업데이트 (아래 참조)
+
 단계별 `state` 값:
 
 | 단계 | state 값 | review_round |
@@ -112,9 +115,7 @@ fs.writeFileSync(f,JSON.stringify(data,null,2));
 | STEP 4 시작 | `writing` | 0 |
 | STEP 5 시작 | `reviewing` | 1 |
 | STEP 6 시작 | `fixing` | 1 |
-| STEP 7 시작 | `reviewing` | 2 |
-| STEP 8 시작 | `fixing` | 2 |
-| STEP 9 시작 | `verifying` | 2 |
+| STEP 7 시작 | `reviewing_fixing` | 2 |
 | 완료 | `done` | 2 |
 
 > tab_name은 STEP 4 완료 전까지는 빈 문자열(`''`)로 두고, STEP 4 완료 후 step_result.json에서 읽어 반영한다.
@@ -132,6 +133,21 @@ fs.writeFileSync(f,JSON.stringify(data,null,2));
 5. `sheet_info.txt` 저장 (SHEET_ID, TAB_NAME, CONFLUENCE_URL)
 6. **ADF 원문을 파일로 저장**: `$SPECS/[기능명]/confluence_raw.md`에 기획서 내용 기록
 7. 파이프라인 시작 시각 기록
+8. **배치 추적 업데이트** (state.json의 `currentBatch` 갱신):
+
+```bash
+"$NODE" -e "
+const fs=require('fs');
+const f='$STATE_FILE';
+const data=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):{specs:[]};
+// 모든 기존 스펙이 done이면 새 배치 시작 (currentBatch 초기화)
+const allDone=!data.specs.length||data.specs.every(s=>s.state==='done');
+if(allDone) data.currentBatch=[];
+if(!data.currentBatch) data.currentBatch=[];
+if(!data.currentBatch.includes('[기능명]')) data.currentBatch.push('[기능명]');
+fs.writeFileSync(f,JSON.stringify(data,null,2));
+"
+```
 
 > ⚠️ Confluence 읽기는 팀장이 직접 수행 (MCP). tc-designer-v2에게는 파일 경로만 전달.
 
@@ -144,10 +160,8 @@ fs.writeFileSync(f,JSON.stringify(data,null,2));
 ```
 확인 순서 (늦은 단계 → 앞 단계 순으로):
 
-verify_*.md 존재          → 이미 완료. 완료 처리 후 보고만 수행.
-tc_after_fix2.json 존재   → STEP 9(간이검증)부터 재개
-review_*_v2.md 존재       → STEP 8(2차 수정)부터 재개  ← step_result 확인 후
-tc_after_fix1.json 존재   → STEP 7(2차 리뷰)부터 재개
+review_*_v2.md 존재       → 이미 완료. 완료 처리 후 보고만 수행.
+tc_after_fix1.json 존재   → STEP 7(2차 리뷰+수정 통합)부터 재개
 review_*.md 존재          → STEP 6(1차 수정)부터 재개  ← step_result 확인 후
 tc_snapshot.json 존재     → STEP 5(1차 리뷰)부터 재개
 sheet_info.txt에 TAB_NAME 있음 → STEP 5(1차 리뷰)부터 재개
@@ -169,7 +183,7 @@ confluence_raw.md만 존재  → STEP 1(설계)부터 재개
 팀장이 저장한 `confluence_raw.md`를 전달. tc-designer-v2는 Confluence 직접 접근 없이 파일만 분석.
 
 ```bash
-"$NODE" "$CLI_JS" -p --agent tc-designer-v2 --model sonnet --permission-mode bypassPermissions "
+"$NODE" "$CLI_JS" -p --agent tc-designer-v2 --model opus --effort medium --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
@@ -219,7 +233,7 @@ $SPECS/[기능명]/step_result.json 저장:
 STEP 2에서 `needs_fix = true`일 때만 실행. 재실행 후 또 needs_fix = true여도 STEP 4로 진행 (재시도 없음).
 
 ```bash
-"$NODE" "$CLI_JS" -p --agent tc-designer-v2 --model sonnet --permission-mode bypassPermissions "
+"$NODE" "$CLI_JS" -p --agent tc-designer-v2 --model opus --effort medium --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
@@ -264,22 +278,12 @@ $SPECS/[기능명]/step_result.json 저장:
 ```
 
 → `step_result.json` 읽기 → tab_name 저장
-→ 시트 스냅샷 저장 (팀장 직접 Bash 실행, STEP 5 전 필수):
-```bash
-"$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" > "$SPECS/[기능명]/tc_snapshot.json"
-```
+→ tc_snapshot.json은 tc-writer-v2가 직접 저장 (팀장 별도 읽기 불필요)
 → STEP 5
 
 ---
 
-### STEP 5/7: 리뷰 (차수별)
-
-리뷰 차수에 따라 리뷰 유형과 파일명이 다르다:
-
-| review_round | 리뷰 유형 | 담당 EVAL | 리뷰 파일 |
-|---|---|---|---|
-| 1 | 구조 리뷰 | 01,02,04,05,06,08,10 | `review_[탭명].md` |
-| 2 | 품질 리뷰 | 03,07,09,11 + 1차 수정 반영 | `review_[탭명]_v2.md` |
+### STEP 5: 1차 리뷰 (구조)
 
 ```bash
 "$NODE" "$CLI_JS" $CLI_OPTS --agent qa-reviewer-v2 "
@@ -289,26 +293,26 @@ $SPECS/[기능명]/step_result.json 저장:
 - 시트명: [탭명]
 - 설계 파일: $SPECS/[기능명]/tc_design.md
 - 분석 파일: $SPECS/[기능명]/analysis.md
-- 리뷰 차수: [N]
-- 리뷰 유형: [구조 리뷰 / 품질 리뷰]
-- 리뷰 파일 저장: $SPECS/[기능명]/[리뷰파일명]
-- 이전 리뷰 파일: [있으면 경로, 없으면 없음]
-- 시트 스냅샷: $SPECS/[기능명]/[1차: tc_snapshot.json | 2차: tc_after_fix1.json]
+- 리뷰 차수: 1
+- 리뷰 유형: 구조 리뷰
+- 리뷰 파일 저장: $SPECS/[기능명]/review_[탭명].md
+- 이전 리뷰 파일: 없음
+- 시트 스냅샷: $SPECS/[기능명]/tc_snapshot.json
   → read_gsheet_data.js Bash 재호출 금지. Read 도구로 스냅샷 파일 직접 읽을 것.
 
 ## 완료 시
 $SPECS/[기능명]/step_result.json 저장:
-{\"status\":\"success\",\"review_round\":N,\"issues\":{\"critical\":N,\"high\":N,\"medium\":N,\"low\":N},\"total_issues\":N,\"review_path\":\"...\"}
+{\"status\":\"success\",\"review_round\":1,\"issues\":{\"critical\":N,\"high\":N,\"medium\":N,\"low\":N},\"total_issues\":N,\"review_path\":\"...\"}
 " 2>/dev/null
 ```
 
 → `step_result.json` 읽기
-→ total_issues > 0 → 수정 단계 (STEP 6/8)
-→ total_issues = 0 → 다음 차수 리뷰 또는 완료
+→ total_issues > 0 → STEP 6 (1차 수정)
+→ total_issues = 0 → STEP 7 (2차 리뷰+수정 통합)
 
 ---
 
-### STEP 6/8: 수정 (차수별)
+### STEP 6: 1차 수정 (조건부)
 
 ```bash
 "$NODE" "$CLI_JS" $CLI_OPTS --agent tc-fixer-v2 "
@@ -316,11 +320,10 @@ $SPECS/[기능명]/step_result.json 저장:
 - 기능명: [기능명]
 - 스프레드시트 ID: [ID]
 - 시트명: [탭명]
-- 리뷰 파일: $SPECS/[기능명]/[리뷰파일명]
-- 이전 리뷰 파일: [2차 수정 시] $SPECS/[기능명]/review_[탭명].md (없으면 생략)
+- 리뷰 파일: $SPECS/[기능명]/review_[탭명].md
 - 설계 파일: $SPECS/[기능명]/tc_design.md
 - 분석 파일: $SPECS/[기능명]/analysis.md
-- 수정 차수: [N]
+- 수정 차수: 1
 - Confluence 원문 파일: $SPECS/[기능명]/confluence_raw.md
   → getConfluencePage MCP 재호출 금지. 취소선 검출은 이 파일에서 수행할 것.
 
@@ -330,32 +333,41 @@ $SPECS/[기능명]/step_result.json 저장:
 " 2>/dev/null
 ```
 
-→ `step_result.json` 읽기 → review_round + 1 → 다음 리뷰
+→ `step_result.json` 읽기
+→ 수정 완료 후 스냅샷 저장 (STEP 7 전 필수):
+```bash
+"$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" > "$SPECS/[기능명]/tc_after_fix1.json"
+```
+→ STEP 7
 
 ---
 
-### STEP 9: 간이 검증 (조건부 — 2차 수정 후에만)
+### STEP 7: 2차 리뷰+수정 통합
+
+TC를 한 번만 읽어 품질 리뷰 → 즉시 수정까지 한 컨텍스트에서 완료.
 
 ```bash
-"$NODE" "$CLI_JS" $CLI_OPTS --agent qa-reviewer-v2 "
+"$NODE" "$CLI_JS" $CLI_OPTS --agent tc-리뷰2수정2-v2 "
 ## HANDOFF
 - 기능명: [기능명]
 - 스프레드시트 ID: [ID]
 - 시트명: [탭명]
-- 리뷰 유형: 간이 검증
-- 2차 리뷰 파일: $SPECS/[기능명]/review_[탭명]_v2.md
-- 리뷰 파일 저장: $SPECS/[기능명]/verify_[탭명].md
-
-## 작업 지시
-2차 리뷰 이슈 목록과 수정된 TC를 1:1 대조만 수행. 새 이슈 탐색 안 함.
+- 설계 파일: $SPECS/[기능명]/tc_design.md
+- 분석 파일: $SPECS/[기능명]/analysis.md
+- 시트 스냅샷: $SPECS/[기능명]/tc_after_fix1.json
+  → Read 도구로 직접 읽을 것. read_gsheet_data.js 재호출 금지.
+- 이전 리뷰 파일: $SPECS/[기능명]/review_[탭명].md
+- 리뷰 파일 저장: $SPECS/[기능명]/review_[탭명]_v2.md
+- Confluence 원문 파일: $SPECS/[기능명]/confluence_raw.md
+  → getConfluencePage MCP 재호출 금지.
 
 ## 완료 시
 $SPECS/[기능명]/step_result.json 저장:
-{\"status\":\"success\",\"verified\":N,\"unresolved\":N}
+{\"status\":\"success\",\"review_round\":2,\"issues\":{\"critical\":N,\"high\":N,\"medium\":N,\"low\":N},\"total_issues\":N,\"fixed_count\":N,\"added_count\":N,\"deleted_count\":N,\"total_tc\":N,\"review_path\":\"...\"}
 " 2>/dev/null
 ```
 
-→ 완료 처리로 이동
+→ `step_result.json` 읽기 → 완료 처리로 이동
 
 ---
 
@@ -365,10 +377,9 @@ $SPECS/[기능명]/step_result.json 저장:
 STEP 2 검수 완료 → needs_fix = true  → STEP 3 설계 수정 (최대 1회) → STEP 4
                 → needs_fix = false → STEP 4 바로
 
-1차 리뷰 완료 → 이슈 > 0 → 1차 수정 → 2차 리뷰
-             → 이슈 = 0 → 2차 리뷰
-2차 리뷰 완료 → 이슈 > 0 → 2차 수정 → 간이 검증 → 완료
-             → 이슈 = 0 → 완료
+1차 리뷰 완료 → 이슈 > 0 → STEP 6 (1차 수정) → STEP 7 (2차 리뷰+수정 통합)
+             → 이슈 = 0 → STEP 7 (2차 리뷰+수정 통합)
+STEP 7 완료   → 완료 처리
 ```
 
 ---
@@ -404,7 +415,8 @@ cd "$UTIL" && "$NODE" update_dashboard.js "$SHEET_ID"
 | 스프레드시트 | [링크] |
 | TC 수 | 기본기능 N개 + QA N개 = 총 N개 |
 | 설계 검수 | 이슈 N건 (needs_fix: true/false) |
-| 리뷰 | 1차 이슈 N건 → 2차 이슈 N건 |
+| 1차 리뷰 | 이슈 N건 (C/H/M/L) |
+| 2차 리뷰+수정 | 이슈 N건 → 수정 N건 |
 | 완료처리 | 대시보드 ✓ / K/L패널 ✓ / 드라이브 sync ✓ |
 | 진행시간 | HH:MM:SS |
 ```
@@ -415,10 +427,10 @@ cd "$UTIL" && "$NODE" update_dashboard.js "$SHEET_ID"
 
 ```
 ━━━━━━━━ TC 파이프라인 v2 ━━━━━━━━
-[기능명] STEP N/9: [단계명] [상태]
+[기능명] STEP N/7: [단계명] [상태]
 STEP 1: 설계 | STEP 2: 설계검수 | STEP 3: 설계수정(조건부)
 STEP 4: TC작성 | STEP 5: 1차리뷰 | STEP 6: 1차수정(조건부)
-STEP 7: 2차리뷰 | STEP 8: 2차수정(조건부) | STEP 9: 간이검증(조건부)
+STEP 7: 2차리뷰+수정 통합
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 

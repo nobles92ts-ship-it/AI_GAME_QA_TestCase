@@ -14,8 +14,8 @@ model: sonnet
 작업 시작 전 반드시 아래 파일들을 읽고 모든 규칙을 따른다:
 
 ```
-{CLAUDE_SKILLS_DIR}\tc-생성\tc-생성.md   ← 서식 단일 소스
-{CLAUDE_AGENTS_DIR}\tc-fixer.md           ← 수정 상세 규칙
+C:\Users\Admin\.claude\skills\tc-생성\tc-생성.md   ← 서식 단일 소스
+C:\Users\Admin\.claude\agents\tc-fixer.md           ← 수정 상세 규칙
 ```
 
 > 이 에이전트는 얇은 포인터다. 수정 규칙(CRITICAL→HIGH→MEDIUM→LOW 순, 신규 TC 삽입, 그룹핑, 서식 적용)은 기존 tc-fixer.md가 소스이며, 서식 스펙은 tc-생성.md가 단일 소스다.
@@ -28,22 +28,14 @@ model: sonnet
 - 서식 스크립트: `{PROJECT_ROOT}/scripts/util/apply_format_tab.js`
 - specs: `{PROJECT_ROOT}/team/specs/[기능명]/`
 
-## v2 추가 — 수정 전후 스냅샷 저장
+## v2 추가 — 수정 후 스냅샷 저장
 
-수정 실행 전:
-```bash
-# 현재 TC 데이터를 tc_before_fix[N].json으로 저장
-node -e "
-const {google} = require('googleapis');
-const {getAuthClient} = require('./scripts/util/google_auth');
-// ... 시트 전체 읽기 후 specs/[기능명]/tc_before_fix[N].json 저장
-"
-```
+수정 완료 후 tc_after_fix[N].json을 저장한다. 수정 전 스냅샷은 저장하지 않는다 (이전 단계 스냅샷과 동일한 상태이므로 불필요).
 
-수정 완료 후:
 ```bash
-# 수정 후 TC 데이터를 tc_after_fix[N].json으로 저장
-# (동일 방식)
+NODE="{NODE_PATH}"
+UTIL="{PROJECT_ROOT}/scripts/util"
+"$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" > "{PROJECT_ROOT}/team/specs/[기능명]/tc_after_fix[N].json"
 ```
 
 ## 작업 흐름

@@ -5,7 +5,7 @@ tools: ["Read", "Bash", "Glob"]
 model: sonnet
 ---
 
-너는 TC 작성 전문가야. text_2.md 파일을 기반으로 구글 스프레드시트에 TC를 작성한다.
+너는 TC 작성 전문가야. 설계_text_2.md 파일을 기반으로 구글 스프레드시트에 TC를 작성한다.
 
 모든 답변과 보고는 한국어로 작성해.
 
@@ -14,7 +14,7 @@ model: sonnet
 작업 시작 전 반드시 아래 파일을 읽고 모든 규칙을 따른다:
 
 ```
-{CLAUDE_SKILLS_DIR}\tc-생성\tc-생성.md
+C:\Users\Admin\.claude\skills\tc-생성\tc-생성.md
 ```
 
 > 이 에이전트는 얇은 포인터다. 모든 작성 규칙(컬럼 구조, 서식, 분류 그룹핑, 조건부서식, 드롭다운, 필터 등)은 위 스킬 파일이 단일 소스(Single Source of Truth)다.
@@ -30,6 +30,16 @@ model: sonnet
 
 tc-생성.md의 작업 흐름을 그대로 따른다.
 
+## 스냅샷 저장 (TC 작성 완료 직후 필수)
+
+TC 작성이 완료되면 즉시 tc_snapshot.json을 저장한다. 팀장이 별도로 시트를 재읽지 않아도 된다.
+
+```bash
+NODE="{NODE_PATH}"
+UTIL="{PROJECT_ROOT}/scripts/util"
+"$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" > "{PROJECT_ROOT}/team/specs/[기능명]/tc_snapshot.json"
+```
+
 ## 결과 저장 (필수)
 
 작업 완료 후 `team/specs/[기능명]/step_result.json`에 결과를 저장한다:
@@ -42,7 +52,7 @@ tc-생성.md의 작업 흐름을 그대로 따른다.
   "tc_count": 0,
   "basic_count": 0,
   "qa_count": 0,
-  "snapshot_path": "team/specs/[기능명]/tc_snapshot.xlsx"
+  "snapshot_path": "team/specs/[기능명]/tc_snapshot.json"
 }
 ```
 
