@@ -77,24 +77,30 @@ The script automatically:
 
 ### 3. Configure credentials
 
-**Google Sheets (MCP)** — add to `~/.claude/.mcp.json`:
+**Google Sheets (MCP)** — install the MCP server, then add to `~/.claude/.mcp.json`:
+
+```bash
+npm install -g mcp-google-sheets
+npm root -g   # copy this path — you'll need it below
+```
 
 ```json
 {
   "mcpServers": {
     "google-sheets": {
       "command": "node",
-      "args": ["PATH/mcp-google-sheets/dist/index.js"],
+      "args": ["/YOUR_NPM_GLOBAL_ROOT/mcp-google-sheets/dist/index.js"],
       "env": {
         "GOOGLE_SHEETS_CLIENT_ID": "YOUR_CLIENT_ID",
         "GOOGLE_SHEETS_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
-        "TOKEN_PATH": "PATH/.mcp-google-sheets-token.json"
+        "TOKEN_PATH": "/YOUR_HOME/.mcp-google-sheets-token.json"
       }
     }
   }
 }
 ```
 
+> Replace `/YOUR_NPM_GLOBAL_ROOT` with the output of `npm root -g`.  
 > See [`.mcp.json.example`](.mcp.json.example) for the full template including Atlassian MCP.
 
 **Google OAuth (for scripts):**

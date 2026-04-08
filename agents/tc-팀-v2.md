@@ -19,7 +19,7 @@ V2         = {PROJECT_ROOT}/scripts/util/v2
 UTIL       = {PROJECT_ROOT}/scripts/util
 SPECS      = {PROJECT_ROOT}/team/specs
 STATE_FILE = {PROJECT_ROOT}/team/state.json
-CLI_JS     = /c/Users/Admin/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js
+CLI_JS     = {CLI_JS}
 CLI_OPTS   = -p --model sonnet --permission-mode bypassPermissions
 ```
 
@@ -233,7 +233,7 @@ $SPECS/[기능명]/step_result.json 저장:
 STEP 2에서 `needs_fix = true`일 때만 실행. 재실행 후 또 needs_fix = true여도 STEP 4로 진행 (재시도 없음).
 
 ```bash
-"$NODE" "$CLI_JS" -p --agent tc-designer-v2 --model opus --effort medium --permission-mode bypassPermissions "
+"$NODE" "$CLI_JS" -p --agent tc-designer-v2 --model opus --effort low --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
@@ -315,7 +315,7 @@ $SPECS/[기능명]/step_result.json 저장:
 ### STEP 6: 1차 수정 (조건부)
 
 ```bash
-"$NODE" "$CLI_JS" $CLI_OPTS --agent tc-fixer-v2 "
+"$NODE" "$CLI_JS" -p --model haiku --permission-mode bypassPermissions --agent tc-fixer-v2 "
 ## HANDOFF
 - 기능명: [기능명]
 - 스프레드시트 ID: [ID]

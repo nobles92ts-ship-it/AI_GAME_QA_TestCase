@@ -1,4 +1,6 @@
 # 인증 정보 (절대 올리지 않음)
+.env
+credentials/client_secret.json
 jira_config.json
 slack_config.json
 pipeline_config.json

@@ -30,11 +30,13 @@ if (-not $NodePath) {
 }
 Write-Host "[OK] Node.js: $NodePath"
 
-# 3. Claude Code CLI 경로 감지
-$CliPath = (Get-Command claude -ErrorAction SilentlyContinue)?.Source
-if (-not $CliPath) {
-    Write-Host "[WARN] Claude Code CLI를 찾을 수 없습니다. 설치 후 agent 파일의 {CLI_JS}를 직접 수정해주세요." -ForegroundColor Yellow
-    $CliPath = "claude"
+# 3. Claude Code cli.js 경로 감지 (npm global root 기반)
+$NpmRoot = (npm root -g 2>$null)?.Trim()
+$CliPath = if ($NpmRoot) { "$NpmRoot/@anthropic-ai/claude-code/cli.js" } else { "" }
+if (-not $CliPath -or -not (Test-Path $CliPath)) {
+    Write-Host "[WARN] Claude Code cli.js를 찾을 수 없습니다. 설치 후 agent 파일의 {CLI_JS}를 직접 수정해주세요." -ForegroundColor Yellow
+    Write-Host "       설치: npm install -g @anthropic-ai/claude-code" -ForegroundColor Yellow
+    $CliPath = "CLI_JS_NOT_FOUND"
 }
 Write-Host "[OK] Claude CLI: $CliPath"
 

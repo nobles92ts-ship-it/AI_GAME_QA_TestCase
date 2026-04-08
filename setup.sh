@@ -28,11 +28,16 @@ if [ -z "$NODE_PATH" ]; then
 fi
 echo "[OK] Node.js: $NODE_PATH"
 
-# 3. Claude Code CLI 경로 감지
-CLI_JS=$(which claude 2>/dev/null || echo "")
-if [ -z "$CLI_JS" ]; then
-  echo "[WARN] Claude Code CLI를 찾을 수 없습니다. 설치 후 agent 파일의 {CLI_JS}를 직접 수정해주세요."
-  CLI_JS="claude"
+# 3. Claude Code cli.js 경로 감지 (npm global root 기반)
+NPM_ROOT=$(npm root -g 2>/dev/null || echo "")
+CLI_JS=""
+if [ -n "$NPM_ROOT" ]; then
+  CLI_JS="$NPM_ROOT/@anthropic-ai/claude-code/cli.js"
+fi
+if [ -z "$CLI_JS" ] || [ ! -f "$CLI_JS" ]; then
+  echo "[WARN] Claude Code cli.js를 찾을 수 없습니다. 설치 후 agent 파일의 {CLI_JS}를 직접 수정해주세요."
+  echo "       설치: npm install -g @anthropic-ai/claude-code"
+  CLI_JS="CLI_JS_NOT_FOUND"
 fi
 echo "[OK] Claude CLI: $CLI_JS"
 
