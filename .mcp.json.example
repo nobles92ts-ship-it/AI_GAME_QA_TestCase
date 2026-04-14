@@ -1,5 +1,14 @@
 {
   "mcpServers": {
+    "gemma4": {
+      "command": "node",
+      "args": ["PATH_TO_CLAUDE_HOME/.claude/scripts/mcp-gemma4.js"],
+      "env": {
+        "GEMMA4_MODEL": "gemma4:31b",
+        "OLLAMA_URL": "http://localhost:11434/api/generate",
+        "GEMMA4_TIMEOUT_MS": "300000"
+      }
+    },
     "google-sheets": {
       "command": "node",
       "args": ["PATH_TO_NODE_MODULES/mcp-google-sheets/dist/index.js"],
