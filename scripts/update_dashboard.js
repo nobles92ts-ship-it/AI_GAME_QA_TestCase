@@ -7,7 +7,7 @@
 const { getAuthClient } = require('./google_auth');
 const { google } = require('googleapis');
 
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID || '1Q-CsPTRB2UO9hPxG50aigBBEEXi4uQuVAMeTFHCP_hY';
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID || process.env.MASTER_DASHBOARD_ID;
 const DASHBOARD_NAME = '대시보드';
 
 const MAX_TC_PER_BLOCK = 5;   // 블록당 최대 TC 시트 수 (전체 제외)

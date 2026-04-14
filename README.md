@@ -42,8 +42,15 @@ Confluence Spec  ──►  Design  ──►  Write TC  ──►  Review × 3 
 |------|---------|
 | [Claude Code](https://claude.ai/code) | AI agent runtime — required |
 | [Node.js](https://nodejs.org) v18+ | Scripts for Google Sheets integration |
+| [Python](https://python.org) 3.10+ | Gemma4 helper scripts (stdlib only, no extra packages) |
+| [Ollama](https://ollama.com) | Local LLM runtime for Gemma4 (fast, offline, free) |
+| Gemma model (`ollama pull gemma4:31b`) | Default `gemma4:31b` (~18GB). Smaller: `gemma4:12b`, `gemma4:4b` |
 | Google Cloud OAuth credentials | Read/write access to Google Sheets & Drive |
 | Atlassian account | Read access to Confluence spec pages |
+
+> **Note**: Gemma4 via Ollama is used as a fast, free, offline fallback for TC writing/fixing/reviewing tasks. Claude handles higher-level orchestration and review. Both are required.
+
+See [docs/PREREQUISITES.md](docs/PREREQUISITES.md) for detailed installation instructions.
 
 ---
 
@@ -169,11 +176,15 @@ AI_GAME_QA_TestCase/
 ├── agents/                 # Claude agent definitions (install to ~/.claude/agents/)
 │   ├── tc-팀-v2.md        # Orchestrator — runs the full pipeline
 │   ├── tc-designer-v2.md  # Spec analysis + TC design
+│   ├── tc-설계검수-v2.md  # Design quality inspection
 │   ├── tc-writer-v2.md    # Writes TCs to Google Sheets
 │   ├── qa-reviewer-v2.md  # Multi-round QA review
 │   ├── tc-fixer-v2.md     # Applies review fixes
-│   ├── tc-updater-v2.md   # Updates TCs when spec changes
-│   └── tc-설계검수-v2.md  # Design quality inspection
+│   ├── tc-리뷰2수정2-v2.md # Combined 2nd review + fix (merged context)
+│   └── tc-updater-v2.md   # Updates TCs when spec changes
+│
+├── commands/               # Claude Code slash commands
+│   └── tc-v2.md            # /tc-v2 — one-shot pipeline launcher
 │
 ├── skills/                 # Knowledge modules (install to ~/.claude/skills/)
 │   ├── tc-설계/           # TC design rules
@@ -181,14 +192,37 @@ AI_GAME_QA_TestCase/
 │   ├── tc-리뷰/           # Review criteria
 │   ├── tc-수정/           # Fix rules
 │   ├── tc-갱신/           # Update rules
-│   └── tc-설계검수/       # Design inspection rules
+│   ├── tc-설계검수/       # Design inspection rules
+│   ├── 완료처리/           # Pipeline-tail orchestration (dashboard + K/L panel + Drive sync)
+│   └── tc-대시보드/        # Dashboard rules SSoT (referenced by 완료처리)
 │
-├── scripts/util/           # Google Sheets integration scripts
-│   ├── google_auth.js      # OAuth authentication
-│   ├── create_gsheet_tc.js # Write TC rows to sheet
-│   ├── update_dashboard.js # Dashboard refresh
-│   └── v2/                 # Pipeline state & timing infrastructure
+├── tc-team-v2/             # Pipeline v2 internal helpers
+│   ├── scripts/            # Python helpers for local Gemma4 batch jobs
+│   │   ├── gemma4_analyze.py
+│   │   ├── gemma4_tc_writer.py
+│   │   ├── gemma4_tc_reviewer.py
+│   │   ├── gemma4_tc_fixer.py
+│   │   └── gemma4_utils.py
+│   ├── skills/gemma4/      # Gemma4 writer/fixer skill definitions
+│   └── docs/               # Reference diagrams
 │
+├── scripts/                # Node.js utilities
+│   ├── mcp-gemma4.js       # Gemma4 MCP server (Ollama HTTP wrapper)
+│   └── util/               # Google Sheets integration scripts
+│       ├── google_auth.js
+│       ├── update_dashboard.js
+│       ├── add_project_info.js
+│       ├── upload_md_to_drive.js
+│       └── v2/             # Pipeline state & timing infrastructure
+│
+├── docs/                   # Extended documentation
+│   ├── PREREQUISITES.md    # Full dependency installation guide
+│   ├── SETUP.md            # Step-by-step walkthrough
+│   └── ARCHITECTURE.md     # Pipeline architecture and data flow
+│
+├── credentials/            # OAuth files go here (gitignored)
+├── team/                   # Runtime data (specs, state — gitignored)
+├── assets/                 # README images (pipeline diagram)
 ├── .env.example            # Environment variable template
 ├── .mcp.json.example       # MCP server config template
 ├── pipeline_config.json.template  # Pipeline path config template

@@ -13,16 +13,17 @@ tools: ["Read", "Write", "Bash", "Glob", "Grep"]
 작업 시작 전 반드시 아래 파일을 읽고 모든 규칙을 따른다:
 
 ```
-C:\Users\Admin\.claude\skills\tc-설계검수\tc-설계검수.md
+{{CLAUDE_HOME}}\tc-team-v2\skills\tc-설계검수\tc-설계검수.md
 ```
 
 > 이 에이전트는 얇은 포인터다. 모든 검수 기준(C-01~C-10, Pass Gate, 보고서 형식)은 위 스킬 파일이 단일 소스(Single Source of Truth)다.
 
 ## 핵심 경로
 
-- specs 위치: `{PROJECT_ROOT}/team/specs/[기능명]/`
-- 검수 기준: `C:\Users\Admin\.claude\skills\tc-설계검수\tc-설계검수.md`
-- 설계 기준: `C:\Users\Admin\.claude\skills\tc-설계\tc-설계.md`
+- specs 위치: `{{WORK_ROOT}}/team/specs/[기능명]/`
+- 검수 기준: `{{CLAUDE_HOME}}\tc-team-v2\skills\tc-설계검수\tc-설계검수.md`
+- 분석 기준: `{{CLAUDE_HOME}}\tc-team-v2\skills\tc-분석\tc-분석.md`
+- 설계 기준: `{{CLAUDE_HOME}}\tc-team-v2\skills\tc-설계\tc-설계.md`
 
 ## 작업 흐름
 

@@ -15,7 +15,7 @@ const { google } = require('googleapis');
 const { getAuthClient } = require('./google_auth');
 const { applyFormatToTab } = require('./apply_format_tab');
 
-const MASTER_SPREADSHEET_ID = '1N8NHdBg1OyrQR46jCMJ5lQOKNN2aYiagjXcZhCqhb-4';
+const MASTER_SPREADSHEET_ID = process.env.INTEGRATION_TC_ID;
 const TAB_NAME = process.argv[2];
 
 if (!TAB_NAME) {

@@ -15,7 +15,7 @@ user-invocable: false
 STEP 1(설계)이 생성한 결과물이 tc-설계.md 기준에 맞게 작성되었는지 검수한다.
 
 - 입력: `analysis.md` + `tc_design.md` (specs/[기능명]/ 내)
-- 기준: `C:\Users\Admin\.claude\skills\tc-설계\tc-설계.md`
+- 기준: `{{CLAUDE_HOME}}\skills\tc-설계\tc-설계.md`
 - 출력: `design_review.md` + `step_result.json`
 
 ---

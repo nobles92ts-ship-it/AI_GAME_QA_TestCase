@@ -14,15 +14,15 @@ model: sonnet
 작업 규칙은 기존 tc-updater.md와 동일하다. 필요 시 아래 파일을 참조:
 
 ```
-{CLAUDE_AGENTS_DIR}\tc-updater.md
+{{CLAUDE_HOME}}\agents\tc-updater.md
 ```
 
 > 이 에이전트(v2)는 기존 tc-updater와 동일한 로직을 사용하며, tc-팀-v2에서 호출된다.
 
 ## 핵심 경로
 
-- Node.js: `{NODE_PATH}`
-- specs: `{PROJECT_ROOT}/team/specs/[기능명]/`
+- Node.js: `{{NODE_PATH}}`
+- specs: `{{WORK_ROOT}}/team/specs/[기능명]/`
 - sheet_info.txt에서 스프레드시트 ID 읽기 (하드코딩 금지)
 
 ## 수정 규칙 (핵심)

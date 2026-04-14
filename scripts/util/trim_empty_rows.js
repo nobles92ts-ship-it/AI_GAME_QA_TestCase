@@ -6,7 +6,7 @@
  *   node trim_empty_rows.js <spreadsheetId> <sheetId>
  *
  * 예시:
- *   node trim_empty_rows.js 1-ICt7w5haohb4S1r3cwX7Z8ZY1tnYCQ6Xawysaocl3E 324241698
+ *   node trim_empty_rows.js YOUR_SPREADSHEET_ID YOUR_SHEET_GID
  */
 const { google } = require('googleapis');
 const { getAuthClient } = require('./google_auth');

@@ -24,8 +24,8 @@ TC 작성 전 설계 단계를 책임져:
 
 - MD 업로드 스크립트: `{PROJECT_ROOT}/scripts/util/upload_md_to_drive.js`
 - 구글 드라이브 기획서 폴더 ID: `1YxK2WVH6nr-e0_2qjDb4DSxXgAffsA2q`
-- MD 파일 저장 위치: `C:\Users\Admin\Downloads\AI_AntiGravity\`
-- **로컬 specs 저장 위치**: `C:\Users\Admin\Downloads\AI_AntiGravity\team\specs\[기능명]\`
+- MD 파일 저장 위치: `{{WORK_ROOT}}\`
+- **로컬 specs 저장 위치**: `{{WORK_ROOT}}\team\specs\[기능명]\`
 - Node.js 경로: `{NODE_PATH}`
 - 상태 파일: `{PROJECT_ROOT}/team/status/tc-designer.txt`
 
@@ -636,7 +636,7 @@ tc-writer가 재현스탭 작성 시 참조할 품질 기준을 설계 단계에
 1. **상태 갱신 (시작)**: `echo "분석/설계중|[기능명]" > status/tc-designer.txt`
 2. **입력 유형 판별** → Confluence/PDF/doc/Excel 기준 처리
 3. **기능명 추출** (공백→`_`, 특수문자 제거)
-4. **기존 파일 확인**: `dir "AI_AntiGravity\*[기능명]*_text_2.md"` — 있으면 재사용, 없으면 신규 작성
+4. **기존 파일 확인**: `dir "$WORK_ROOT\*[기능명]*_text_2.md"` — 있으면 재사용, 없으면 신규 작성
 5. `DX-[기능명]_text_1.md` 작성 → **즉시 파일 저장** (원문 정리)
 6. `DX-[기능명]_text_2.md` 아래 섹션을 **순서대로, 각 섹션 완성 후 즉시 append 저장**:
    - 기본기능 검증 항목
@@ -650,7 +650,7 @@ tc-writer가 재현스탭 작성 시 참조할 품질 기준을 설계 단계에
    - 검증단계 사전 배분표 (EVAL-02) — BVA 포인트 수량 근거 포함
    - **재현스탭 샘플 (HIGH 리스크 소분류)** (EVAL-03) ← 저장
    - 커버리지 매핑표
-7. `AI_AntiGravity\`에 저장
+7. `$WORK_ROOT\`에 저장
 8. **specs 폴더에 복사**: `team/specs/[기능명]/analysis.md`, `tc_design.md`
 9. `upload_md_to_drive.js`로 드라이브 업로드
 10. **상태 갱신 (완료)**: `echo "idle|" > status/tc-designer.txt`

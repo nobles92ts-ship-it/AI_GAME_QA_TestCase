@@ -8,7 +8,8 @@ pipeline_config.local.json
 *.token.json
 *.credentials.json
 .mcp.json
-구글 클라우드 API 키값/
+# Legacy Korean-named credential folder (if exists)
+**/구글*클라우드*API*키값/
 client_secret_*.json
 *-bot-*.json
 oauth_token.json

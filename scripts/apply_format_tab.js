@@ -21,7 +21,7 @@ const { google } = require('googleapis');
 const { getAuthClient } = require('./google_auth');
 const { addResultCondFormat, addVerifCondFormat } = require('./tc_utilities');
 
-const DEFAULT_SHEET_ID = '1-ICt7w5haohb4S1r3cwX7Z8ZY1tnYCQ6Xawysaocl3E';
+const DEFAULT_SHEET_ID = process.env.GAME_QA_ID;
 
 async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEFAULT_SHEET_ID) {
   const auth = await getAuthClient();
