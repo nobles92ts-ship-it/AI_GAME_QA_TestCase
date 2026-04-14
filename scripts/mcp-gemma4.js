@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Gemma4 MCP Server — Ollama HTTP API 래퍼
-// C-2: 모델명 환경변수화 (gemma4:latest → gemma4:31b, GEMMA4_MODEL로 외부 설정 가능)
-// M-5: HTTP 요청 타임아웃 추가 (무한 대기 방지)
+// 모델명 환경변수화 (GEMMA4_MODEL로 외부 설정 가능)
+// 기본값: gemma4:26b (MoE A4B, 활성 4B — 31B Dense 대비 4~6배 빠름)
+// HTTP 요청 타임아웃 추가 (무한 대기 방지)
 const readline = require('readline');
 const http = require('http');
 
-// C-2: Python 스크립트(gemma4:31b)와 모델 통일, 환경변수로 오버라이드 가능
-const GEMMA4_MODEL = process.env.GEMMA4_MODEL || 'gemma4:31b';
+const GEMMA4_MODEL = process.env.GEMMA4_MODEL || 'gemma4:26b';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.GEMMA4_TIMEOUT_MS || '300000', 10); // 기본 5분
 
 const rl = readline.createInterface({ input: process.stdin });

@@ -54,15 +54,18 @@ Assume the target machine has **only Claude Code** installed. The preflight scri
 
 **Install**:
 ```bash
-ollama pull gemma4:31b    # default, ~18 GB download
+ollama pull gemma4:26b    # default, ~17 GB download (MoE, active 4B params)
 ```
 
 You can pick a smaller model and set `GEMMA4_MODEL` in `.env` accordingly:
-| Model | Size | Quality | Speed |
-|-------|------|---------|-------|
-| `gemma4:31b` | ~18 GB | best | slower |
-| `gemma4:12b` | ~7 GB | good | medium |
-| `gemma4:4b` | ~3 GB | lower | fastest |
+| Model | Size | Quality | Speed | Notes |
+|-------|------|---------|-------|-------|
+| `gemma4:26b` | ~17 GB | best | **fast** | MoE A4B — 26B total, 4B active/token, runs ~4B speed |
+| `gemma4:31b` | ~18 GB | best | slow | Dense — all 31B active per token, not recommended for batch |
+| `gemma4:latest` (E4B) | ~9.6 GB | good | fast | 8B physical / 4B effective, multimodal (vision + audio) |
+| `gemma3:4b` | ~3 GB | lower | fastest | legacy Gemma 3 |
+
+> **Why 26B A4B is the default**: Mixture-of-Experts architecture — only 4B parameters activate per token, so inference speed is close to a 4B dense model while retaining 26B total knowledge. The 31B Dense variant is ~4–6× slower on batch workloads and is no longer recommended as the default.
 
 **Verify**: `ollama list` shows the model you pulled.
 
@@ -142,7 +145,7 @@ After installing everything, create `.env` from `.env.example` and fill in:
 | `GOOGLE_OAUTH_CLIENT_SECRET_PATH` | yes | `./credentials/client_secret.json` |
 | `MASTER_DASHBOARD_ID` | yes | Google Sheets ID |
 | `CONFLUENCE_SITE` | yes | `https://yourcompany.atlassian.net` |
-| `GEMMA4_MODEL` | yes | `gemma4:31b` (default) |
+| `GEMMA4_MODEL` | yes | `gemma4:26b` (default) |
 
 Run `preflight.ps1` / `preflight.sh` again after editing `.env` — it will substitute placeholders in the `.claude/` files and copy them to your `CLAUDE_HOME`.
 

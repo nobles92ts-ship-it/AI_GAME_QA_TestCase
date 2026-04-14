@@ -10,7 +10,7 @@ import sys
 import urllib.request
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-GEMMA4_MODEL = "gemma4:31b"
+GEMMA4_MODEL = "gemma4:26b"
 DEFAULT_TIMEOUT = 1800
 
 
@@ -19,7 +19,7 @@ def call_ollama(prompt, model=GEMMA4_MODEL, temperature=0.3, timeout=DEFAULT_TIM
 
     Args:
         prompt: 전달할 프롬프트 문자열
-        model: 사용할 모델명 (기본: gemma4:31b)
+        model: 사용할 모델명 (기본: gemma4:26b)
         temperature: 샘플링 온도 (낮을수록 일관성 증가)
         timeout: HTTP 요청 타임아웃 (초)
         num_ctx: 컨텍스트 윈도우 크기

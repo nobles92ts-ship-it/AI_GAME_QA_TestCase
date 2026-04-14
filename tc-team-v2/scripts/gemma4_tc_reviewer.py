@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "gemma4:31b"
+MODEL = "gemma4:26b"
 TIMEOUT = 1800
 BATCH_SIZE = 40  # TC 배치당 처리 개수
 

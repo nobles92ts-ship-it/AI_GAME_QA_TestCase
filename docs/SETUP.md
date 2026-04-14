@@ -29,7 +29,7 @@ bash ./scripts/preflight/preflight.sh
 
 Preflight will:
 1. Check for Node.js, Python, Ollama, `gh` — offer to install missing ones
-2. Pull the Gemma model (default `gemma4:31b`, or pick another)
+2. Pull the Gemma model (default `gemma4:26b` — MoE A4B, or pick another)
 3. Run `npm install` and `pip install -r requirements.txt`
 4. Check for `credentials/client_secret.json`
 5. Create `.env` from `.env.example` if missing

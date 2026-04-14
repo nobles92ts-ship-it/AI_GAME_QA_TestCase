@@ -88,7 +88,7 @@ This single design decision drops Claude token usage by **~70%** on a 300-TC fea
 | STEP 7 (R2 + Fix 2 merged) | two Claude calls | one Claude call (context consolidation) | ~$2 |
 | **Total** | **~$17/run** | **~$5/run** | **~$12 saved** |
 
-Gemma4 runs on your own machine via [Ollama](https://ollama.com). Default model is `gemma4:31b` (~18 GB). Swap via `GEMMA4_MODEL` env var.
+Gemma4 runs on your own machine via [Ollama](https://ollama.com). Default model is **`gemma4:26b`** (~17 GB), a Mixture-of-Experts variant with 26B total parameters but only 4B active per token — so it runs roughly as fast as a 4B dense model while retaining 26B-scale knowledge. Swap via `GEMMA4_MODEL` env var (e.g. `gemma4:latest` for the 8B E4B multimodal edge model).
 
 ---
 
@@ -143,7 +143,7 @@ Three MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.m
     "gemma4": {
       "command": "node",
       "args": ["<CLAUDE_HOME>/scripts/mcp-gemma4.js"],
-      "env": { "GEMMA4_MODEL": "gemma4:31b" }
+      "env": { "GEMMA4_MODEL": "gemma4:26b" }
     },
     "google-sheets": {
       "command": "node",
@@ -168,7 +168,7 @@ The Gemma4 MCP server is included in this repo (`scripts/mcp-gemma4.js`); `googl
 | Layer | Tech |
 |-------|------|
 | Agent runtime | Claude Code (Sonnet 4.6 · Opus 4) |
-| Local LLM | Gemma4 via [Ollama](https://ollama.com) — default `gemma4:31b`, configurable via `GEMMA4_MODEL` |
+| Local LLM | Gemma4 via [Ollama](https://ollama.com) — default `gemma4:26b` (MoE A4B), configurable via `GEMMA4_MODEL` |
 | Orchestration | Bash + Node.js (CLI process spawning, state persistence, Bash↔MCP bridging) |
 | Stage implementations | Python 3 (Gemma4 Ollama HTTP callers, stdlib only) |
 | Input parsers | `xlsx` (Excel) · `pdf-parse` / `pdfjs-dist` (PDF) · `mammoth` (Word) · MCP (Confluence ADF) |
