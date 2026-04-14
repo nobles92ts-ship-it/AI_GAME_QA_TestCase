@@ -28,30 +28,41 @@ CLI_OPTS   = -p --model sonnet --permission-mode bypassPermissions
 
 ## 자동 시작 조건
 
-- **신규 TC**: 스프레드시트 링크 + Confluence 링크 함께 제공 → 즉시 시작
-  - ⛔ 스프레드시트 없이 Confluence만 제공 → "대상 스프레드시트 링크를 함께 제공해주세요" 안내 후 대기
+- **신규 TC**: 스프레드시트 링크 + **기획서 소스(Confluence URL 또는 로컬 파일 경로)** 함께 제공 → 즉시 시작
+  - 기획서 소스로 허용되는 것: Confluence URL / `.pdf` / `.doc` / `.docx` / `.xlsx` / `.xls` 파일 경로
+  - ⛔ 스프레드시트 없이 기획서 소스만 제공 → "대상 스프레드시트 링크를 함께 제공해주세요" 안내 후 대기
 - **TC 갱신**: "기획 변경됐어", "TC 갱신" → tc-updater-v2 에이전트로 위임
 
 ---
 
-## 배치 처리 (Confluence URL 여러 개)
+## 배치 처리 (기획서 소스 여러 개)
 
-입력에서 Confluence URL을 모두 추출해 순서대로 처리한다.
+입력에서 기획서 소스(Confluence URL 또는 로컬 파일 경로)를 모두 추출해 순서대로 처리한다.
 
 ### 파싱 규칙
 
 1. 스프레드시트 URL: `docs.google.com/spreadsheets` 포함 → SHEET_ID 추출
-2. Confluence URL 목록: `atlassian.net/wiki` 포함하는 URL 전부 수집 → 순서 유지
+2. **기획서 소스 목록** (순서 유지, 여러 유형 혼합 가능):
+   - **Confluence URL**: `atlassian.net/wiki` 포함 → `type: "confluence"`, `url: <URL>`
+   - **PDF 파일**: `.pdf` 확장자로 끝나는 경로 → `type: "pdf"`, `path: <절대경로>`
+   - **Word 파일**: `.doc` / `.docx` 확장자 → `type: "docx"`, `path: <절대경로>`
+   - **Excel 파일**: `.xlsx` / `.xls` 확장자 → `type: "xlsx"`, `path: <절대경로>`
+3. 파일 경로의 경우 **Read 도구로 존재 여부를 먼저 검증**하고 존재하지 않으면 해당 항목 스킵 + 사용자에게 경고
 
 ### 배치 실행 흐름
 
 ```
-confluence_urls = [URL1, URL2, URL3, ...]
+spec_sources = [
+  {type: "confluence", url: "https://.../pages/111"},
+  {type: "pdf",        path: "C:/path/to/spec.pdf"},
+  {type: "docx",       path: "C:/path/to/spec.docx"},
+  ...
+]
 results = []
 
-for each url in confluence_urls:
+for each source in spec_sources:
   [전체 파이프라인 실행 (초기화 ~ 완료처리)]
-  results.append({url, feature, status, tc_count, elapsed})
+  results.append({source, feature, status, tc_count, elapsed})
 
 [배치 완료 후 전체 요약 보고]
 ```
@@ -194,13 +205,32 @@ fs.writeFileSync(f,JSON.stringify(data,null,2));
 ### 초기화
 
 1. 스프레드시트 ID 추출 (`/spreadsheets/d/[ID]` 파싱)
-2. Confluence 페이지 읽기 (getConfluencePage, contentFormat: adf) — **팀장이 직접 수행**
-3. 기능명 추출 (페이지 제목에서 공백→`_`, 특수문자 제거)
-4. specs 폴더 생성: `mkdir -p "$SPECS/[기능명]"`
-5. `sheet_info.txt` 저장 (SHEET_ID, TAB_NAME, CONFLUENCE_URL)
-6. **ADF 원문을 파일로 저장**: `$SPECS/[기능명]/confluence_raw.md`에 기획서 내용 기록
-7. 파이프라인 시작 시각 기록
-8. **배치 추적 업데이트** (state.json의 `currentBatch` 갱신):
+2. **기획서 원문 로드** — 소스 유형에 따라 분기 (팀장이 직접 수행):
+
+   **(a) Confluence URL인 경우:**
+   - `getConfluencePage` MCP 호출 (contentFormat: adf)
+   - 페이지 제목에서 기능명 추출 (공백→`_`, 특수문자 제거)
+
+   **(b) PDF / doc / docx 파일인 경우:**
+   - Read 도구로 파일 직접 읽기
+   - 파일명(확장자 제거)에서 기능명 추출 (공백→`_`, 특수문자 제거)
+
+   **(c) xlsx / xls 파일인 경우:**
+   - Bash로 `"$NODE" -e "const XLSX=require('xlsx'); ..."` 실행하여 전체 시트를 CSV로 변환
+   - 파일명에서 기능명 추출
+
+3. specs 폴더 생성: `mkdir -p "$SPECS/[기능명]"`
+4. `sheet_info.txt` 저장 (SHEET_ID, TAB_NAME, SOURCE_TYPE, SOURCE_REF)
+   - `SOURCE_TYPE`: `confluence` / `pdf` / `docx` / `xlsx`
+   - `SOURCE_REF`: Confluence URL 또는 로컬 파일 절대경로
+5. **기획서 원문을 파일로 저장** (소스 유형 무관, 항상 동일 경로):
+   `$SPECS/[기능명]/confluence_raw.md`
+   - Confluence: ADF 원문 그대로 저장
+   - PDF/doc/docx: Read 결과 텍스트 저장
+   - xlsx: CSV 변환 결과 저장
+   > 파일명이 `confluence_raw.md`인 것은 레거시. 실제 내용은 모든 소스 유형의 원문이다.
+6. 파이프라인 시작 시각 기록
+7. **배치 추적 업데이트** (state.json의 `currentBatch` 갱신):
 
 ```bash
 "$NODE" -e "
@@ -216,7 +246,8 @@ fs.writeFileSync(f,JSON.stringify(data,null,2));
 "
 ```
 
-> ⚠️ Confluence 읽기는 팀장이 직접 수행 (MCP). tc-designer-v2에게는 파일 경로만 전달.
+> ⚠️ 기획서 원문 로드는 **팀장이 직접 수행** — Confluence는 MCP로, 로컬 파일은 Read/Bash로.
+> tc-designer-v2에게는 `$SPECS/[기능명]/confluence_raw.md` 파일 경로만 핸드오프로 전달한다 (소스 유형 무관).
 
 ---
 

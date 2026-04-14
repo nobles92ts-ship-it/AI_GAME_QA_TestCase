@@ -148,15 +148,52 @@ Edit `pipeline_config.json` — set your Drive folder IDs and Confluence site:
 
 ## Usage
 
-Open Claude Code and type:
+Open Claude Code and use the `/tc-v2` slash command. The pipeline accepts **Confluence URLs or local spec files** (PDF / doc / docx / xlsx / xls) — and can mix both in a single batch.
+
+```
+# Confluence
+/tc-v2 https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit \
+       https://your-site.atlassian.net/wiki/spaces/.../pages/111
+
+# PDF file
+/tc-v2 https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit \
+       C:/specs/my_feature.pdf
+
+# Word docx
+/tc-v2 https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit \
+       C:/specs/my_feature.docx
+
+# Excel xlsx
+/tc-v2 https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit \
+       C:/specs/test_matrix.xlsx
+
+# Batch (mix any number of sources)
+/tc-v2 https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit \
+       https://your-site.atlassian.net/wiki/.../pages/111 \
+       C:/specs/feature2.pdf \
+       C:/specs/feature3.docx
+```
+
+**Supported input types**:
+
+| Type | Detection | Processing |
+|------|-----------|------------|
+| Confluence URL | `atlassian.net/wiki` in the argument | Atlassian MCP → ADF format |
+| PDF | `.pdf` extension | Read tool → raw text |
+| Word | `.doc` / `.docx` extension | Read tool → raw text |
+| Excel | `.xlsx` / `.xls` extension | `xlsx` npm module → CSV |
+
+> Paths with spaces must be quoted: `"C:/my docs/spec.pdf"`. Prefer absolute paths.
+
+The TC Team orchestrator picks it up and runs the full pipeline automatically. After each source is processed, the next one starts without intervention.
+
+Alternatively, you can also trigger it with natural language:
 
 ```
 TC 팀 v2로 진행
 Spreadsheet: https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit
-Confluence: https://your-site.atlassian.net/wiki/spaces/.../pages/...
+Spec: C:/specs/my_feature.pdf
 ```
-
-The TC Team orchestrator picks it up and runs the full pipeline automatically.
 
 ### TC Update (when spec changes)
 
@@ -165,7 +202,7 @@ The TC Team orchestrator picks it up and runs the full pipeline automatically.
 Confluence: https://...updated-page...
 ```
 
-The `tc-updater-v2` agent diffs the old spec against the new one and updates only the affected TCs.
+The `tc-updater-v2` agent diffs the old spec against the new one and updates only the affected TCs. This currently supports Confluence pages only — for PDF/doc updates, re-run the full `/tc-v2` command.
 
 ---
 

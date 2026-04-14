@@ -125,15 +125,39 @@ On Windows, Ollama typically starts on boot after install — check Task Manager
 Open Claude Code and run:
 
 ```
-/tc-v2 <spreadsheet-url> <confluence-url>
+/tc-v2 <spreadsheet-url> <spec-source-1> <spec-source-2> ...
 ```
 
-Example:
-```
+**Spec sources can be any of**:
+- Confluence URL (`atlassian.net/wiki/...`)
+- PDF file path (`*.pdf`)
+- Word file path (`*.doc`, `*.docx`)
+- Excel file path (`*.xlsx`, `*.xls`)
+
+You can mix multiple types in a single batch run.
+
+Examples:
+```bash
+# Confluence
 /tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit https://your.atlassian.net/wiki/spaces/PROJECT/pages/111
+
+# PDF
+/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit C:/specs/my_feature.pdf
+
+# Word docx
+/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit /home/user/specs/feature.docx
+
+# Mixed batch
+/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit \
+       https://your.atlassian.net/wiki/.../pages/111 \
+       C:/specs/feature2.pdf \
+       "C:/my docs/feature3.docx"
 ```
 
-For batch mode, pass multiple Confluence URLs separated by spaces.
+**Notes**:
+- Paths with spaces must be quoted.
+- Prefer absolute paths — relative paths are resolved from Claude Code's working directory.
+- If a file doesn't exist, the pipeline skips that item and logs a warning.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full pipeline flow.
 
