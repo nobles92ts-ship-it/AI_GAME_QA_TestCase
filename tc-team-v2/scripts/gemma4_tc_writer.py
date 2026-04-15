@@ -13,14 +13,16 @@ gemma4_tc_writer_proposed_20260413.py
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
 from gemma4_utils import call_ollama, extract_json_array, GEMMA4_MODEL
 
-TC_RULES_PATH     = os.environ.get('CLAUDE_HOME', '') + '/tc-team-v2/skills/tc-생성/tc-생성.md'
-GEMMA4_RULES_PATH = os.environ.get('CLAUDE_HOME', '') + '/tc-team-v2/skills/gemma4/gemma4-writer.md'
+_CLAUDE_HOME = os.environ.get("CLAUDE_HOME", "")
+TC_RULES_PATH     = f"{_CLAUDE_HOME}/tc-team-v2/skills/tc-생성/tc-생성.md"
+GEMMA4_RULES_PATH = f"{_CLAUDE_HOME}/tc-team-v2/skills/gemma4/gemma4-writer.md"
 
 # 케이스 파싱 정규식
 CASE_PATTERN = re.compile(r"→\s*(정상|부정|예외)-(\d+):\s*(.+)", re.IGNORECASE)
@@ -97,13 +99,13 @@ def parse_and_validate(json_str, section_name):
         if row[3] not in ("정상", "부정", "예외"):
             row[3] = "정상"
 
-        if row[4] not in ("PC", "모바일", "PC/모바일"):
-            if "모바일" in row[4] and "PC" in row[4]:
-                row[4] = "PC/모바일"
-            elif "모바일" in row[4]:
-                row[4] = "모바일"
+        if row[5] not in ("PC", "모바일", "PC/모바일"):
+            if "모바일" in row[5] and "PC" in row[5]:
+                row[5] = "PC/모바일"
+            elif "모바일" in row[5]:
+                row[5] = "모바일"
             else:
-                row[4] = "PC/모바일"
+                row[5] = "PC/모바일"
 
         valid.append(row)
     return valid
@@ -154,7 +156,7 @@ def parse_basic_section(section_text):
         if verif not in ("정상", "부정", "예외"):
             verif = "정상"
 
-        rows.append(["기본기능", minor, sub, verif, platform, content, ""])
+        rows.append(["기본기능", minor, sub, verif, content, platform, ""])
 
     print(f"  [기본기능] 테이블 파싱: {len(rows)}개 TC")
     return rows
@@ -171,7 +173,7 @@ def extract_groups_from_tree(section_text):
     current_lines = []
 
     for line in section_text.split("\n"):
-        m = re.match(r"^(\d+)\.\s+\*\*(.+?)\*\*\s+\(대분류\)", line.strip())
+        m = re.match(r"^(?:#+\s*)?(\d+)\.\s+\*\*(.+?)\*\*\s+\(대분류", line.strip())
         if m:
             if current_name is not None:
                 groups.append((current_name, "\n".join(current_lines)))
@@ -338,7 +340,7 @@ def generate_tcs_for_group_legacy(group_name, group_text, feature_name, tc_rules
 
 ---
 출력 형식: JSON 배열. 각 원소는 7개 문자열 배열:
-["대분류", "중분류", "소분류", "검증단계", "플랫폼", "재현스탭", "비고"]
+["대분류", "중분류", "소분류", "검증단계", "재현스탭", "플랫폼", "비고"]
 출력: JSON 배열만 (설명, 주석, 마크다운 없이)
 ---
 
@@ -452,8 +454,9 @@ def main():
                             plat_m = re.search(r"\[(PC(?:/모바일)?|모바일)\]", line)
                             plat = plat_m.group(1) if plat_m else "PC/모바일"
                             all_tcs.append([
-                                group_name, "추후 구현", item, "정상", plat,
+                                group_name, "추후 구현", item, "정상",
                                 f"{item} 기능이 구현된 상태에서 정상 동작하는지 확인",
+                                plat,
                                 "추후 구현"
                             ])
                     continue
@@ -488,8 +491,8 @@ def main():
                             sub_info["중분류"],
                             sub_info["소분류"],
                             case["검증단계"],
-                            sub_info["플랫폼"],
                             step,
+                            sub_info["플랫폼"],
                             ""
                         ]
                         all_tcs.append(tc_row)

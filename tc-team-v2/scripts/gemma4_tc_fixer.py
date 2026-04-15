@@ -9,13 +9,15 @@ Gemma4는 재현스탭 초안→완성 문장 변환만 담당. 판단 없음.
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
 from gemma4_utils import call_ollama, GEMMA4_MODEL
 
-GEMMA4_RULES_PATH = os.environ.get('CLAUDE_HOME', '') + '/tc-team-v2/skills/gemma4/gemma4-fixer.md'
+_CLAUDE_HOME = os.environ.get("CLAUDE_HOME", "")
+GEMMA4_RULES_PATH = f"{_CLAUDE_HOME}/tc-team-v2/skills/gemma4/gemma4-fixer.md"
 
 
 def load_gemma4_rules():
@@ -23,7 +25,7 @@ def load_gemma4_rules():
     import re
     p = Path(GEMMA4_RULES_PATH)
     if not p.exists():
-        print(f"  WARN: gemma4-fixer.md 없음 — 내장 규칙 사용", file=sys.stderr)
+        print(f"  WARN: gemma4-fixer.md 없음 -- 내장 규칙 사용", file=sys.stderr)
         return ""
     content = p.read_text(encoding="utf-8")
     content = re.sub(r"^---[\s\S]*?---\n", "", content).strip()
@@ -45,14 +47,46 @@ FIELD_MAP = {
 
 
 def parse_prescriptions(review_text):
-    """리뷰 보고서에서 '처방:' 줄을 모두 추출."""
+    """리뷰 보고서에서 '처방:' 줄을 모두 추출.
+    - '처방:' 또는 '- 처방:' 형식 모두 지원
+    - 멀티라인 처방 지원 (다음 '---', 빈 줄, 또는 다음 처방까지)
+    """
     prescriptions = []
-    for line in review_text.split("\n"):
-        stripped = line.strip()
+    lines = review_text.split("\n")
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        # '처방:' 또는 '- 처방:' 패턴 매칭
+        prefix = None
         if stripped.startswith("처방:"):
-            p = stripped[3:].strip()
-            if p:
-                prescriptions.append(p)
+            prefix = stripped[3:].strip()
+        elif stripped.startswith("- 처방:"):
+            prefix = stripped[5:].strip()
+
+        if prefix is not None:
+            # 현재 줄의 처방 내용
+            current = prefix
+            # 다음 줄이 들여쓰기된 연속 내용이면 수집 (멀티라인 처방)
+            j = i + 1
+            while j < len(lines):
+                next_stripped = lines[j].strip()
+                # 멀티라인 처방: '- TC 추가 N)' 패턴
+                if next_stripped.startswith("- TC 추가"):
+                    sub_content = next_stripped[2:].strip()  # '- ' 제거
+                    # 현재 처방에 이 서브 처방을 별도로 추가
+                    if current:
+                        prescriptions.append(current)
+                    current = sub_content
+                    j += 1
+                elif next_stripped == "" or next_stripped.startswith("---") or next_stripped.startswith("처방:") or next_stripped.startswith("- 처방:") or next_stripped.startswith("#"):
+                    break
+                else:
+                    j += 1
+            if current:
+                prescriptions.append(current)
+            i = j
+        else:
+            i += 1
     return prescriptions
 
 
@@ -83,7 +117,7 @@ def complete_step_with_gemma4(draft, context=""):
     )
     response = call_ollama(prompt, temperature=0.1)
     if response is None:
-        print("  WARN: Gemma4 호출 실패 — 초안 그대로 사용", file=sys.stderr)
+        print("  WARN: Gemma4 호출 실패 -- 초안 그대로 사용", file=sys.stderr)
         return draft
     return response.strip().strip('"').strip("'")
 
@@ -100,9 +134,9 @@ def prescription_to_fix(prescription, existing_tc_ids):
             return None
         return {"action": "delete", "tc_id": tc_id}
 
-    # ── TC-XXX [열] 수정 — '[현재]' → '[새값/초안]' ───────────
+    # ── TC-XXX [열] 수정 -- '[현재]' → '[새값/초안]' ───────────
     m = re.match(
-        r"TC-?(\d+)\s+([A-J]열)\s+수정\s+[—\-]+\s*'[^']*'\s*→\s*'([^']+)'",
+        r"TC-?(\d+)\s+([A-J]열)\s+수정\s+[—\-]+\s*'[^']*'\s*[→>]\s*'([^']+)'",
         prescription,
     )
     if m:
@@ -121,7 +155,7 @@ def prescription_to_fix(prescription, existing_tc_ids):
             new_val = complete_step_with_gemma4(new_val, f"TC-{tc_id}")
         return {"action": "update", "tc_id": tc_id, "field": field, "value": new_val}
 
-    # ── TC-XXX [열] 추가 — '[값]' ─────────────────────────────
+    # ── TC-XXX [열] 추가 -- '[값]' ─────────────────────────────
     m = re.match(
         r"TC-?(\d+)\s+([A-J]열)\s+추가\s+[—\-]+\s*'([^']+)'",
         prescription,
@@ -138,7 +172,54 @@ def prescription_to_fix(prescription, existing_tc_ids):
             return None
         return {"action": "update", "tc_id": tc_id, "field": field, "value": val}
 
-    # ── '[소분류]' 소분류에 신규 TC 추가 ─────────────────────────
+    # ── C열(중분류) 표기 처방 ─────────────────────────────────────
+    # "아래 TC의 C열(중분류)에 중분류명 표기" 형식
+    if "C열" in prescription and "중분류" in prescription and ("표기" in prescription or "기입" in prescription):
+        # 중분류 채우기는 apply_gemma4_fixes.js에서 별도 처리 필요
+        # fill_subcategory 액션으로 전달
+        return {"action": "fill_column_c", "description": prescription[:200]}
+
+    # ── [소분류명] 소분류에 신규 TC 추가 (따옴표 없는 형식) ─────────────
+    # 형식 1: "X 소분류에 신규 TC 추가 -- 검증단계: Y, 플랫폼: Z, 재현스탭 초안: 'W'"
+    m = re.match(
+        r"(.+?)\s+소분류에\s+신규\s+TC\s+추가\s*[—\-]+\s*"
+        r"검증단계:\s*(\S+)[,\s]+플랫폼:\s*([^,\n]+)[,\s]+재현스탭\s*초안:\s*['\"]?([^'\"\n]+)['\"]?",
+        prescription,
+    )
+    if m:
+        sub = m.group(1).strip().strip("'\"")
+        stage = m.group(2).strip().rstrip(",")
+        platform = m.group(3).strip().rstrip(",")
+        draft = m.group(4).strip()
+        completed = complete_step_with_gemma4(draft, f"소분류: {sub}, 검증단계: {stage}")
+        return {
+            "action": "add",
+            "after_tc_id": "last",
+            "sub_category": sub,
+            "data": ["", "", sub, stage, completed, platform, ""],
+        }
+
+    # ── 'TC 추가 N)' 형식 (멀티라인 처방에서 파싱된 서브 처방) ──────
+    # "TC 추가 1) 검증단계: Y, 플랫폼: Z, 재현스탭 초안: 'W'"
+    m = re.match(
+        r"TC\s+추가\s+\d+\)\s+검증단계:\s*(\S+)[,\s]+플랫폼:\s*([^,\n]+)[,\s]+재현스탭\s*초안:\s*['\"]?([^'\"\n]+)['\"]?",
+        prescription,
+    )
+    if m:
+        stage = m.group(1).strip().rstrip(",")
+        platform = m.group(2).strip().rstrip(",")
+        draft = m.group(3).strip()
+        # 소분류는 처방 컨텍스트에서 추정 불가 → 빈칸
+        sub = ""
+        completed = complete_step_with_gemma4(draft, f"검증단계: {stage}")
+        return {
+            "action": "add",
+            "after_tc_id": "last",
+            "sub_category": sub,
+            "data": ["", "", sub, stage, completed, platform, ""],
+        }
+
+    # ── 따옴표 있는 형식: '[소분류]' 소분류에 신규 TC 추가 ─────────────
     m = re.match(
         r"'([^']+)'\s+소분류에\s+신규\s+TC\s+추가\s+[—\-]+\s*"
         r"검증단계:\s*(\S+)[,\s]+플랫폼:\s*([^,\n]+)[,\s]+재현스탭\s*초안:\s*'([^']+)'",
@@ -153,11 +234,11 @@ def prescription_to_fix(prescription, existing_tc_ids):
         return {
             "action": "add",
             "after_tc_id": "last",
-            "sub_category": sub,          # apply_gemma4_fixes.js가 삽입 위치 탐색에 사용
-            "data": ["", "", sub, stage, platform, completed, ""],
+            "sub_category": sub,
+            "data": ["", "", sub, stage, completed, platform, ""],
         }
 
-    print(f"  SKIP: 처방 형식 인식 불가 — {prescription[:80]}", file=sys.stderr)
+    print(f"  SKIP: 처방 형식 인식 불가 -- {prescription[:80]}", file=sys.stderr)
     return None
 
 
@@ -188,13 +269,13 @@ def main():
     existing_tc_ids = {str(row[0]).strip().zfill(3) for row in rows if row and row[0]}
 
     print(f"=== 처방 기반 TC 수정 지시 생성 v2 ===")
-    print(f"기능: {feature_name} / 기존 TC: {len(rows)}개 / 모델: {GEMMA4_MODEL}")
+    print(f"기능: {feature_name} / 기존 TC: {len(rows)}개")
 
     prescriptions = parse_prescriptions(review_text)
     print(f"처방 파싱: {len(prescriptions)}건")
 
     if not prescriptions:
-        print("처방 없음 — 수정 지시 없음 (리뷰 보고서에 처방: 필드 확인 필요)")
+        print("처방 없음 -- 수정 지시 없음 (리뷰 보고서에 처방: 필드 확인 필요)")
         Path(args.output).write_text("[]", encoding="utf-8")
         return
 
@@ -222,7 +303,7 @@ def main():
     delete_count = sum(1 for f in sorted_fixes if f.get("action") == "delete")
 
     print(f"\n=== 완료 ===")
-    print(f"처방: {len(prescriptions)}건 → 실행: {len(sorted_fixes)}건 (스킵: {skipped}건)")
+    print(f"처방: {len(prescriptions)}건 -> 실행: {len(sorted_fixes)}건 (스킵: {skipped}건)")
     print(f"내역: update:{update_count} add:{add_count} delete:{delete_count}")
     print(f"출력: {args.output}")
 

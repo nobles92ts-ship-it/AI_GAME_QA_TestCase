@@ -90,6 +90,26 @@ This single design decision drops Claude token usage by **~70%** on a 300-TC fea
 
 Gemma4 runs on your own machine via [Ollama](https://ollama.com). Default model is **`gemma4:26b`** (~17 GB), a Mixture-of-Experts variant with 26B total parameters but only 4B active per token — so it runs roughly as fast as a 4B dense model while retaining 26B-scale knowledge. Swap via `GEMMA4_MODEL` env var (e.g. `gemma4:latest` for the 8B E4B multimodal edge model).
 
+### Alternative — Google AI Studio (cloud)
+
+Don't have the ~17 GB VRAM to run Gemma4 locally? You can swap Ollama for Google AI Studio's free tier with a single env-var change. The pipeline auto-routes Gemma4 calls to whichever backend is configured:
+
+```env
+GEMMA4_BACKEND=google        # default is "ollama"
+GOOGLE_AI_API_KEY=xxxxxxxx   # free key: https://aistudio.google.com/app/apikey
+GOOGLE_AI_MODEL=gemma-4-31b-it   # 31B dense IT (recommended)
+```
+
+**Tradeoffs:**
+- ✅ **No VRAM required** — runs on any machine with network access
+- ✅ **Free tier** — no cost under normal usage
+- ✅ **Higher quality option** — `gemma-4-31b-it` is the 31B dense Instruction-Tuned variant
+- ⚠️ **Rate limits** — free tier caps at ~15 RPM / 1500 RPD per model (as of 2025-Q2; subject to change)
+- ⚠️ **Network latency** — ~2–10s per call vs. ~1s local
+- ⚠️ **Data leaves your machine** — not suitable if your spec is confidential
+
+For most indie/solo users who don't want to maintain a local Ollama server, the Google AI Studio path is the easiest way to get started. For sustained batch work on private specs, keep Ollama local.
+
 ---
 
 ## 🚀 Quick start

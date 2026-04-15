@@ -97,9 +97,10 @@ def call_ollama(prompt):
 def format_tc_rows(rows, headers):
     """TC 행 목록을 읽기 쉬운 텍스트로 변환"""
     lines = []
-    col_names = ["TC ID", "대분류", "중분류", "소분류", "검증단계", "플랫폼", "재현스탭", "비고"]
+    # tc-생성.md SSoT: A=TC ID B=대분류 C=중분류 D=소분류 E=검증단계 F=재현스탭 G=플랫폼 H=PC결과 I=모바일결과 J=비고
+    col_names = ["TC ID", "대분류", "중분류", "소분류", "검증단계", "재현스탭", "플랫폼", "PC결과", "모바일결과", "비고"]
     for row in rows:
-        padded = list(row) + [""] * max(0, 8 - len(row))
+        padded = list(row) + [""] * max(0, len(col_names) - len(row))
         tc_id = padded[0] if padded[0] else "?"
         parts = []
         for i, name in enumerate(col_names):
