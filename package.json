@@ -1,0 +1,16 @@
+{
+  "name": "game-qa-testcase",
+  "version": "1.0.0",
+  "description": "AI-powered Game QA Test Case automation pipeline using Claude Code + Google Sheets + Confluence",
+  "scripts": {
+    "auth": "node scripts/google_auth.js",
+    "monitor": "node scripts/pipeline_monitor.js",
+    "monitor:watch": "node scripts/pipeline_monitor.js --watch",
+    "dashboard": "node scripts/update_dashboard.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "googleapis": "^171.4.0",
+    "exceljs": "^4.4.0"
+  }
+}
