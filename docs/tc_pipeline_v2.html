@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TC 팀 v2 — 파이프라인</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #08090f;
+    --surface: #0f1117;
+    --border: #1e2130;
+    --judge-color: #3b82f6;
+    --judge-glow: rgba(59,130,246,0.18);
+    --coder-color: #f59e0b;
+    --coder-glow: rgba(245,158,11,0.18);
+    --gemma-color: #a78bfa;
+    --gemma-glow: rgba(167,139,250,0.18);
+    --ssot-color: #10b981;
+    --text-primary: #f0f2f8;
+    --text-muted: #6b7280;
+    --arrow: #2d3348;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Manrope', sans-serif;
+    min-height: 100vh;
+    padding: 40px 24px 80px;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+  .header-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--judge-color);
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3);
+    padding: 4px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.1em;
+    margin-bottom: 16px;
+  }
+  .header h1 {
+    font-size: clamp(24px, 4vw, 42px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #f0f2f8 40%, #6b7280);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header p {
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    margin-bottom: 52px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .pipeline-wrap {
+    display: grid;
+    grid-template-columns: 180px 1fr 180px;
+    gap: 0 24px;
+    max-width: 960px;
+    margin: 0 auto;
+    align-items: start;
+  }
+
+  /* ── SKILL COLUMN ── */
+  .skill-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-top: 20px;
+  }
+  .skill-anchor {
+    position: relative;
+    margin-bottom: 0;
+  }
+  .skill-tag {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--ssot-color);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--ssot-color);
+    line-height: 1.4;
+    white-space: nowrap;
+    margin-bottom: 12px;
+  }
+  .skill-tag span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 9px;
+    margin-top: 2px;
+  }
+
+  /* ── CENTER PIPELINE ── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Source node */
+  .source-node {
+    background: var(--surface);
+    border: 1px dashed #2d3348;
+    border-radius: 12px;
+    padding: 14px 28px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    width: 100%;
+    max-width: 480px;
+  }
+  .source-node strong {
+    display: block;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  /* Arrow */
+  .arrow {
+    width: 2px;
+    background: var(--arrow);
+    height: 28px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid var(--arrow);
+  }
+  .arrow.gap { height: 20px; }
+
+  /* Step node */
+  .step-node {
+    width: 100%;
+    max-width: 480px;
+    border-radius: 14px;
+    padding: 18px 22px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    position: relative;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: default;
+  }
+  .step-node:hover {
+    transform: translateY(-2px);
+  }
+  .step-node.judge {
+    border-color: rgba(59,130,246,0.4);
+    background: linear-gradient(135deg, rgba(59,130,246,0.06) 0%, var(--surface) 100%);
+    box-shadow: 0 0 0 1px rgba(59,130,246,0.1), 0 4px 24px rgba(59,130,246,0.08);
+  }
+  .step-node.judge:hover {
+    box-shadow: 0 0 0 1px rgba(59,130,246,0.25), 0 8px 32px rgba(59,130,246,0.15);
+  }
+  .step-node.coder {
+    border-color: rgba(245,158,11,0.35);
+    background: linear-gradient(135deg, rgba(245,158,11,0.05) 0%, var(--surface) 100%);
+    box-shadow: 0 0 0 1px rgba(245,158,11,0.08), 0 4px 24px rgba(245,158,11,0.06);
+  }
+  .step-node.coder:hover {
+    box-shadow: 0 0 0 1px rgba(245,158,11,0.2), 0 8px 32px rgba(245,158,11,0.12);
+  }
+  .step-node.check {
+    border-color: rgba(16,185,129,0.35);
+    background: linear-gradient(135deg, rgba(16,185,129,0.05) 0%, var(--surface) 100%);
+  }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .judge .step-num {
+    background: rgba(59,130,246,0.15);
+    color: var(--judge-color);
+  }
+  .coder .step-num {
+    background: rgba(245,158,11,0.15);
+    color: var(--coder-color);
+  }
+  .check .step-num {
+    background: rgba(16,185,129,0.15);
+    color: var(--ssot-color);
+  }
+
+  .step-role-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .judge .step-role-badge {
+    background: rgba(59,130,246,0.12);
+    color: var(--judge-color);
+    border: 1px solid rgba(59,130,246,0.25);
+  }
+  .coder .step-role-badge {
+    background: rgba(245,158,11,0.12);
+    color: var(--coder-color);
+    border: 1px solid rgba(245,158,11,0.25);
+  }
+  .check .step-role-badge {
+    background: rgba(16,185,129,0.12);
+    color: var(--ssot-color);
+    border: 1px solid rgba(16,185,129,0.25);
+  }
+
+  .step-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .step-desc {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .step-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 4px;
+  }
+  .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: #9ca3af;
+  }
+  .tag.out {
+    border-color: rgba(16,185,129,0.3);
+    color: var(--ssot-color);
+    background: rgba(16,185,129,0.06);
+  }
+
+  /* Haiku badge inside node */
+  .gemma-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--gemma-color);
+    background: rgba(167,139,250,0.08);
+    border: 1px solid rgba(167,139,250,0.25);
+    border-radius: 5px;
+    padding: 3px 8px;
+    margin-top: 6px;
+    width: fit-content;
+  }
+  .gemma-badge::before {
+    content: '◆';
+    font-size: 8px;
+  }
+
+  /* ── GEMMA SIDE COL ── */
+  .gemma-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding-top: 20px;
+  }
+  .gemma-card {
+    background: var(--surface);
+    border: 1px solid rgba(167,139,250,0.25);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+  .gemma-card-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--gemma-color);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .gemma-card-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ── OUTPUT NODE ── */
+  .output-node {
+    background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, var(--surface) 100%);
+    border: 1px solid rgba(16,185,129,0.35);
+    border-radius: 12px;
+    padding: 18px 24px;
+    text-align: center;
+    width: 100%;
+    max-width: 480px;
+  }
+  .output-node strong {
+    font-size: 16px;
+    color: var(--ssot-color);
+  }
+  .output-node p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ── SSoT SECTION ── */
+  .ssot-section {
+    max-width: 960px;
+    margin: 60px auto 0;
+    padding: 28px 28px 24px;
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--ssot-color);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .ssot-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--ssot-color);
+    margin-bottom: 18px;
+  }
+  .ssot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .ssot-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .ssot-card-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ssot-color);
+    margin-bottom: 4px;
+  }
+  .ssot-card-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .ssot-arrow {
+    font-size: 10px;
+    color: #374151;
+    margin-top: 4px;
+  }
+
+  /* ── PRINCIPLE STRIP ── */
+  .principle-strip {
+    max-width: 960px;
+    margin: 16px auto 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .principle-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    text-align: center;
+  }
+  .principle-card .icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  .principle-card h3 {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .principle-card p {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ── SPACER ── */
+  .spacer { height: 36px; }
+
+  @media (max-width: 700px) {
+    .pipeline-wrap {
+      grid-template-columns: 1fr;
+    }
+    .skill-col, .gemma-col { display: none; }
+    .principle-strip { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-badge">TC TEAM v2 · 파이프라인</div>
+  <h1>설계 → 코딩 → 검증 → 수정</h1>
+  <p>판단하는 역할과 코딩하는 역할을 명확히 분리</p>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--judge-color)"></div>
+    판단자 — 무엇을 / 어떻게 결정
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--coder-color)"></div>
+    코더 — 시키는 대로 실행
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--gemma-color)"></div>
+    Haiku — 문장 변환만
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:var(--ssot-color)"></div>
+    SSoT 스킬 파일
+  </div>
+</div>
+
+<!-- MAIN PIPELINE GRID -->
+<div class="pipeline-wrap">
+
+  <!-- LEFT: SKILL FILES -->
+  <div class="skill-col">
+    <!-- spacer to align with STEP 1 -->
+    <div style="height:108px"></div>
+
+    <div class="skill-tag">
+      tc-분석.md
+      <span>← STEP 1 참조</span>
+      <span>예외·경계값 참조표</span>
+    </div>
+
+    <div style="height:4px"></div>
+
+    <div class="skill-tag">
+      tc-설계.md
+      <span>← STEP 1 참조</span>
+      <span>케이스 트리·분류 구조</span>
+    </div>
+
+    <div style="height:80px"></div>
+
+    <div class="skill-tag">
+      tc-생성.md
+      <span>← STEP 3 참조</span>
+      <span>10컬럼 양식·서식</span>
+    </div>
+
+    <div style="height:80px"></div>
+
+    <div class="skill-tag">
+      tc-리뷰.md
+      <span>← STEP 4/6 참조</span>
+      <span>EVAL 01~13·처방 형식</span>
+    </div>
+
+    <div style="height:56px"></div>
+
+    <div class="skill-tag">
+      tc-수정.md
+      <span>← STEP 5/7 참조</span>
+      <span>처방 파싱·실행 규칙</span>
+    </div>
+  </div>
+
+  <!-- CENTER: PIPELINE -->
+  <div class="pipeline">
+
+    <!-- SOURCE -->
+    <div class="source-node">
+      <strong>기획서 (Confluence / PDF / doc)</strong>
+      스프레드시트 ID + Confluence URL
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 1 -->
+    <div class="step-node judge">
+      <div class="step-header">
+        <span class="step-num">STEP 1</span>
+        <span class="step-title">tc-designer</span>
+        <span class="step-role-badge">판단자</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">기획서 분석 · 이미지 포함 직접 분석<br>케이스 트리 작성 (→ 정상/부정/예외-N:)</div>
+        <div class="step-tags">
+          <span class="tag out">analysis.md</span>
+          <span class="tag out">tc_design.md</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 2 -->
+    <div class="step-node check">
+      <div class="step-header">
+        <span class="step-num">STEP 2</span>
+        <span class="step-title">tc-설계검수</span>
+        <span class="step-role-badge">검수</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">C-01~C-10 기준 설계 결과물 검수<br>이슈 있으면 STEP 1 재실행</div>
+        <div class="step-tags">
+          <span class="tag out">design_review.md</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 3 -->
+    <div class="step-node coder">
+      <div class="step-header">
+        <span class="step-num">STEP 3</span>
+        <span class="step-title">tc-writer</span>
+        <span class="step-role-badge">코더</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">tc_design.md 케이스 목록 읽고<br>스프레드시트 10컬럼에 그대로 코딩</div>
+        <div class="gemma-badge">Haiku — 케이스 설명 → 재현스탭 문장 변환만</div>
+        <div class="step-tags">
+          <span class="tag out">스프레드시트 TC</span>
+          <span class="tag out">tc_snapshot.xlsx</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 4 -->
+    <div class="step-node judge">
+      <div class="step-header">
+        <span class="step-num">STEP 4</span>
+        <span class="step-title">qa-reviewer (1차)</span>
+        <span class="step-role-badge">판단자</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">구조 리뷰 — EVAL 01·02·04~06·08·10·12<br>이슈마다 <strong style="color:#f0f2f8">처방:</strong> 필드 작성 필수</div>
+        <div class="step-tags">
+          <span class="tag out">review_v1.md (처방 포함)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 5 -->
+    <div class="step-node coder">
+      <div class="step-header">
+        <span class="step-num">STEP 5</span>
+        <span class="step-title">tc-fixer (1차)</span>
+        <span class="step-role-badge">코더</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">처방: 줄만 파싱 → 순서대로 실행<br>판단 없음 · 처방 없는 이슈는 스킵</div>
+        <div class="gemma-badge">Haiku — 재현스탭 초안 → 완성 문장 변환만</div>
+        <div class="step-tags">
+          <span class="tag out">tc_after_fix1.json</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 6 -->
+    <div class="step-node judge">
+      <div class="step-header">
+        <span class="step-num">STEP 6</span>
+        <span class="step-title">qa-reviewer (2차)</span>
+        <span class="step-role-badge">판단자</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">품질 리뷰 — EVAL 03·07·09·11·13<br>1차 수정 반영 확인 + 처방: 작성</div>
+        <div class="step-tags">
+          <span class="tag out">review_v2.md (처방 포함)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- STEP 7 -->
+    <div class="step-node coder">
+      <div class="step-header">
+        <span class="step-num">STEP 7</span>
+        <span class="step-title">tc-fixer (2차)</span>
+        <span class="step-role-badge">코더</span>
+      </div>
+      <div class="step-body">
+        <div class="step-desc">2차 처방 실행 · 서식 재적용<br>스냅샷 저장 · 대시보드 갱신</div>
+        <div class="gemma-badge">Haiku — 재현스탭 초안 → 완성 문장 변환만</div>
+        <div class="step-tags">
+          <span class="tag out">tc_after_fix2.json</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- OUTPUT -->
+    <div class="output-node">
+      <strong>✓ TC 완료</strong>
+      <p>스프레드시트 · 로컬 스냅샷 · 대시보드 갱신</p>
+    </div>
+
+  </div><!-- /pipeline -->
+
+  <!-- RIGHT: GEMMA4 -->
+  <div class="gemma-col">
+    <div style="height:344px"></div>
+
+    <div class="gemma-card">
+      <div class="gemma-card-title">◆ WRITER 내 Haiku</div>
+      <div class="gemma-card-desc">
+        케이스 설명 1줄<br>
+        → 재현스탭 문장 1줄<br><br>
+        뭘 테스트할지 판단 ✗<br>
+        문장 형식 변환만 ✓
+      </div>
+    </div>
+
+    <div style="height:188px"></div>
+
+    <div class="gemma-card">
+      <div class="gemma-card-title">◆ FIXER 내 Haiku</div>
+      <div class="gemma-card-desc">
+        재현스탭 초안 1줄<br>
+        → 완성 문장 1줄<br><br>
+        처방 해석 판단 ✗<br>
+        문장 완성만 ✓
+      </div>
+    </div>
+  </div>
+
+</div><!-- /pipeline-wrap -->
+
+<!-- SSoT SECTION -->
+<div class="ssot-section">
+  <div class="ssot-title">SINGLE SOURCE OF TRUTH — 스킬 파일 체계</div>
+  <div class="ssot-grid">
+    <div class="ssot-card">
+      <div class="ssot-card-name">tc-분석.md</div>
+      <div class="ssot-card-desc">기획서 분석 단계<br>입력 유형 감지<br>예외·경계값 참조표</div>
+      <div class="ssot-arrow">↑ designer 참조</div>
+    </div>
+    <div class="ssot-card">
+      <div class="ssot-card-name">tc-설계.md</div>
+      <div class="ssot-card-desc">설계 단계<br>케이스 트리<br>플랫폼·GlobalDefine 결정</div>
+      <div class="ssot-arrow">↑ designer 참조</div>
+    </div>
+    <div class="ssot-card">
+      <div class="ssot-card-name">tc-설계검수.md</div>
+      <div class="ssot-card-desc">설계 검수 기준<br>C-01~C-10<br>Pass Gate</div>
+      <div class="ssot-arrow">↑ 설계검수 참조</div>
+    </div>
+    <div class="ssot-card">
+      <div class="ssot-card-name">tc-생성.md</div>
+      <div class="ssot-card-desc">양식 코딩 규칙<br>10컬럼 구조<br>재현스탭 형식</div>
+      <div class="ssot-arrow">↑ writer 참조</div>
+    </div>
+    <div class="ssot-card">
+      <div class="ssot-card-name">tc-리뷰.md</div>
+      <div class="ssot-card-desc">EVAL 01~13 기준<br>처방 작성 규칙<br>차수별 역할 분리</div>
+      <div class="ssot-arrow">↑ reviewer 참조</div>
+    </div>
+    <div class="ssot-card">
+      <div class="ssot-card-name">tc-수정.md</div>
+      <div class="ssot-card-desc">처방 실행 규칙<br>신규 TC 삽입<br>분류 그룹핑</div>
+      <div class="ssot-arrow">↑ fixer 참조</div>
+    </div>
+  </div>
+</div>
+
+<!-- PRINCIPLE STRIP -->
+<div class="principle-strip">
+  <div class="principle-card">
+    <div class="icon">🎯</div>
+    <h3>판단은 한 곳에</h3>
+    <p>designer·reviewer가 모든 결정.<br>writer·fixer는 그 결정을 실행만.</p>
+  </div>
+  <div class="principle-card">
+    <div class="icon">📋</div>
+    <h3>처방 기반 수정</h3>
+    <p>reviewer가 처방: 작성.<br>fixer는 처방 그대로 코딩.<br>처방 없는 이슈는 스킵.</p>
+  </div>
+  <div class="principle-card">
+    <div class="icon">✨</div>
+    <h3>Haiku = 문장 변환만</h3>
+    <p>뭘 테스트할지 판단 안 함.<br>케이스 설명·초안을 TC 서식<br>문장으로 다듬는 것만.</p>
+  </div>
+</div>
+
+<div class="spacer"></div>
+
+</body>
+</html>
