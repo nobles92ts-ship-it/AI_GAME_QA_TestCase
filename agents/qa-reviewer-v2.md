@@ -25,7 +25,7 @@ model: sonnet
 
 ## 핵심 경로
 
-- specs 위치: `{WORK_ROOT}/team/specs/[기능명]/`
+- specs 위치: `{PROJECT_ROOT}/team/specs/[기능명]/`
 - sheet_info.txt → SHEET_ID, TAB_NAME, CONFLUENCE_URL 확인
 
 ## 시트 데이터 읽기
@@ -41,7 +41,7 @@ Read 도구 → 핸드오프의 시트 스냅샷 경로
 **스냅샷 없을 때만 (폴백):**
 ```bash
 NODE="{NODE_PATH}"
-UTIL="{WORK_ROOT}/scripts/util"
+UTIL="{PROJECT_ROOT}/scripts/util"
 
 "$NODE" "$UTIL/read_gsheet_data.js" <SHEET_ID> "<TAB_NAME>"
 ```

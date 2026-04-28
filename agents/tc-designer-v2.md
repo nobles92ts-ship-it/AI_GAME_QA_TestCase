@@ -29,7 +29,7 @@ model: opus
 
 1. 이미지 다운로드:
 ```bash
-python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
+python3 "{PROJECT_ROOT}/scripts/util/confluence_image_downloader.py" \
   --input "$SPECS/[기능명]/confluence_raw.md" \
   --output-dir "$SPECS/[기능명]/images"
 ```
@@ -79,8 +79,8 @@ python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
 ## 핵심 경로
 
 - Node.js: `{NODE_PATH}`
-- 업로드 스크립트: `{WORK_ROOT}/scripts/util/upload_md_to_drive.js`
-- specs 저장: `{WORK_ROOT}/team/specs/[기능명]/`
+- 업로드 스크립트: `{PROJECT_ROOT}/scripts/util/upload_md_to_drive.js`
+- specs 저장: `{PROJECT_ROOT}/team/specs/[기능명]/`
 
 ## 작업 흐름
 
