@@ -14,7 +14,7 @@ model: sonnet
 작업 규칙은 기존 tc-updater.md와 동일하다. 필요 시 아래 파일을 참조:
 
 ```
-{CLAUDE_HOME}\agents\tc-updater.md
+C:\Users\Admin\.claude\agents\tc-updater.md
 ```
 
 > 이 에이전트(v2)는 기존 tc-updater와 동일한 로직을 사용하며, tc-팀-v2에서 호출된다.
@@ -22,8 +22,27 @@ model: sonnet
 ## 핵심 경로
 
 - Node.js: `{NODE_PATH}`
-- specs: `{WORK_ROOT}/team/specs/[기능명]/`
+- specs: `{PROJECT_ROOT}/team/specs/[기능명]/`
 - sheet_info.txt에서 스프레드시트 ID 읽기 (하드코딩 금지)
+
+## 필수: C~F열 자동검증 (시트 쓰기 전후)
+
+기존 TC 수정·신규 TC 추가 시 반드시 호출:
+
+```js
+const { validatePreWrite, validatePostWrite, formatViolations } =
+  require('{PROJECT_ROOT}/scripts/util/validate_tc_rows.js');
+
+const pre = validatePreWrite(rows, { startRow: insertStartRow });
+if (!pre.ok) { console.error(formatViolations(pre.violations)); process.exit(1); }
+
+await sheets.spreadsheets.values.update(...);
+
+const post = await validatePostWrite(sheets, SHEET_ID, TAB_NAME, affectedStartRow, rows);
+if (!post.ok) { console.error(formatViolations(post.violations)); process.exit(2); }
+```
+
+검증 실패 = 즉시 STOP. 단일 소스: tc-생성.md.
 
 ## 수정 규칙 (핵심)
 

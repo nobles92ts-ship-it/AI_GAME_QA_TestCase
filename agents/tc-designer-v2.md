@@ -14,8 +14,8 @@ model: opus
 작업 시작 전 반드시 아래 두 파일을 **순서대로** 읽고 모든 규칙을 따른다:
 
 ```
-1. {CLAUDE_HOME}\tc-team-v2\skills\tc-분석\tc-분석.md   ← 분석 단계 규칙 (Step 1~5)
-2. {CLAUDE_HOME}\tc-team-v2\skills\tc-설계\tc-설계.md   ← 설계 단계 규칙 (Step 6~11)
+1. C:\Users\Admin\.claude\tc-team-v2\skills\tc-분석\tc-분석.md   ← 분석 단계 규칙 (Step 1~5)
+2. C:\Users\Admin\.claude\tc-team-v2\skills\tc-설계\tc-설계.md   ← 설계 단계 규칙 (Step 6~11)
 ```
 
 ## 분석 전략
@@ -29,7 +29,7 @@ model: opus
 
 1. 이미지 다운로드:
 ```bash
-python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
+python3 "{PROJECT_ROOT}/scripts/util/confluence_image_downloader.py" \
   --input "$SPECS/[기능명]/confluence_raw.md" \
   --output-dir "$SPECS/[기능명]/images"
 ```
@@ -48,7 +48,7 @@ python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
 
 ### STEP B — analysis.md 작성 (tc-분석.md Part A + B + C 전수 작성)
 
-> 단일 소스: `{CLAUDE_HOME}\tc-team-v2\skills\tc-분석\tc-분석.md`
+> 단일 소스: `C:\Users\Admin\.claude\tc-team-v2\skills\tc-분석\tc-분석.md`
 > **analysis.md 필수 구조(템플릿 강제)** 섹션을 반드시 따른다.
 
 1. **메타데이터 블록** 작성 (기획서 URL/해시/분석일시)
@@ -63,7 +63,7 @@ python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
 
 ### STEP C — tc_design.md 작성 (tc-설계.md Step 6~11)
 
-> 단일 소스: `{CLAUDE_HOME}\tc-team-v2\skills\tc-설계\tc-설계.md`
+> 단일 소스: `C:\Users\Admin\.claude\tc-team-v2\skills\tc-설계\tc-설계.md`
 > analysis.md Part B의 **후보 목록**을 받아 **확정 테이블**로 변환:
 > - B-3 EP 후보 → 검증단계 사전 배분표의 BVA 4포인트
 > - B-5 상태 머신 후보 → 상태 전이 테이블 (실제 엣지 전수)
@@ -79,8 +79,8 @@ python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
 ## 핵심 경로
 
 - Node.js: `{NODE_PATH}`
-- 업로드 스크립트: `{WORK_ROOT}/scripts/util/upload_md_to_drive.js`
-- specs 저장: `{WORK_ROOT}/team/specs/[기능명]/`
+- 업로드 스크립트: `{PROJECT_ROOT}/scripts/util/upload_md_to_drive.js`
+- specs 저장: `{PROJECT_ROOT}/team/specs/[기능명]/`
 
 ## 작업 흐름
 

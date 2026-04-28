@@ -1,11 +1,11 @@
 # TC 팀 v2 — 모니터 출력 규칙 (SSoT)
 
-팀장은 STEP 전환 시점마다 이 파일을 Read하여 모니터 블록을 렌더링한다.
+팀장은 STEP 전환 시점마다 본 파일 Read → 모니터 블록 렌더링.
 
 ---
 
 ## 갱신 시점
-- **STEP 전환 직후**: 이전 STEP 완료 + 다음 STEP 시작 시점 1회 재출력 (권장)
+- **STEP 전환 직후**: 이전 완료 + 다음 시작 시 1회 재출력 (권장)
 - 30초 강제 주기 갱신 없음 (노이즈 방지)
 - 배치 내 기능 전환 시 전체 블록 재출력
 
@@ -13,7 +13,7 @@
 
 ## 파일 출력 (PowerShell 외부 모니터용)
 
-팀장은 모니터 블록을 **항상 `monitor.log`에 overwrite** 저장:
+팀장은 모니터 블록을 **`monitor.log`에 overwrite** 저장:
 
 ```bash
 MONITOR_FILE="{WORK_ROOT}/team/monitor.log"
@@ -26,11 +26,11 @@ $(generate_monitor_body)
 EOF
 }
 
-# 사용: 화면 + 파일 동시 출력 (파일은 덮어쓰기)
+# 화면 + 파일 동시 출력 (파일 덮어쓰기)
 print_monitor | tee "$MONITOR_FILE"
 ```
 
-> `monitor.log`에는 **최신 블록 1개만** 저장됨 (덮어쓰기). PowerShell 외부 창에서 실시간 관찰 가능 (`monitor.bat` 참조).
+> `monitor.log`에는 **최신 블록 1개만** 저장 (덮어쓰기). PowerShell 외부 창 실시간 관찰 (`monitor.bat`).
 
 ---
 
@@ -115,25 +115,21 @@ TC 팀 v2 에이전트 모니터  (HH시 MM분 SS초)
 
 ## 비용 임계 경고 (모니터 상단 강조)
 
-`batch_cost_summary.sh` exit code 기반:
+**정지 기능 OFF**. `batch_cost_summary.sh` 항상 exit 0. 초과해도 파이프라인 계속.
 
 ```bash
-bash "$UTIL/batch_cost_summary.sh"
-case $? in
-  0) ;;  # 정상
-  2) echo "🔴 [경고] 배치 누적 \$30 초과 — 자동 일시중지, 계속 여부 확인 필요" ;;
-esac
+bash "$UTIL/batch_cost_summary.sh"   # 항상 정보성 — 차단 X
 ```
 
-모니터 상단 헤더에 비용 색상 표기:
-- 잔여 $10 이하 → `비용 $24.52 / $30 🟡`
-- $30 초과 → `비용 $31.10 / $30 🔴 [일시중지]`
+모니터 상단 비용 색상 표기 (정보성):
+- 잔여 $5 이하 → `비용 $25.00 / $30 🟡 (정보성)`
+- $30 초과 → `비용 $31.10 / $30 [한도 초과 — 계속 진행 중]`
 
 ---
 
 ## 실패 배치 재시도 가이드
 
-배치 완료 블록에 실패 기능이 있으면 **자동으로 재실행 템플릿 1줄** 출력. 사용자는 복사-붙여넣기로 재시도 가능.
+배치 완료 블록에 실패 기능 있으면 **재실행 템플릿 1줄** 자동 출력. 복사-붙여넣기로 재시도.
 
 ```
  ⚠️ 실패 기능 재실행 템플릿:
@@ -149,12 +145,12 @@ esac
 bash "$UTIL/batch_cost_summary.sh"
 ```
 - 기능별 소계 + 배치 누적 + 잔여 예산 출력
-- 단일 기능 $10 초과 시 경고 (루프 의심)
-- 배치 누적 $30 초과 시 exit 2 → 팀장이 모니터에 🔴 경고 표시 + 사용자 계속 여부 확인
+- 단일 기능 $10 초과 → 경고 (루프 의심, 정지 X)
+- 배치 누적 $30 초과 → 정보성 로그 (**정지 OFF** — 계속)
 
 ---
 
 ## 외부 모니터 (pipeline_monitor.js)
 
-`monitor.bat` 더블클릭 시 `pipeline_monitor.js --watch` 실행 → PowerShell 창에서 `state.json` 기반 5초 주기 자동 렌더링.
-- 규칙 변경 시 `$UTIL/pipeline_monitor.js` 소스 수정 (본 문서의 포맷과 동기화 필요)
+`monitor.bat` 더블클릭 → `pipeline_monitor.js --watch` 실행 → PowerShell 창에서 `state.json` 기반 5초 주기 자동 렌더링.
+- 규칙 변경 시 `$UTIL/pipeline_monitor.js` 소스 수정 (본 문서 포맷과 동기화 필요)
