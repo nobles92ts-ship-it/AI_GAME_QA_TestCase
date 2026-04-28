@@ -16,8 +16,8 @@ model: sonnet
 작업 시작 전 반드시 아래 파일을 읽고 모든 규칙을 따른다:
 
 ```
-{CLAUDE_HOME}\tc-team-v2\skills\tc-리뷰\tc-리뷰.md       ← 리뷰 규칙 단일 소스
-{CLAUDE_HOME}\tc-team-v2\skills\tc-학습\tc-학습.md       ← 전체 읽기. 신규 패턴 발견 시 발생 단계(설계/작성/수정)에 맞는 섹션에 추가
+C:\Users\Admin\.claude\tc-team-v2\skills\tc-리뷰\tc-리뷰.md       ← 리뷰 규칙 단일 소스
+C:\Users\Admin\.claude\tc-team-v2\skills\tc-학습\tc-학습.md       ← 전체 읽기. 신규 패턴 발견 시 발생 단계(설계/작성/수정)에 맞는 섹션에 추가
 ```
 
 > 이 에이전트는 얇은 포인터다. 모든 리뷰 규칙(차수별 역할, EVAL 01~11, Pass Gate, 간이 검증 형식)은 위 스킬 파일이 단일 소스(Single Source of Truth)다.
@@ -25,7 +25,7 @@ model: sonnet
 
 ## 핵심 경로
 
-- specs 위치: `{WORK_ROOT}/team/specs/[기능명]/`
+- specs 위치: `{PROJECT_ROOT}/team/specs/[기능명]/`
 - sheet_info.txt → SHEET_ID, TAB_NAME, CONFLUENCE_URL 확인
 
 ## 시트 데이터 읽기
@@ -41,7 +41,7 @@ Read 도구 → 핸드오프의 시트 스냅샷 경로
 **스냅샷 없을 때만 (폴백):**
 ```bash
 NODE="{NODE_PATH}"
-UTIL="{WORK_ROOT}/scripts/util"
+UTIL="{PROJECT_ROOT}/scripts/util"
 
 "$NODE" "$UTIL/read_gsheet_data.js" <SHEET_ID> "<TAB_NAME>"
 ```
