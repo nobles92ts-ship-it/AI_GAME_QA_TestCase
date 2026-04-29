@@ -20,9 +20,9 @@
 
 ## ⚡ TL;DR
 
-- **7-stage multi-agent pipeline** — Claude Opus for analysis/design, Sonnet for review, Haiku for coding
+- **7-stage multi-agent pipeline** — Claude Opus for analysis/design, Sonnet for all other stages
 - **4 input formats** — Confluence URL / PDF / Word (`.doc`, `.docx`) / Excel (`.xlsx`, `.xls`), auto-detected
-- **Smart model routing** — Opus reasons, Sonnet reviews, Haiku codes — all via Claude Code CLI, no external API needed
+- **Smart model routing** — Opus for deep reasoning (STEP 1), Sonnet for everything else — all via Claude Code CLI, no external API needed
 - **Hybrid subagent + orchestrator pattern** — orchestrator spawns each worker as an isolated `claude` CLI process
 - **Resume logic** — checkpoint-based via `state.json`; survives mid-run interruptions
 - **SSoT rule management** — one skill file per stage, every agent reloads on change
@@ -59,11 +59,11 @@ Output quality benchmarked against a 3-year senior QA engineer: terminology cons
 |---|-------|-------|-------|-------------|:---:|
 | INIT | Workspace init + spec ingestion | orchestrator | Node.js + MCP | — | — |
 | 1 | Spec analysis & TC design | `tc-designer-v2` | Claude Opus · `effort:med` | — | ~40m |
-| 2 | Design inspection (C-01 ~ C-10) | `tc-설계검수-v2` | Claude Opus · `effort:low` | — | ~10m |
+| 2 | Design inspection (C-01 ~ C-10) | `tc-설계검수-v2` | Claude Sonnet | — | ~10m |
 | 3 | Design fix (max 1×) | `tc-designer-v2` | Claude Sonnet | `needs_fix == true` | ~10m |
-| 4 | TC authoring → Google Sheets | `tc-writer-v2` | Claude Haiku | — | ~3m |
+| 4 | TC authoring → Google Sheets | `tc-writer-v2` | Claude Sonnet | — | ~3m |
 | 5 | Review R1 (structure) | `qa-reviewer-v2` | Claude Sonnet | — | ~10m |
-| 6 | Fix R1 | `tc-fixer-v2` | Claude Haiku | `issues > 0` | ~2m |
+| 6 | Fix R1 | `tc-fixer-v2` | Claude Sonnet | `issues > 0` | ~2m |
 | 7 | Review R2 + Fix R2 (merged one-context pass) | `tc-리뷰2수정2-v2` | Claude Sonnet | — | ~10m |
 | DONE | Dashboard refresh + K·L panel + Drive sync | orchestrator | Node.js | — | ~2m |
 
@@ -77,20 +77,18 @@ We don't throw the same model at every stage. Each model has a sweet spot:
 
 | Model | Role | Stages |
 |-------|------|--------|
-| **Claude Opus** | Deep reasoning — spec analysis, design | STEP 1, 2 |
-| **Claude Sonnet** | Balanced — review, design fixes | STEP 3, 5, 7 |
-| **Claude Haiku** | Fast coder — mechanical text generation | STEP 4, 6 |
+| **Claude Opus** | Deep reasoning — spec analysis & design | STEP 1 |
+| **Claude Sonnet** | Balanced — all other stages | STEP 2, 3, 4, 5, 6, 7 |
 
-- **Opus handles**: spec analysis, design inspection (complex judgment)
-- **Sonnet handles**: structural review, merged review+fix (balanced reasoning)
-- **Haiku handles**: TC authoring (writing rows into Sheets), fix-application (applying reviewer prescriptions)
+- **Opus handles**: spec analysis (complex judgment, `--effort medium`)
+- **Sonnet handles**: design inspection, TC authoring, review, fix-application, merged review+fix
 
 All models are called through **Claude Code CLI** (`claude --model <model> --agent <agent>`) — no external API keys, no SDK dependencies, no local model servers needed.
 
-| Stage | Before (v1 — Gemma4 local) | After (v2 — Haiku CLI) | Improvement |
+| Stage | Before (v1 — Gemma4 local) | After (v2 — Sonnet CLI) | Improvement |
 |-------|:---:|:---:|:---:|
-| STEP 4 TC authoring | Gemma4 · ~10 min · preamble bugs | Haiku CLI · ~3 min · clean output | 3× faster, no bugs |
-| STEP 6 Fix R1 | Gemma4 · ~10 min · quota limits | Haiku CLI · ~2 min · no limits | 5× faster, reliable |
+| STEP 4 TC authoring | Gemma4 · ~10 min · preamble bugs | Sonnet CLI · ~3 min · clean output | 3× faster, no bugs |
+| STEP 6 Fix R1 | Gemma4 · ~10 min · quota limits | Sonnet CLI · ~2 min · no limits | 5× faster, reliable |
 | Setup complexity | Ollama install + VRAM + API key | None (Claude Code built-in) | Zero setup |
 
 ---
@@ -165,7 +163,7 @@ Two MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.mcp
 
 | Layer | Tech |
 |-------|------|
-| Agent runtime | Claude Code CLI (Opus 4.6 · Sonnet 4.6 · Haiku 4.5) |
+| Agent runtime | Claude Code CLI (Opus 4.6 · Sonnet 4.6) |
 | Orchestration | Bash + Node.js (CLI process spawning, state persistence, Bash↔MCP bridging) |
 | Input parsers | `xlsx` (Excel) · `pdf-parse` / `pdfjs-dist` (PDF) · `mammoth` (Word) · MCP (Confluence ADF) |
 | Output | Google Sheets API via `googleapis` |
@@ -181,9 +179,9 @@ AI_GAME_QA_TestCase/
 │   ├── tc-팀-v2.md                # Orchestrator — state.json + worker spawning
 │   ├── tc-designer-v2.md          # STEP 1 / STEP 3
 │   ├── tc-설계검수-v2.md          # STEP 2 — design quality gate (C-01~C-10)
-│   ├── tc-writer-v2.md            # STEP 4 — TC authoring (Haiku)
+│   ├── tc-writer-v2.md            # STEP 4 — TC authoring (Sonnet)
 │   ├── qa-reviewer-v2.md          # STEP 5 — structural review
-│   ├── tc-fixer-v2.md             # STEP 6 — fix application (Haiku)
+│   ├── tc-fixer-v2.md             # STEP 6 — fix application (Sonnet)
 │   ├── tc-리뷰2수정2-v2.md        # STEP 7 — merged R2 + fix pass
 │   └── tc-updater-v2.md           # Spec-change detection + surgical TC update
 │
@@ -192,7 +190,7 @@ AI_GAME_QA_TestCase/
 │
 ├── skills/                        # Per-stage SSoT skill files
 │   ├── tc-설계/  tc-생성/  tc-리뷰/  tc-수정/  tc-갱신/  tc-설계검수/
-│   ├── haiku/                     # Haiku writer/fixer skill definitions (STEP 4, 6)
+│   ├── haiku/                     # Sonnet writer/fixer skill definitions (STEP 4, 6)
 │   └── 완료처리/  tc-대시보드/    # Pipeline-tail skills
 │
 ├── scripts/
@@ -228,7 +226,7 @@ AI_GAME_QA_TestCase/
 
 ### ✅ Phase 1 — Multi-source TC automation & auto-completion (shipped)
 - Confluence / PDF / Word / Excel → Google Sheets generation
-- 7-stage multi-agent pipeline (Claude Opus / Sonnet / Haiku via CLI)
+- 7-stage multi-agent pipeline (Claude Opus for STEP 1, Sonnet for STEP 2–7, via CLI)
 - Merged review + fix pass for faster quality cycles
 - Auto-completion tail: dashboard / K·L panel / Drive sync
 - `tc-updater-v2` for surgical spec-change updates (Confluence only for now)
