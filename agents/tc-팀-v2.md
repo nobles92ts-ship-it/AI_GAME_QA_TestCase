@@ -62,7 +62,7 @@ STABILITY_DOC = {CLAUDE_HOME}/tc-team-v2/docs/stability.md
 
 ```bash
 bash "$RETRY" "$SPECS/[기능명]/step[N]_stderr.log" -- \
-  bash "$UTIL/run-agent.sh" -p --agent <에이전트명> --model <모델> [--effort <level>] --permission-mode bypassPermissions \
+  bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" -p --agent <에이전트명> --model <모델> [--effort <level>] --permission-mode bypassPermissions \
   "<핸드오프 프롬프트>"
 
 rc=$?
@@ -291,7 +291,7 @@ fi
 ```bash
 # Bash 툴 호출 시 timeout: 3600000 (60분) 필수 — analysis.md Part A/B/C 작성 시간 확보
 bash "$RETRY" "$SPECS/[기능명]/step1_stderr.log" -- \
-  bash "$UTIL/run-agent.sh" -p --agent tc-designer-v2 --model opus --effort medium --permission-mode bypassPermissions "
+  bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" -p --agent tc-designer-v2 --model opus --effort medium --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
@@ -309,7 +309,7 @@ Confluence MCP 재호출 금지.
 ```bash
 # Bash 툴 호출 시 timeout: 600000 (10분) 필수
 bash "$RETRY" "$SPECS/[기능명]/step2_stderr.log" -- \
-  bash "$UTIL/run-agent.sh" -p --agent tc-설계검수-v2 --model sonnet --permission-mode bypassPermissions "
+  bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" -p --agent tc-설계검수-v2 --model sonnet --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - specs 경로: $SPECS/[기능명]
@@ -324,7 +324,7 @@ bash "$RETRY" "$SPECS/[기능명]/step2_stderr.log" -- \
 ```bash
 # Bash 툴 호출 시 timeout: 1800000 (30분) 필수
 bash "$RETRY" "$SPECS/[기능명]/step3_stderr.log" -- \
-  bash "$UTIL/run-agent.sh" -p --agent tc-designer-v2 --model sonnet --permission-mode bypassPermissions "
+  bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" -p --agent tc-designer-v2 --model sonnet --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
@@ -361,7 +361,7 @@ fi
 
 # writer 호출
 bash "$RETRY" "$SPECS/[기능명]/step4_stderr.log" -- \
-  bash "$UTIL/run-agent.sh" -p --agent tc-writer-v2 --model sonnet --permission-mode bypassPermissions "
+  bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" -p --agent tc-writer-v2 --model sonnet --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 스프레드시트 ID: [SHEET_ID]
@@ -399,7 +399,7 @@ else
 
   # Bash 툴 호출 시 timeout: 600000 (10분) 필수
   bash "$RETRY" "$SPECS/[기능명]/step5_stderr.log" -- \
-    bash "$UTIL/run-agent.sh" $CLI_OPTS --agent qa-reviewer-v2 "
+    bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" $CLI_OPTS --agent qa-reviewer-v2 "
 ## HANDOFF
 - 기능명: [기능명]
 - 스프레드시트 ID: [ID]
@@ -432,7 +432,7 @@ else
 
   # Bash 툴 호출 시 timeout: 1800000 (30분) 필수
   bash "$RETRY" "$SPECS/[기능명]/step6_stderr.log" -- \
-    bash "$UTIL/run-agent.sh" -p --agent tc-fixer-v2 --model sonnet --permission-mode bypassPermissions "
+    bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" -p --agent tc-fixer-v2 --model sonnet --permission-mode bypassPermissions "
 ## HANDOFF
 - 기능명: [기능명]
 - 스프레드시트 ID: [SHEET_ID]
@@ -470,7 +470,7 @@ else
   [ -f "$SNAPSHOT" ] || SNAPSHOT="$SPECS/[기능명]/tc_snapshot.json"
 
   bash "$RETRY" "$SPECS/[기능명]/step7_stderr.log" -- \
-    bash "$UTIL/run-agent.sh" $CLI_OPTS --agent tc-리뷰2수정2-v2 "
+    bash "{PROJECT_ROOT}/scripts/util/run-agent.sh" $CLI_OPTS --agent tc-리뷰2수정2-v2 "
 ## HANDOFF
 - 기능명: [기능명]
 - 스프레드시트 ID: [ID]
