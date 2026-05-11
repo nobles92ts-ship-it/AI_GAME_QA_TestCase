@@ -26,7 +26,7 @@
 - **Hybrid subagent + orchestrator pattern** — orchestrator spawns each worker as an isolated `claude` CLI process
 - **Resume logic** — checkpoint-based via `state.json`; survives mid-run interruptions
 - **SSoT rule management** — one skill file per stage, every agent reloads on change
-- **Auto-completion tail** — master dashboard refresh + K/L project panel + Google Drive sync
+- **Auto-completion tail** — master dashboard refresh + K/L project panel + Google Drive sync + tab color/order sort
 - **Zero human click-through time beyond the initial 2 links** (~1 min of human attention per 300-TC run)
 
 ---
@@ -65,7 +65,7 @@ Output quality benchmarked against a 3-year senior QA engineer: terminology cons
 | 5 | Review R1 (structure) | `qa-reviewer-v2` | Claude Sonnet | — | ~10m |
 | 6 | Fix R1 | `tc-fixer-v2` | Claude Sonnet | `issues > 0` | ~2m |
 | 7 | Review R2 + Fix R2 (merged one-context pass) | `tc-리뷰2수정2-v2` | Claude Sonnet | — | ~10m |
-| DONE | Dashboard refresh + K·L panel + Drive sync | orchestrator | Node.js | — | ~2m |
+| DONE | Dashboard refresh + K·L panel + Drive sync + tab color sort | orchestrator | Node.js | — | ~2m |
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full data-flow diagram, resume-logic implementation, and orchestration internals.
 
@@ -193,12 +193,16 @@ AI_GAME_QA_TestCase/
 │   ├── haiku/                     # Sonnet writer/fixer skill definitions (STEP 4, 6)
 │   └── 완료처리/  tc-대시보드/    # Pipeline-tail skills
 │
+├── appscript/
+│   └── tab_manager.gs             # Tab color/sort Apps Script (M3 button + daily 09:00 KST auto-run)
+│
 ├── scripts/
 │   └── util/                      # Node utilities
 │       ├── google_auth.js         # Google OAuth (client_secret + token flow)
 │       ├── update_dashboard.js    # Master dashboard refresh
 │       ├── add_project_info.js    # K/L project-info panel
 │       ├── upload_md_to_drive.js  # Specs → Drive sync
+│       ├── deploy_appscript.js    # One-shot deployer — pushes tab_manager.gs to Sheets-bound project
 │       ├── create_gsheet_tc_from_json.js
 │       ├── apply_fixes.js
 │       ├── read_gsheet_data.js
@@ -229,6 +233,7 @@ AI_GAME_QA_TestCase/
 - 7-stage multi-agent pipeline (Claude Opus for STEP 1, Sonnet for STEP 2–7, via CLI)
 - Merged review + fix pass for faster quality cycles
 - Auto-completion tail: dashboard / K·L panel / Drive sync
+- Tab color/sort auto-management: M3 dashboard button trigger + daily 09:00 KST auto-sort (`tab_manager.gs` + `deploy_appscript.js`)
 - `tc-updater-v2` for surgical spec-change updates (Confluence only for now)
 
 ### 🔜 Phase 2 — Intelligent TC management

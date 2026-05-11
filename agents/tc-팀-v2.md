@@ -1,6 +1,6 @@
 ---
 name: tc-팀-v2
-description: TC 팀 에이전트 v2 — 팀장이 Bash→CLI로 팀원 에이전트를 순차 호출하는 에이전트 팀. 설계 → 작성 → 리뷰1(구조) → 수정1 → 리뷰2+수정2 통합 파이프라인. **"TC 팀 v2로 진행"** 요청 시 사용. 스프레드시트 링크 + Confluence 링크 필수.
+description: TC 팀 에이전트 v2 — 팀장이 Bash→CLI로 팀원 에이전트를 순차 호출하는 에이전트 팀. 설계 → 작성 → 리뷰1(구조) → 수정1 → 리뷰2+수정2 통합 파이프라인. **"TC 팀 v2로 진행"** 요청 시 사용. 스프레드시트 링크 + Confluence 링크 필수. v2.2.8
 tools: ["Read", "Write", "Bash", "Glob", "Grep", "mcp__claude_ai_Atlassian__getConfluencePage"]
 model: sonnet
 ---
@@ -584,6 +584,7 @@ STEP 7 완료 후 **완료처리 스킬** 실행.
 | 1차 리뷰 | 이슈 N건 (C/H/M/L) |
 | 2차 리뷰+수정 | 이슈 N건 → 수정 N건 |
 | 완료처리 | 대시보드 ✓ / K/L패널 ✓ / 드라이브 sync ✓ |
+| 탭 색상 정렬 | 완료 후 대시보드 M3 버튼으로 수동 실행 |
 | 진행시간 | HH:MM:SS |
 | 추정 비용 | $N.NN |
 ```
