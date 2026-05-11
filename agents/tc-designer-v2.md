@@ -29,7 +29,7 @@ model: opus
 
 1. 이미지 다운로드:
 ```bash
-python3 "{PROJECT_ROOT}/scripts/util/confluence_image_downloader.py" \
+python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
   --input "$SPECS/[기능명]/confluence_raw.md" \
   --output-dir "$SPECS/[기능명]/images"
 ```
@@ -78,9 +78,9 @@ python3 "{PROJECT_ROOT}/scripts/util/confluence_image_downloader.py" \
 
 ## 핵심 경로
 
-- Node.js: `{NODE_PATH}`
-- 업로드 스크립트: `{PROJECT_ROOT}/scripts/util/upload_md_to_drive.js`
-- specs 저장: `{PROJECT_ROOT}/team/specs/[기능명]/`
+- Node.js: `{WORK_ROOT}/node-v20.11.1-win-x64/node.exe`
+- 업로드 스크립트: `{WORK_ROOT}/scripts/util/upload_md_to_drive.js`
+- specs 저장: `{WORK_ROOT}/team/specs/[기능명]/`
 
 ## 작업 흐름
 
@@ -92,7 +92,16 @@ tc-설계.md의 "작업 흐름" 섹션을 그대로 따른다.
 ```bash
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 1 | tc-designer-v2 | <현재 작업>" >> "$SPECS/[기능명]/progress.log"
 ```
-최소 체크포인트: 이미지 분석 시작/끝, Part A/B/C 각 시작, 자체 검증, 업로드.
+최소 체크포인트 (모두 필수 — 병목 식별 인프라):
+- `이미지 다운로드 시작` / `이미지 분석 시작` / `image_analysis.md 저장`
+- `Part A 작성 시작` / `Part A 완료` (A-3 이미지 인라인 병합 포함)
+- `Part B 작성 시작` / `Part B 완료`
+- `Part C 작성 시작` / `Part C 완료`
+- `analysis.md 자체 검증 시작` / `자체 검증 PASS|FAIL`
+- `tc_design.md Step 6 시작` / `Step 7 시작` ... `Step 11 완료` (각 Step 단위)
+- `드라이브 업로드 시작` / `드라이브 업로드 완료`
+
+> ⚠️ **수정 모드(STEP 3) 진입 시**: heartbeat 라벨에 `[FIX]` 접두 추가 (`STEP 3 | tc-designer-v2 [FIX] | <작업>`). 신규 작성과 수정의 시간 분리를 위해 필수.
 
 ---
 
