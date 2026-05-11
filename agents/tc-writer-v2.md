@@ -14,7 +14,7 @@ model: sonnet
 작업 시작 전 `tc-생성.md`의 **ROLE INDEX 표만 먼저 Read**한 뒤, **자기 역할(writer) 섹션만 부분 로드**한다.
 
 ```
-경로: {CLAUDE_HOME}\tc-team-v2\skills\tc-생성\tc-생성.md
+경로: C:\Users\Admin\.claude\tc-team-v2\skills\tc-생성\tc-생성.md
 ```
 
 ### Read 절차 (필수 — 풀 로드 금지)
@@ -37,10 +37,10 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] [READ] tc-생성.md offset=<N> limit=<M> re
 
 ## 핵심 경로
 
-- Node.js: `{NODE_PATH}`
-- TC 생성 스크립트: `{PROJECT_ROOT}/scripts/util/create_gsheet_tc.js`
-- 서식 스크립트: `{PROJECT_ROOT}/scripts/util/apply_format_tab.js`
-- specs 저장: `{PROJECT_ROOT}/team/specs/[기능명]/`
+- Node.js: `{WORK_ROOT}/node-v20.11.1-win-x64/node.exe`
+- TC 생성 스크립트: `{WORK_ROOT}/scripts/util/create_gsheet_tc.js`
+- 서식 스크립트: `{WORK_ROOT}/scripts/util/apply_format_tab.js`
+- specs 저장: `{WORK_ROOT}/team/specs/[기능명]/`
 
 ## 작업 흐름
 
@@ -53,7 +53,7 @@ LLM 판단으로 skip 금지. 검증 실패 시 적재 중단·STOP·로그.
 
 ```js
 const { validatePreWrite, validatePostWrite, formatViolations } =
-  require('{PROJECT_ROOT}/scripts/util/validate_tc_rows.js');
+  require('{WORK_ROOT}/scripts/util/validate_tc_rows.js');
 
 // ① 적재 직전 (LLM 호출 0, ~10ms)
 const pre = validatePreWrite(rows, { startRow: 2 });
@@ -87,9 +87,9 @@ TC 작성이 완료되면 즉시 **슬림 스냅샷 + 풀 스냅샷 2종**을 �
 - **풀 스냅샷** (`tc_snapshot_full.json`): 전체 열(A~L) + 정렬 JSON. 완료처리·대시보드용.
 
 ```bash
-NODE="{NODE_PATH}"
-UTIL="{PROJECT_ROOT}/scripts/util"
-SPEC="{PROJECT_ROOT}/team/specs/[기능명]"
+NODE="{WORK_ROOT}/node-v20.11.1-win-x64/node.exe"
+UTIL="{WORK_ROOT}/scripts/util"
+SPEC="{WORK_ROOT}/team/specs/[기능명]"
 
 # ① 슬림 스냅샷 (리뷰/수정용 — A~J열, minified)
 "$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" --columns A,B,C,D,E,F,G,H,I,J --minify > "$SPEC/tc_snapshot.json"
@@ -107,7 +107,17 @@ SPEC="{PROJECT_ROOT}/team/specs/[기능명]"
 ```bash
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 4 | tc-writer-v2 | <현재 작업>" >> "$SPECS/[기능명]/progress.log"
 ```
-최소 체크포인트: 탭 삭제, TC JSON 조립, 업로드 시작, 서식 적용, 스냅샷 저장.
+최소 체크포인트 (모두 필수 — STEP 4 내부 병목 식별용):
+- `tc-생성.md ROLE INDEX Read` / `writer 섹션 부분 Read 완료`
+- `tc_design.md Read 완료` / `행 수=N`
+- `컬럼 매핑 시작` / `컬럼 매핑 완료`
+- `분류 그룹핑 정렬 시작` / `정렬 완료`
+- `tc_data.json 조립 시작` / `tc_data.json 작성 완료` (행 수 명시)
+- `Pre-Write 검증 시작` / `Pre-Write PASS|FAIL`
+- `Sheets 탭 생성/리셋` / `batch update 시작` / `batch update 완료`
+- `Post-Write 검증 시작` / `Post-Write PASS|FAIL`
+- `서식 적용 시작` / `서식 적용 완료`
+- `슬림 스냅샷 저장` / `풀 스냅샷 저장`
 
 ---
 
