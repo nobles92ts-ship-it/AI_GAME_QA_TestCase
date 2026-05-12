@@ -160,14 +160,15 @@ async function updateDashboard() {
   }
 
   // 3. 초기화 (값 + 병합 + 서식 모두 초기화)
-  console.log('초기화 중...');
-  await sheets.spreadsheets.values.clear({ spreadsheetId:SPREADSHEET_ID, range:`${DASHBOARD_NAME}!A:AZ` });
+  //   ⚠️ A~L열(=12열, 0-indexed 0~12)만 초기화. M열 이후(특히 Q열~)는 AI 메트릭 영역으로 update_metrics.js가 관리하므로 절대 건드리지 않음.
+  console.log('초기화 중... (A:L 범위 제한)');
+  await sheets.spreadsheets.values.clear({ spreadsheetId:SPREADSHEET_ID, range:`${DASHBOARD_NAME}!A:L` });
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { requests: [
-      { unmergeCells: { range: R(SID, 0, 0, 200, 60) } },
+      { unmergeCells: { range: R(SID, 0, 0, 200, 12) } },
       { repeatCell: {
-          range: R(SID, 0, 0, 200, 60),
+          range: R(SID, 0, 0, 200, 12),
           cell: {},
           fields: 'userEnteredFormat'
       }},
