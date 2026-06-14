@@ -1,7 +1,14 @@
 /**
  * pipeline_monitor.js
  * TC 파이프라인 칸반 모니터 — state.json 기반으로 각 기획서의 현재 위치를 표시
- * 8단계를 세로(행)로, 기획서명을 오른쪽에 나열
+ * 10단계를 세로(행)로, 기획서명을 오른쪽에 나열
+ *
+ * v2 업그레이드:
+ *   - 상단 헤더: 배치 진행률 바
+ *   - 진행중 기능에 ▶ 마커 + 경과시간 인라인
+ *   - 완료 섹션: ✓/✗/⟲ + 소요 + TC 수
+ *   - 실패 기능 재실행 템플릿 자동 표시
+ *   - 비용 표기 제거(2026-06-10): cost.log 미배선(쓰기 코드 없음) — 거짓 $0 표시 방지 (팀장-1ⓑ 연장)
  *
  * 사용법:
  *   node pipeline_monitor.js          (1회 출력)
@@ -12,10 +19,11 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 
-const STATE_FILE = '{PROJECT_ROOT}/team/state.json';
-const HISTORY_FILE = '{PROJECT_ROOT}/team/history.json';
-const TIMING_FILE = '{PROJECT_ROOT}/team/timing.csv';
-const STATUS_DIR = '{PROJECT_ROOT}/team/status/';
+const STATE_FILE = '{WORK_ROOT}/team/state.json';
+const HISTORY_FILE = '{WORK_ROOT}/team/history.json';
+const TIMING_FILE = '{WORK_ROOT}/team/timing.csv';
+const STATUS_DIR = '{WORK_ROOT}/team/status/';
+const SPECS_DIR = '{WORK_ROOT}/team/specs/';
 
 // ── 행 정의 (순서 고정) — v2 파이프라인 기준 ──────────────────────────────
 const ROWS = [
@@ -37,38 +45,37 @@ function getRow(spec) {
   const r = review_round || 0;
   switch (state) {
     case 'pending':          return 'pending';
-    // STEP 1: 설계
     case 'designing':        return 'designing';
-    // STEP 2: 설계검수
     case 'design_reviewing': return 'design_review';
-    // STEP 3: 설계수정 (조건부)
     case 'design_fixing':    return 'design_fix';
-    case 'designed':         return 'writing';   // 설계 완료 → 작성 대기
-    // STEP 4: TC 작성
+    case 'designed':         return 'writing';
     case 'writing':          return 'writing';
     case 'written':
       if (r <= 1) return 'review1';
       if (r === 2) return 'review2';
       return 'done';
-    // STEP 5/7: 리뷰
     case 'reviewing':
       if (r <= 1) return 'review1';
       return 'review2';
-    // STEP 6/8: 수정
     case 'fixing':
       if (r <= 1) return 'fix1';
       return 'fix2';
-    // STEP 9: 간이검증 (조건부)
+    case 'reviewing_fixing': return 'review2';
     case 'verifying':        return 'verify';
     case 'done':             return 'done';
+    case 'failed':           return 'failed';
     default:                 return 'pending';
   }
 }
 
-// ── 시간 포맷팅 (ms → "2h 30m") ────────────────────────────────────────────
+// ── 시간 포맷팅 (ms → "2h 30m" / "12m 30s") ────────────────────────────────
 function formatDuration(ms) {
+  if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
   const totalMinutes = Math.floor(ms / 1000 / 60);
-  if (totalMinutes < 60) return `${totalMinutes}m`;
+  if (totalMinutes < 60) {
+    const sec = Math.floor((ms % 60000) / 1000);
+    return sec > 0 ? `${totalMinutes}m ${sec}s` : `${totalMinutes}m`;
+  }
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
@@ -80,49 +87,71 @@ function getStateDuration(feature, history, state) {
   const timeline = history[feature];
   let current = null;
   for (const entry of timeline) {
-    if (entry.state === state) {
-      current = entry;
-      break;
-    }
+    if (entry.state === state) { current = entry; break; }
   }
   if (!current) return null;
-
   const currentIdx = timeline.indexOf(current);
   const nextIdx = currentIdx + 1;
   if (nextIdx >= timeline.length) {
-    // 아직 완료되지 않음 → 현재 시간까지의 경과시간
     const elapsed = Date.now() - new Date(current.entered_at).getTime();
-    return {
-      duration: elapsed,
-      ongoing: true,
-      startTime: current.entered_at,
-      endTime: null
-    };
+    return { duration: elapsed, ongoing: true, startTime: current.entered_at, endTime: null };
   }
-
   const startTime = new Date(current.entered_at);
   const endTime = new Date(timeline[nextIdx].entered_at);
-  const duration = endTime.getTime() - startTime.getTime();
   return {
-    duration,
+    duration: endTime.getTime() - startTime.getTime(),
     ongoing: false,
     startTime: current.entered_at,
     endTime: timeline[nextIdx].entered_at
   };
 }
 
-// ── 시간 포맷팅 (ISO → "14:30") ────────────────────────────────────────────
 function formatTime(isoString) {
   const date = new Date(isoString);
   return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-// ── timing.csv 읽기 → 기능별 { startTime, endTime, duration } 맵 ─────────
+// ── step_result.json에서 TC 수 읽기 (있으면) ───────────────────────────────
+function readTcCount(feature) {
+  const candidates = ['step4_result.json', 'step_result.json'];
+  for (const c of candidates) {
+    const fp = path.join(SPECS_DIR, feature, c);
+    if (fs.existsSync(fp)) {
+      try {
+        const r = JSON.parse(fs.readFileSync(fp, 'utf8'));
+        if (r.tc_count) return r.tc_count;
+        if (r.total_tc) return r.total_tc;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+// ── 안전 파일 읽기 (Windows 파일 락 회피) ─────────────────────────────────
+function safeRead(fp) {
+  if (!fs.existsSync(fp)) return null;
+  for (let i = 0; i < 3; i++) {
+    try { return fs.readFileSync(fp, 'utf8'); }
+    catch (e) {
+      if (e.code === 'EBUSY' || e.code === 'EPERM') {
+        // 팀장이 쓰는 중 — 50ms 후 재시도
+        const until = Date.now() + 50;
+        while (Date.now() < until) {}
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+// ── timing.csv 읽기 ──────────────────────────────────────────────────────
 function readTimingMap() {
-  if (!fs.existsSync(TIMING_FILE)) return {};
-  const lines = fs.readFileSync(TIMING_FILE, 'utf8').trim().split('\n');
-  const map = {};  // featureName → { startTime: Date, endTime: Date }
-  for (let i = 1; i < lines.length; i++) {  // 헤더 skip
+  const raw = safeRead(TIMING_FILE);
+  if (!raw) return {};
+  const lines = raw.trim().split('\n');
+  const map = {};
+  for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',');
     if (cols.length < 6) continue;
     const feature = (cols[1] || '').trim();
@@ -139,14 +168,13 @@ function readTimingMap() {
       if (end   > map[feature].endTime)   map[feature].endTime   = end;
     }
   }
-  // duration 계산
   for (const f of Object.keys(map)) {
     map[f].duration = map[f].endTime.getTime() - map[f].startTime.getTime();
   }
   return map;
 }
 
-// ── 에이전트 상태 파일 읽기 (v2 에이전트 기준) ────────────────────────────
+// ── 에이전트 상태 파일 읽기 ────────────────────────────────────────────────
 function readAgentStatus() {
   const agents = [
     { file: 'tc-designer-v2.txt',    label: '설계' },
@@ -169,9 +197,15 @@ function readAgentStatus() {
   return result;
 }
 
-// ── 이전 출력 줄 지우기 (readline 기반, Windows PowerShell 호환) ─────────
-let prevLineCount = 0;
+// ── 진행률 바 렌더링 ──────────────────────────────────────────────────────
+function progressBar(current, total, width = 10) {
+  if (total <= 0) return '░'.repeat(width);
+  const filled = Math.round((current / total) * width);
+  return '▓'.repeat(filled) + '░'.repeat(width - filled);
+}
 
+// ── 이전 출력 줄 지우기 ───────────────────────────────────────────────────
+let prevLineCount = 0;
 function clearPrevOutput() {
   if (prevLineCount > 0) {
     readline.moveCursor(process.stdout, 0, -prevLineCount);
@@ -179,59 +213,76 @@ function clearPrevOutput() {
   }
 }
 
-// ── ANSI 색상 (터미널 렌더링 글리치 방지) ──────────────────────────────────
+// ── ANSI 색상 ──────────────────────────────────────────────────────────────
 const C = {
   reset:  '\x1b[0m',
   bold:   '\x1b[1m',
   dim:    '\x1b[2m',
-  cyan:   '\x1b[36m',
-  green:  '\x1b[32m',
-  yellow: '\x1b[33m',
-  white:  '\x1b[37m',
-  gray:   '\x1b[90m',
+  cyan:   '\x1b[96m',
+  green:  '\x1b[92m',
+  yellow: '\x1b[93m',
+  white:  '\x1b[97m',
+  gray:   '\x1b[37m',
+  red:    '\x1b[91m',
+  magenta:'\x1b[95m',
 };
 
 // ── 메인 렌더링 ────────────────────────────────────────────────────────────
 function render() {
-  if (!fs.existsSync(STATE_FILE)) {
+  const stateRaw = safeRead(STATE_FILE);
+  if (!stateRaw) {
     clearPrevOutput();
     process.stdout.write('\n  [파이프라인 없음]  state.json 파일을 찾을 수 없습니다.\n\n');
     return;
   }
 
-  const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  const specs = raw.specs || [];
-  let history = fs.existsSync(HISTORY_FILE)
-    ? JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'))
-    : {};
+  let raw;
+  try { raw = JSON.parse(stateRaw); }
+  catch {
+    // 팀장이 쓰는 중간 상태일 수 있음 — 이번 tick은 skip
+    return;
+  }
+  const specs = (raw.specs || []).filter(s => s && typeof s.feature === 'string');
+  const historyRaw = safeRead(HISTORY_FILE);
+  let history = {};
+  if (historyRaw) { try { history = JSON.parse(historyRaw); } catch {} }
 
-  // history.json에 없는 기능 자동 생성 (진행 중인 기능만 — done은 fake 데이터 생성 방지)
   let historyUpdated = false;
   for (const spec of specs) {
-    if (!history[spec.feature] && spec.state !== 'done') {
+    if (!history[spec.feature] && spec.state !== 'done' && spec.state !== 'failed') {
       const now = new Date();
-      history[spec.feature] = [
-        { "state": "pending", "entered_at": now.toISOString().slice(0, 19) }
-      ];
+      history[spec.feature] = [{ "state": "pending", "entered_at": now.toISOString().slice(0, 19) }];
       historyUpdated = true;
     }
   }
-
-  // history.json 자동 저장
   if (historyUpdated) {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
   }
 
-  // timing.csv 로드
   const timingMap = readTimingMap();
-
-  // currentBatch: 가장 최근 배치의 기능명 목록 (없으면 전체)
   const currentBatch = raw.currentBatch || null;
 
-  // 각 행에 기능명 배치
+  // ── 배치 진행률 & 비용 집계 ────────────────────────────────────────────
+  const batchFeatures = (currentBatch && currentBatch.length > 0
+    ? currentBatch
+    : specs.map(s => s.feature)
+  ).filter(f => f && typeof f === 'string');
+  const batchTotal = batchFeatures.length;
+  let batchDone = 0, batchFailed = 0;
+  const failedFeatures = [];
+  for (const f of batchFeatures) {
+    const s = specs.find(x => x.feature === f);
+    if (s) {
+      if (s.state === 'done') batchDone++;
+      if (s.state === 'failed') { batchFailed++; failedFeatures.push(f); }
+    }
+  }
+
+  // ── 각 행에 기능 배치 (상태 마커 + 경과시간 포함) ───────────────────────
   const rows = {};
   const done  = [];
-  const stats = [];  // 각 기능의 시간 통계
+  const failed = [];
+  const stats = [];
 
   for (const r of ROWS) rows[r.key] = [];
 
@@ -240,25 +291,22 @@ function render() {
     const rowKey = getRow(spec);
     const name = spec.feature.replace(/_/g, ' ');
 
-    // 통계 수집 우선순위: timing.csv → history.json 순
     let statInfo = null;
     const timing = timingMap[spec.feature];
     if (timing && timing.duration > 0) {
-      // timing.csv에 실제 기록된 데이터 사용
       statInfo = {
         duration: timing.duration,
-        ongoing: spec.state !== 'done',
+        ongoing: spec.state !== 'done' && spec.state !== 'failed',
         startTime: timing.startTime.toISOString(),
-        endTime: spec.state === 'done' ? timing.endTime.toISOString() : null
+        endTime: (spec.state === 'done' || spec.state === 'failed') ? timing.endTime.toISOString() : null
       };
-    } else if (spec.state === 'done' && history[spec.feature]) {
+    } else if ((spec.state === 'done' || spec.state === 'failed') && history[spec.feature]) {
       const timeline = history[spec.feature];
       if (timeline.length > 1) {
         const startTime = new Date(timeline[0].entered_at);
         const endTime = new Date(timeline[timeline.length - 1].entered_at);
-        const duration = endTime.getTime() - startTime.getTime();
         statInfo = {
-          duration,
+          duration: endTime.getTime() - startTime.getTime(),
           ongoing: false,
           startTime: timeline[0].entered_at,
           endTime: timeline[timeline.length - 1].entered_at
@@ -268,15 +316,13 @@ function render() {
       statInfo = getStateDuration(spec.feature, history, spec.state);
     }
 
-    // currentBatch 필터: done 항목은 현재 배치에 속한 것만 표시
     const inBatch = !currentBatch || currentBatch.includes(spec.feature);
-    if (rowKey === 'done' && !inBatch) continue;
+    if ((rowKey === 'done' || rowKey === 'failed') && !inBatch) continue;
 
     if (statInfo && (statInfo.duration > 0 || statInfo.ongoing)) {
       const dur = formatDuration(statInfo.duration);
       const startTime = formatTime(statInfo.startTime);
       let timeRange;
-
       if (statInfo.endTime) {
         const endTime = formatTime(statInfo.endTime);
         timeRange = `${startTime}-${endTime}`;
@@ -284,23 +330,52 @@ function render() {
         timeRange = `${startTime}-현재`;
       }
 
-      const marker = spec.state === 'done' ? '✅' : (statInfo.ongoing ? '▶' : ' ');
+      let marker, color;
+      if (spec.state === 'done') { marker = '✓'; color = C.green; }
+      else if (spec.state === 'failed') { marker = '✗'; color = C.red; }
+      else if (statInfo.ongoing) { marker = '▶'; color = C.yellow; }
+      else { marker = ' '; color = C.white; }
+
       const featureName = (spec.feature || '').replace(/_/g, ' ');
-      stats.push(`${marker} ${featureName}: ${timeRange} (${dur})`);
+      const tcCount = readTcCount(spec.feature);
+      const tcStr = tcCount ? `, TC ${tcCount}개` : '';
+      stats.push({
+        marker, color,
+        text: `${marker} ${featureName}: ${timeRange} (${dur}${tcStr})`,
+        state: spec.state
+      });
     }
 
     if (rowKey === 'done') { done.push(name); continue; }
-    rows[rowKey].push(name);
+    if (rowKey === 'failed') { failed.push(name); continue; }
+
+    // 진행중 행에 경과시간 주석 추가
+    let rowLabel = name;
+    if (statInfo && statInfo.ongoing) {
+      const dur = formatDuration(statInfo.duration);
+      rowLabel = `▶ ${name} (${dur})`;
+    }
+    rows[rowKey].push(rowLabel);
   }
 
   // ── 출력 ─────────────────────────────────────────────────────────────────
   const now = new Date().toLocaleTimeString('ko-KR', { hour12: false });
-  const W = 52;  // 기능명 영역 너비
+  const W = 52;
   const lines = [];
+  const SEP = '─────────────────────────────────────────────────';
 
   lines.push('');
-  lines.push(`${C.bold}${C.cyan} TC 팀 v2 에이전트 모니터  (${now})${C.reset}`);
+  lines.push(`${C.bold}${C.cyan}━━━ TC 팀 v2 에이전트 모니터  (${now}) ━━━${C.reset}`);
 
+  // 상단 헤더: 배치 진행률
+  if (batchTotal > 0) {
+    const bar = progressBar(batchDone, batchTotal);
+    const barColor = batchDone === batchTotal ? C.green : C.cyan;
+    lines.push(` ${barColor}배치 ${bar} ${batchDone}/${batchTotal}${C.reset}`);
+    lines.push(`${C.gray}${SEP}${C.reset}`);
+  }
+
+  // 매트릭스 본체
   for (const r of ROWS) {
     const items = rows[r.key];
     if (items.length === 0) {
@@ -308,45 +383,56 @@ function render() {
     } else {
       items.forEach((name, i) => {
         const truncated = name.length > W ? name.slice(0, W - 1) + '…' : name;
+        const color = name.startsWith('▶') ? C.yellow : C.white;
         if (i === 0) {
-          lines.push(`${C.white} ${r.label} ${C.gray}│${C.yellow} ${truncated}${C.reset}`);
+          lines.push(`${C.white} ${r.label} ${C.gray}│ ${color}${truncated}${C.reset}`);
         } else {
-          lines.push(`${C.gray}       │${C.yellow} ${truncated}${C.reset}`);
+          lines.push(`${C.gray}       │ ${color}${truncated}${C.reset}`);
         }
       });
     }
   }
 
-  // 완료 섹션
-  if (stats.length || done.length) {
+  // 완료/실패 섹션
+  if (stats.length) {
+    lines.push(`${C.gray}${SEP}${C.reset}`);
     lines.push(`${C.white} 완료   ${C.gray}│${C.reset}`);
-    if (stats.length) {
-      stats.forEach(stat => {
-        lines.push(`${C.gray}       │${C.white} ${stat}${C.reset}`);
-      });
-    } else {
-      done.forEach(name => {
-        lines.push(`${C.gray}       │${C.green} ✅ ${name}${C.reset}`);
-      });
-    }
+    stats.forEach(s => {
+      lines.push(`${C.gray}       │${s.color} ${s.text}${C.reset}`);
+    });
+  } else if (done.length || failed.length) {
+    lines.push(`${C.gray}${SEP}${C.reset}`);
+    lines.push(`${C.white} 완료   ${C.gray}│${C.reset}`);
+    done.forEach(name => {
+      lines.push(`${C.gray}       │${C.green} ✓ ${name}${C.reset}`);
+    });
+    failed.forEach(name => {
+      lines.push(`${C.gray}       │${C.red} ✗ ${name}${C.reset}`);
+    });
   }
 
+  // 팀원 상태
   const agentStatus = readAgentStatus();
   if (agentStatus.length) {
+    lines.push(`${C.gray}${SEP}${C.reset}`);
     lines.push(`${C.white} 팀원   ${C.gray}│${C.cyan} ${agentStatus.join(`  ${C.gray}│${C.cyan}  `)}${C.reset}`);
+  }
+
+  // 실패 재실행 템플릿
+  if (failedFeatures.length > 0) {
+    lines.push(`${C.gray}${SEP}${C.reset}`);
+    lines.push(`${C.red} ⚠️  실패 기능 재실행 템플릿:${C.reset}`);
+    lines.push(`${C.yellow}    /tc-v2 <시트 URL> ${failedFeatures.map(f => `<${f} URL>`).join(' ')}${C.reset}`);
   }
 
   lines.push('');
 
   clearPrevOutput();
-  const output = lines.join('\n') + '\n';
-  process.stdout.write(output);
+  process.stdout.write(lines.join('\n') + '\n');
   prevLineCount = lines.length;
 }
 
 // ── 실행 ──────────────────────────────────────────────────────────────────
 const watchMode = process.argv.includes('--watch');
 render();
-if (watchMode) {
-  setInterval(render, 5000);
-}
+if (watchMode) setInterval(render, 5000);
