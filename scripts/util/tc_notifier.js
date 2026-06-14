@@ -19,8 +19,8 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 // ── 파일 경로 ────────────────────────────────────────────────────────────────
-const STATE_FILE    = '{PROJECT_ROOT}/team/state.json';
-const STATUS_DIR    = '{PROJECT_ROOT}/team/status/';
+const STATE_FILE    = '{WORK_ROOT}/team/state.json';
+const STATUS_DIR    = '{WORK_ROOT}/team/status/';
 const SNAPSHOT_FILE = path.join(__dirname, 'tc_notifier_snapshot.json');
 
 // ── 폴링 간격 (ms) ───────────────────────────────────────────────────────────

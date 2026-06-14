@@ -31,18 +31,22 @@ if [ "${1:-}" = "--self-test" ]; then
 
     echo "── pipeline_retry.sh 자기 검증 ──"
     check "claude CLI PATH"     'command -v claude >/dev/null'
-    check "node.exe 실행가능"   '[ -x "C:/Users/Admin/Downloads/AI_AntiGravity/node-v20.11.1-win-x64/node.exe" ]'
+    check "node.exe 실행가능"   '[ -x "{NODE_PATH}" ]'
     check "bash grep 지원"      'echo "429 RESOURCE_EXHAUSTED" | grep -qE "429|RESOURCE_EXHAUSTED"'
-    check "tmp 디렉터리 쓰기"   'touch "C:/Users/Admin/AppData/Local/Temp/.tcv2_selftest" && rm -f "C:/Users/Admin/AppData/Local/Temp/.tcv2_selftest"'
+    check "tmp 디렉터리 쓰기"   'touch "~/AppData/Local/Temp/.tcv2_selftest" && rm -f "~/AppData/Local/Temp/.tcv2_selftest"'
 
     # 에러 분류 함수 dry-run
-    TMP_LOG="C:/Users/Admin/AppData/Local/Temp/.tcv2_classify_$$"
+    TMP_LOG="~/AppData/Local/Temp/.tcv2_classify_$$"
     echo "HTTP 429 Too Many Requests" > "$TMP_LOG"
     grep -qE "429|RESOURCE_EXHAUSTED|Quota exceeded|rateLimit|userRateLimitExceeded|503" "$TMP_LOG" && check "분류: quota 감지" 'true' || check "분류: quota 감지" 'false'
     echo "invalid_grant OAuth error" > "$TMP_LOG"
-    grep -qE "OAuth|invalid_grant|401 Unauthorized|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$TMP_LOG" && check "분류: token 감지 (OAuth)" 'true' || check "분류: token 감지 (OAuth)" 'false'
+    grep -qE "OAuth|invalid_grant|401 Unauthorized|401 Invalid|Failed to authenticate|Invalid authentication credentials|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$TMP_LOG" && check "분류: token 감지 (OAuth)" 'true' || check "분류: token 감지 (OAuth)" 'false'
     echo "Invalid API key · Fix external API key" > "$TMP_LOG"
-    grep -qE "OAuth|invalid_grant|401 Unauthorized|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$TMP_LOG" && check "분류: token 감지 (API key)" 'true' || check "분류: token 감지 (API key)" 'false'
+    grep -qE "OAuth|invalid_grant|401 Unauthorized|401 Invalid|Failed to authenticate|Invalid authentication credentials|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$TMP_LOG" && check "분류: token 감지 (API key)" 'true' || check "분류: token 감지 (API key)" 'false'
+    # L4-F12 회귀 (2026-06-13 v6): "Failed to authenticate. API Error: 401 Invalid authentication credentials"가
+    #   옛 정규식에 안 잡혀 type=other로 오분류 → 무의미 재시도 → 체인이 "silent" 오인. 이 문자열 필수 포착.
+    echo "Failed to authenticate. API Error: 401 Invalid authentication credentials" > "$TMP_LOG"
+    grep -qE "OAuth|invalid_grant|401 Unauthorized|401 Invalid|Failed to authenticate|Invalid authentication credentials|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$TMP_LOG" && check "분류: token 감지 (v6 401 Invalid auth)" 'true' || check "분류: token 감지 (v6 401 Invalid auth)" 'false'
     echo "ECONNRESET by peer" > "$TMP_LOG"
     grep -qE "ETIMEDOUT|ECONNRESET|500 Internal|502 Bad Gateway|ENETUNREACH" "$TMP_LOG" && check "분류: network 감지" 'true' || check "분류: network 감지" 'false'
     rm -f "$TMP_LOG"
@@ -71,7 +75,7 @@ RETRY3_LOG="${LOGFILE%.log}_retry3.log"
 
 classify_error() {
     local log="$1"
-    if grep -qE "OAuth|invalid_grant|401 Unauthorized|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$log" 2>/dev/null; then
+    if grep -qE "OAuth|invalid_grant|401 Unauthorized|401 Invalid|Failed to authenticate|Invalid authentication credentials|UNAUTHENTICATED|invalid_token|Invalid API key|Fix external API key|Please run /login|authentication_error" "$log" 2>/dev/null; then
         echo "token"
     elif grep -qE "429|RESOURCE_EXHAUSTED|Quota exceeded|rateLimit|userRateLimitExceeded|503" "$log" 2>/dev/null; then
         echo "quota"

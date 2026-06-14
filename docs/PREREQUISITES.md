@@ -1,8 +1,8 @@
 # Prerequisites
 
-The TC Team v2 pipeline coordinates multiple tools. This document lists every dependency, why it is needed, and how to install it.
+The TC Team v2 pipeline coordinates Claude Code, Node.js, Google APIs, and (optionally) Confluence. This document lists every dependency, why it's needed, and how to install it.
 
-Assume the target machine has **only Claude Code** installed. The preflight script (`scripts/preflight/preflight.ps1` or `.sh`) will automate most of the checks below.
+Assume the target machine has **only Claude Code** installed. The setup script (`setup.ps1` on Windows, `setup.sh` on macOS/Linux) automates the rest — agent/skill installation, path resolution, and `npm install`.
 
 ---
 
@@ -10,111 +10,116 @@ Assume the target machine has **only Claude Code** installed. The preflight scri
 
 ### 1. Node.js 20 LTS
 
-**Why**: All utility scripts under `scripts/util/` are Node.js, including Google Sheets R/W, dashboard updater, and OAuth helper.
+**Why**: Every utility script under `scripts/util/` is Node.js — Google Sheets read/write, dashboard updater, OAuth helper, and Excel parsing.
 
 **Install**:
 - Windows: `winget install OpenJS.NodeJS.LTS`
 - macOS: `brew install node@20`
-- Linux: use your distro package manager or nvm
+- Linux: your distro package manager, or `nvm install 20`
 
 **Verify**: `node --version` → `v20.x.x`
 
----
-
-### 2. Python 3.10+ (optional)
-
-**Why**: Only needed if you use analysis utility scripts. Not required for the core pipeline.
-
-**Install**:
-- Windows: `winget install Python.Python.3.11`
-- macOS: `brew install python@3.11`
-- Linux: `sudo apt-get install python3 python3-pip`
-
-**Verify**: `python --version` → `Python 3.10+`
+The setup script auto-detects the `node` path. npm dependencies (`googleapis`, `xlsx`) are installed for you when you run it.
 
 ---
 
-### 3. Google OAuth credentials
+### 2. Google OAuth credentials
 
-**Why**: The pipeline reads from and writes to Google Sheets for test case tracking, and uploads MD spec files to Google Drive.
+**Why**: The pipeline reads from and writes to Google Sheets for test-case tracking, and uploads MD spec files to Google Drive.
 
 **Obtain**:
 1. Go to https://console.cloud.google.com/apis/credentials
 2. Create an OAuth 2.0 Client ID (application type: **Desktop app**)
-3. Download the JSON file
-4. Save it as `credentials/client_secret.json` in this repo (the folder is gitignored)
-5. Enable the following APIs in your project:
-   - Google Sheets API
-   - Google Drive API
+3. Download the JSON and save it as `credentials/client_secret.json` (the folder is gitignored)
+4. Enable **Google Sheets API** and **Google Drive API** in the same project
 
-On first pipeline run, a browser window will open for you to authorize the app. A token (`oauth_token.json`) will be saved automatically.
+On first authorization (`npm run auth`), a browser window opens to authorize the app; a token (`credentials/oauth_token.json`) is then cached automatically.
+
+> The scripts default to `./credentials/client_secret.json` and `./credentials/oauth_token.json`, so **no environment variable is required** if you use those paths.
 
 ---
 
-### 4. Claude Code CLI
+### 3. Claude Code CLI
 
-**Why**: The `tc-팀-v2` agent orchestrates sub-agents by spawning `claude` CLI processes in separate child shells. This keeps each sub-agent's context isolated.
+**Why**: The `tc-팀-v2` orchestrator spawns each sub-agent as a separate `claude` CLI process in its own child shell, keeping each worker's context isolated.
 
 **Install**: Follow the [Claude Code installation guide](https://claude.com/claude-code).
 
 **Verify**: `claude --version`
 
-**Note**: The full path to `cli.js` is required in `.env` as `CLI_JS`. On Windows with npm global install, this is typically:
-```
-C:/Users/YourName/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js
-```
+The setup script auto-detects `cli.js` via `npm root -g`. If it can't be found, the script tells you and leaves a clearly-marked placeholder to fill in.
 
 ---
 
 ## Optional
 
+### Python 3.10+ (only for the Confluence image-matching helper)
+
+**Why**: `scripts/util/confluence_image_downloader.py` (used by the `/tc-이미지매칭` feature) needs Python. It uses the **standard library only** — there is no `pip install` step and no `requirements.txt`.
+
+**Install**: Windows `winget install Python.Python.3.11` · macOS `brew install python@3.11` · Linux `apt-get install python3`
+
+The core pipeline does **not** require Python.
+
 ### GitHub CLI (`gh`)
 
-**Why**: Only needed if you will use the `github-repo` skill to publish this repo back to GitHub. Not required for running the pipeline itself.
+**Why**: Only if you'll use the `github-repo` skill to publish this repo back to GitHub. Not needed to run the pipeline.
 
-**Install**:
-- Windows: `winget install GitHub.cli`
-- macOS: `brew install gh`
-- Linux: see https://cli.github.com/
+**Install**: Windows `winget install GitHub.cli` · macOS `brew install gh` · Linux see https://cli.github.com/
+
+---
+
+## Input formats — no extra parsers needed
+
+The pipeline accepts four spec-source types, and only one needs an npm package:
+
+| Spec source | How it's read | Dependency |
+|-------------|---------------|------------|
+| Confluence URL | Atlassian MCP / built-in connector | MCP (below) |
+| PDF (`.pdf`) | Claude Code reads it natively | none |
+| Word (`.doc`, `.docx`) | Claude Code reads it natively | none |
+| Excel (`.xlsx`, `.xls`) | parsed with the `xlsx` Node module | `xlsx` (installed by setup) |
+
+There is **no** `pdf-parse` / `pdfjs-dist` / `mammoth` dependency — PDF and Word are handled by Claude Code's native file reading.
 
 ---
 
 ## MCP Servers
 
-The pipeline uses these MCP servers inside Claude Code. After running preflight, register them manually:
+The pipeline uses these MCP integrations inside Claude Code:
 
 | MCP Server | Purpose | How to register |
 |------------|---------|-----------------|
-| `google-sheets` | Sheets API wrapper | Install a Google Sheets MCP server of your choice and register with `claude mcp add` |
-| `claude_ai_Atlassian` | Confluence page fetch | Usually configured globally in Claude Code settings |
+| `google-sheets` | Sheets API wrapper used by the agents | Install a Google Sheets MCP server of your choice and add it to `~/.claude/.mcp.json` (template: [`.mcp.json.example`](../.mcp.json.example)) |
+| Atlassian / Confluence | Spec-page fetch | Recommended: Claude Code's **built-in Atlassian connector** (no `.mcp.json` entry). A community `mcp-atlassian` server also works. |
 
-See the Claude Code docs for `claude mcp add` syntax.
+```bash
+claude mcp list   # see what's currently registered
+```
+
+> Confluence access is only needed for Confluence-URL specs. If you only feed PDF/Word/Excel files, you can skip the Atlassian setup entirely.
 
 ---
 
-## Environment variables
+## Environment variables (all optional)
 
-After installing everything, create `.env` from `.env.example` and fill in:
+The pipeline runs without a `.env` file. The keys below are read straight from the **process environment** (no auto-`.env` loader by design) and exist only to override defaults — export them in the shell that runs the pipeline if needed:
 
-| Variable | Required | Example |
-|----------|----------|---------|
-| `WORK_ROOT` | yes | `C:/Users/You/tc-work` |
-| `CLAUDE_HOME` | yes | `C:/Users/You/.claude` |
-| `NODE_PATH` | yes | `node` (or full path) |
-| `CLI_JS` | yes | `.../claude-code/cli.js` |
-| `GOOGLE_OAUTH_CLIENT_SECRET_PATH` | yes | `./credentials/client_secret.json` |
-| `MASTER_DASHBOARD_ID` | yes | Google Sheets ID |
-| `CONFLUENCE_SITE` | yes | `https://yourcompany.atlassian.net` |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GOOGLE_OAUTH_PATH` | `./credentials/client_secret.json` | OAuth client secret location |
+| `GOOGLE_TOKEN_PATH` | `./credentials/oauth_token.json` | Cached token location |
+| `SPREADSHEET_ID` | passed as CLI arg | Default sheet for `npm run dashboard` |
+| `SLACK_BOT_TOKEN` | disabled | Enable optional Slack QA notifications |
 
-Run `preflight.ps1` / `preflight.sh` again after editing `.env` — it will substitute placeholders in the `.claude/` files and copy them to your `CLAUDE_HOME`.
+See [`.env.example`](../.env.example) for the annotated template.
 
 ---
 
 ## Verification
 
-After preflight, run:
-```bash
-claude /tc-v2 --help
+After setup, open Claude Code in the repo and run:
 ```
-If the slash command is recognized, the integration is complete.
-
+/tc-v2
+```
+If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. See [SETUP.md](./SETUP.md) for the full first-run walkthrough.

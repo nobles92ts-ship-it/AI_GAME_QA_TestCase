@@ -19,9 +19,9 @@ TC Team v2 is a multi-agent pipeline that turns a Confluence spec page into a fu
 | `tc-designer-v2` | Analyzes the spec page, produces an analysis MD + a design MD |
 | `tc-설계검수-v2` | Reviews the design MD for completeness and structural issues |
 | `tc-writer-v2` | Writes the actual test cases into a new Google Sheets tab |
-| `qa-reviewer-v2` | Reviews the generated TCs in three rounds (structure, quality, final) |
-| `tc-fixer-v2` | Applies fixes based on reviewer reports |
-| `tc-리뷰2수정2-v2` | Combined 2nd review + fix in a single context |
+| `tc-리뷰1수정1-v2` | STEP 5 — structural review **and** fix applied in one context (round 1) |
+| `tc-리뷰2수정2-v2` | STEP 6 — quality review **and** fix applied in one context (round 2) |
+| `qa-reviewer-v2`, `tc-fixer-v2` | Legacy split review/fix agents — kept for rollback, **not** called by the active pipeline |
 | `tc-updater-v2` | Handles spec changes by diffing old vs new and updating affected TCs |
 
 ---
@@ -37,15 +37,14 @@ Input: spreadsheet URL + Confluence URL(s)
 +-------------------------------+
   |
   v
-+===== Main pipeline (STEP 1-7) =====+
-| STEP 1: Design           (designer)  |
-| STEP 2: Design review    (설계검수)  |
-| STEP 3: Design fix       (conditional, max 1x)
-| STEP 4: TC writing       (writer)    |  -> new Google Sheets tab
-| STEP 5: Review round 1   (structure) |
-| STEP 6: Fix round 1      (conditional)
-| STEP 7: Review2+Fix2 merged          |
-+=======================================+
++===== Main pipeline (STEP 1-6) =====+
+| STEP 1: Analysis + Design (designer, Opus)    |
+| STEP 2: Design review     (설계검수)          |
+| STEP 3: Design fix        (conditional, max 1x)
+| STEP 4: TC writing        (writer)    |  -> new Google Sheets tab
+| STEP 5: Review1 + Fix1 merged (리뷰1수정1)    |
+| STEP 6: Review2 + Fix2 merged (리뷰2수정2)    |
++================================================+
   |
   v
 +-------------------------------+
@@ -59,9 +58,9 @@ Input: spreadsheet URL + Confluence URL(s)
 Final user report
 ```
 
-Steps 3 and 6 are conditional — they only run if the preceding review flagged issues.
+STEP 3 is conditional — it only runs if STEP 2 flagged design issues. STEP 5 and STEP 6 always run; each performs its review **and** applies the resulting fixes within the same context (the round-1 and round-2 review/fix passes were merged in Phase 2-B).
 
-**STEP numbering caveat**: the pipeline uses STEP 1-7 for the main flow, and the completion skill uses its own STEP 1-3 internally. They do not share a namespace. Pipeline STEP 1 (design) is unrelated to completion STEP 1 (dashboard).
+**STEP numbering caveat**: the pipeline uses STEP 1-6 for the main flow, and the completion skill uses its own STEP 1-3 internally. They do not share a namespace. Pipeline STEP 1 (design) is unrelated to completion STEP 1 (dashboard).
 
 ---
 
@@ -71,16 +70,15 @@ All LLM calls go through the Claude Code CLI. The orchestrator selects the model
 
 | Task type | Model | CLI flag |
 |-----------|-------|----------|
-| Design, review, complex reasoning | Sonnet (default) | `--model sonnet` |
-| TC writing, mechanical fixes, bulk analysis | Haiku | `--model haiku` |
-| Architectural decisions | Opus | `--model opus` |
+| Spec analysis & TC design (STEP 1) | Opus | `--model opus --effort medium` |
+| Everything else (STEP 2-6: review, writing, fix) | Sonnet | `--model sonnet` |
 
-Every worker agent is invoked as:
+Every worker agent is invoked through the `run-agent.sh` wrapper, which resolves to:
 ```bash
-claude --model <model> --agent <agent-path> -p "<prompt>"
+claude --model <model> --agent <agent-name> -p "<prompt>"
 ```
 
-No local LLM, Ollama, or MCP proxy is required — all inference is handled by the Anthropic API through Claude Code.
+No local LLM, Ollama, or external model server is required — all inference is handled by Claude Code itself.
 
 ---
 

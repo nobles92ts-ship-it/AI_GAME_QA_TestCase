@@ -8,15 +8,32 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const STATUS_FILE = path.join(__dirname, '..', 'qa_status.json');
-const HTML_TEMPLATE = path.join(__dirname, '..', '..', '..', 'QA_테스트_결과서_20260317.html');
-const DEPLOY_DIR = '{USER_DOWNLOADS}/qa-report-deploy';
-const VERCEL_SCOPE = 'process.env.VERCEL_SCOPE || 'your-vercel-scope'';
+// ── CLI 파라미터 파싱 (--config qa_config_6차.json) ──
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const idx = args.indexOf('--config');
+  if (idx !== -1 && args[idx + 1]) {
+    const configPath = path.resolve(__dirname, args[idx + 1]);
+    if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  }
+  return null;
+}
+const milestoneConfig = parseArgs();
+const configArg = process.argv.includes('--config')
+  ? `--config ${process.argv[process.argv.indexOf('--config') + 1]}`
+  : '';
+
+const STATUS_FILE = path.join(__dirname, milestoneConfig?.statusFile || 'qa_status.json');
+const HTML_TEMPLATE = milestoneConfig?.htmlTemplate
+  || path.join(__dirname, '..', '..', '..', 'QA_결과서', 'QA_테스트_결과서_20260317.html');
+const DEPLOY_DIR = milestoneConfig?.deployDir || 'C:/work/qa-report-deploy';
+const MILESTONE = milestoneConfig?.milestone || '';
+const VERCEL_SCOPE = milestoneConfig?.vercelScope || 'nobles92ts-7686s-projects';
 
 // ── 1. 최신 데이터 가져오기 ──
 console.log('[1/3] 스프레드시트에서 데이터 수집 중...');
 try {
-  execSync('node fetch_qa_status.js', { cwd: __dirname, stdio: 'inherit' });
+  execSync(`node fetch_qa_status.js ${configArg}`.trim(), { cwd: __dirname, stdio: 'inherit' });
 } catch (e) {
   console.error('데이터 수집 실패:', e.message);
   process.exit(1);
@@ -65,7 +82,7 @@ function jiraLinks(bug) {
   const bugs = (bug.match(/버그ID-\d+/g) || []);
   if (bugs.length === 0) return '<span style="color:var(--text3)">-</span>';
   return bugs.map(b =>
-    `<a class="jira-link" href="https://your-site.atlassian.net/browse/${b}" target="_blank">${b}</a>`
+    `<a class="jira-link" href="https://YOUR_SITE.atlassian.net/browse/${b}" target="_blank">${b}</a>`
   ).join(', ');
 }
 
@@ -94,16 +111,24 @@ const failsJS = JSON.stringify(allFails.map(f => ({
   sheet: f.sheet,
   id: f.id,
   repro: f.repro || '',
+  title: f.title || '',
   step: f.step,
   bug: f.bug || '-',
 })));
+
+// Hero 서브타이틀 업데이트 (마일스톤명 자동 반영)
+if (MILESTONE) {
+  html = html.replace(
+    /개발 QA - TC \([^)]+마일스톤 통합 TC\)/,
+    `개발 QA - TC (${MILESTONE} 마일스톤 통합 TC)`
+  );
+}
 
 // Hero 메타 업데이트
 html = html.replace(/20\d\d\.\d\d\.\d\d/g, today);
 html = html.replace(/20\d\d-\d\d-\d\d/g, today.replace(/\./g, '-'));
 html = html.replace(/\d+개 기능/g, `${sheets.length}개 기능`);
 html = html.replace(/(<div class="hero-meta-value">)\d+건(<\/div>)/, `$1${summary.pcTarget}건$2`);
-html = html.replace(/(<div class="hero-meta-value"[^>]*>)[\d.]+%(<\/div>)/, `$1${summary.pcRate}%$2`);
 
 // KPI 카드 업데이트
 html = html.replace(/<div class="kpi-card pass[^]*?<div class="kpi-number">(\d+)<\/div>/,
@@ -115,64 +140,107 @@ html = html.replace(/<div class="kpi-card block[^]*?<div class="kpi-number">(\d+
 html = html.replace(/<div class="kpi-card pending[^]*?<div class="kpi-number">(\d+)<\/div>/,
   `<div class="kpi-card pending animate-in delay-4">\n      <div class="kpi-number">${summary.pc.pending}</div>`);
 
-// 진행률
-html = html.replace(/style="width:[\d.]+%"/g, `style="width:${summary.pcRate}%"`);
-html = html.replace(/<div class="progress-pct">[\d.]+%<\/div>/,
-  `<div class="progress-pct">${summary.pcRate}%</div>`);
-html = html.replace(/실행 대상 \d+건 중 \d+건 완료[^<]*/,
-  `실행 대상 ${summary.pcTarget}건 중 ${summary.pcDone}건 완료 (PASS ${summary.pc.PASS} + FAIL ${summary.pc.FAIL})`);
+// 등록된 버그 카드 업데이트 (5번째 KPI)
+if (jira) {
+  html = html.replace(
+    /(<div class="kpi-label">등록된 버그<\/div>\s*<div style="[^"]*">해결 )\d+( \/ 미해결 )\d+(<\/div>)/,
+    `$1${jira.resolved}$2${jira.open}$3`
+  );
+  html = html.replace(
+    /(<div class="kpi-card[^"]*"[^>]*style="border-top:3px solid var\(--fail\)">\s*<div class="kpi-number"[^>]*>)\d+(<\/div>)/,
+    `$1${jira.total}$2`
+  );
+}
 
 // JS data 블록 교체
 html = html.replace(/const sheets = \[[\s\S]*?\];/, `const sheets = ${sheetsJS};`);
 html = html.replace(/const fails = \[[\s\S]*?\];/, `const fails = ${failsJS};`);
 
 
-// FAIL 요약 카드
-html = html.replace(/<div class="fail-summary">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/,
-  `<div class="fail-summary">${failSummaryCards}</div>`);
+// fail-summary 섹션 제거됨 — 교체 불필요
 
-// 도넛 차트 + 범례 데이터 (PC 기준)
-const totalMobPending = sheets.reduce((a, s) => a + s.mob.pending, 0);
-const totalMobNA = sheets.reduce((a, s) => a + s.mob.NA, 0);
-html = html.replace(/<td>194<\/td><td>0<\/td><td>194<\/td>/g,
-  `<td>${summary.pc.PASS}</td><td>0</td><td>${summary.pc.PASS}</td>`);
-html = html.replace(/<td>23<\/td><td>0<\/td><td>23<\/td>/g,
-  `<td>${summary.pc.FAIL}</td><td>0</td><td>${summary.pc.FAIL}</td>`);
-
-// 종합 소견 업데이트
-const findings = [
-  { bar: 'c-accent', label: 'PC 테스트', desc: completedFeats.length > 0 ? `${completedFeats.length}개 기능 완료 (${completedFeats.join(', ')}) | 진행률 ${summary.pcRate}%` : `진행률 ${summary.pcRate}%` },
-  { bar: 'c-pending', label: '모바일 테스트', desc: '전 기능 미진행 (0%) — PC 테스트 완료 후 순차 진행 예정' },
-  { bar: 'c-fail', label: 'FAIL 현황', desc: allFails.length > 0 ? `총 ${allFails.length}건 발견` : '발견된 FAIL 없음' },
-];
-
-const findingsHtml = findings.map(f =>
-  `<div class="finding-card"><div class="finding-bar ${f.bar}"></div><div class="finding-label">${f.label}</div><div class="finding-desc">${f.desc}</div></div>`
-).join('\n    ');
-
-// findings 섹션 전체 교체 (중첩 div 깊이 추적)
+// 도넛 차트 + 범례 테이블 전체 교체 (대시보드 summary 기준)
 {
-  const openTag = '<div class="findings">';
+  const mob = summary.mob || { PASS: 0, FAIL: 0, BLOCK: 0, pending: 0, NA: 0 };
+  const pcTotal = summary.pc.PASS + summary.pc.FAIL + summary.pc.BLOCK + summary.pc.pending + summary.pc.NA;
+  const C = 2 * Math.PI * 70; // ≈ 439.82
+  const arc = (n) => pcTotal > 0 ? (n / pcTotal) * C : 0;
+
+  const naArc      = arc(summary.pc.NA);
+  const pendingArc = arc(summary.pc.pending);
+  const passArc    = arc(summary.pc.PASS);
+  const failArc    = arc(summary.pc.FAIL);
+  const blockArc   = arc(summary.pc.BLOCK);
+
+  const seg = (stroke, a, offset) =>
+    `<circle cx="90" cy="90" r="70" fill="none" stroke="${stroke}" stroke-width="24" ` +
+    `stroke-dasharray="${a.toFixed(2)} ${(C - a).toFixed(2)}" stroke-dashoffset="-${offset.toFixed(2)}" ` +
+    `transform="rotate(-90 90 90)"/>`;
+
+  const fmt = (n) => Number(n).toLocaleString('ko-KR');
+  const row = (label, color, pc, m) =>
+    `<tr><td><span class="legend-dot" style="background:${color}"></span>${label}</td>` +
+    `<td>${fmt(pc)}</td><td>${fmt(m)}</td><td>${fmt(pc + m)}</td></tr>`;
+
+  const chartHtml = `<div class="chart-row">
+    <div class="donut-wrap">
+      <svg width="180" height="180" viewBox="0 0 180 180">
+        <circle cx="90" cy="90" r="70" fill="none" stroke="#1F2937" stroke-width="24"/>
+        ${seg('#4B5563', naArc, 0)}
+        ${seg('#6B7280', pendingArc, naArc)}
+        ${seg('#10B981', passArc, naArc + pendingArc)}
+        ${seg('#EF4444', failArc, naArc + pendingArc + passArc)}
+        ${seg('#F59E0B', blockArc, naArc + pendingArc + passArc + failArc)}
+        <circle cx="90" cy="90" r="52" fill="#111827"/>
+        <text x="90" y="86" text-anchor="middle" fill="white" font-size="22" font-weight="800" font-family="Inter">${summary.pcRate}%</text>
+        <text x="90" y="104" text-anchor="middle" fill="#6B7280" font-size="11" font-family="Inter">진행률</text>
+      </svg>
+    </div>
+    <table class="legend-table">
+      <thead><tr><th>상태</th><th>PC</th><th>모바일</th><th>합계</th></tr></thead>
+      <tbody>
+        ${row('PASS',  'var(--pass)',    summary.pc.PASS,    mob.PASS)}
+        ${row('FAIL',  'var(--fail)',    summary.pc.FAIL,    mob.FAIL)}
+        ${row('BLOCK', 'var(--block)',   summary.pc.BLOCK,   mob.BLOCK)}
+        ${row('미진행', 'var(--pending)', summary.pc.pending, mob.pending)}
+        ${row('N/A',   'var(--na)',      summary.pc.NA,      mob.NA)}
+      </tbody>
+    </table>
+  </div>`;
+
+  const openTag = '<div class="chart-row">';
   const start = html.indexOf(openTag);
   if (start !== -1) {
-    let depth = 1;
-    let pos = start + openTag.length;
+    let depth = 1, pos = start + openTag.length;
     while (pos < html.length && depth > 0) {
-      const nextOpen = html.indexOf('<div', pos);
-      const nextClose = html.indexOf('</div>', pos);
-      if (nextClose === -1) break;
-      if (nextOpen !== -1 && nextOpen < nextClose) {
-        depth++;
-        pos = nextOpen + 4;
-      } else {
-        depth--;
-        pos = nextClose + 6;
-      }
+      const no = html.indexOf('<div', pos);
+      const nc = html.indexOf('</div>', pos);
+      if (nc === -1) break;
+      if (no !== -1 && no < nc) { depth++; pos = no + 4; }
+      else { depth--; pos = nc + 6; }
     }
-    // findings div 교체 후, 뒤에 남은 고아 finding-card 제거
-    let after = html.slice(pos);
-    after = after.replace(/^(\s*<div class="finding-card">[\s\S]*?<\/div>\s*)+/, '');
-    html = html.slice(0, start) + `<div class="findings">\n    ${findingsHtml}\n  </div>` + after;
+    html = html.slice(0, start) + chartHtml + html.slice(pos);
+  }
+}
+
+// 종합 소견 섹션 제거됨 — 교체 불필요
+
+// 우선순위 카드 업데이트
+if (jira?.priority) {
+  const p = jira.priority;
+  const cards = [
+    { cls: 'p-critical', val: p.critical },
+    { cls: 'p-high',     val: p.high },
+    { cls: 'p-medium',   val: p.medium },
+    { cls: 'p-low',      val: p.low },
+    { cls: 'p-lowest',   val: p.lowest },
+  ];
+  for (const { cls, val } of cards) {
+    const hasRemain = val > 0 ? ' has-remain' : '';
+    html = html.replace(
+      new RegExp(`(<div class="priority-card ${cls}">[\\s\\S]*?<div class="priority-num)[^"]*(">[\\s\\S]*?<\\/div>)`),
+      (m, pre, post) => `${pre}${hasRemain}">${val}</div>`
+    );
   }
 }
 
@@ -200,21 +268,32 @@ if (fs.existsSync(opinionPath)) {
 }
 
 // 푸터 날짜
-html = html.replace(/DEXAR QA Team[^<]*/, `DEXAR QA Team &nbsp;|&nbsp; ${today}`);
+html = html.replace(/QA Team[^<]*/, `QA Team &nbsp;|&nbsp; ${today}`);
 
-// 저장
+// 저장: config.htmlTemplate 위치(dirname) 기준, 없으면 fallback
 const outputName = `QA_테스트_결과서_${today.replace(/\./g, '')}.html`;
-const outputPath = path.join('{USER_DOWNLOADS}', outputName);
+const outputDir = milestoneConfig?.htmlTemplate
+  ? path.dirname(milestoneConfig.htmlTemplate)
+  : 'C:/work/QA_결과서';
+if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+const outputPath = path.join(outputDir, outputName);
 fs.writeFileSync(outputPath, html, 'utf-8');
 
-// deploy 폴더에도 복사
-if (!fs.existsSync(DEPLOY_DIR)) fs.mkdirSync(DEPLOY_DIR, { recursive: true });
-fs.copyFileSync(outputPath, path.join(DEPLOY_DIR, 'index.html'));
+// deploy 폴더에 마일스톤 서브디렉토리로 복사
+const milestoneDir = MILESTONE ? path.join(DEPLOY_DIR, MILESTONE) : DEPLOY_DIR;
+if (!fs.existsSync(milestoneDir)) fs.mkdirSync(milestoneDir, { recursive: true });
+fs.copyFileSync(outputPath, path.join(milestoneDir, 'index.html'));
 
 console.log(`HTML 생성 완료: ${outputPath}`);
 
 // ── 3. Vercel 배포 ──
-const tokenArg = process.argv[2]; // 토큰을 인자로 받음
+// --config 플래그 이후 값을 제외한 나머지 인자 중 첫 번째를 토큰으로 사용
+const _configIdx = process.argv.indexOf('--config');
+const _skipIdx = _configIdx !== -1 ? _configIdx + 1 : -1;
+const tokenArg = process.argv.slice(2).find((a, i) => {
+  const absIdx = i + 2;
+  return !a.startsWith('--') && absIdx !== _skipIdx && !a.endsWith('.json');
+});
 if (tokenArg) {
   console.log('[3/3] Vercel 배포 중...');
   try {

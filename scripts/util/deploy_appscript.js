@@ -24,10 +24,15 @@ if (!SPREADSHEET_ID) {
     process.exit(1);
 }
 
-const OAUTH_PATH   = process.env.GOOGLE_OAUTH_CLIENT_SECRET_PATH || path.join(__dirname, '../credentials/client_secret.json');
-const TOKEN_PATH   = process.env.GOOGLE_OAUTH_TOKEN_PATH || path.join(__dirname, '../credentials/appscript_token.json');
+const OAUTH_PATH   = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../credentials/client_secret.json');
+const TOKEN_PATH   = path.join(__dirname, '../credentials/appscript_token.json');
 const SCRIPT_ID_PATH = path.join(__dirname, '../credentials/appscript_script_id.json');
-const GS_FILE      = path.join(__dirname, '../../appscript/tab_manager.gs');
+// ⚠ Apps Script content PUT은 전체 교체 — 프로젝트의 모든 .gs 파일을 여기에 포함할 것
+const GS_FILES = [
+    { name: 'tab_manager', path: path.join(__dirname, '../../appscript/tab_manager.gs') },
+    { name: 'bvt_slack',   path: path.join(__dirname, '../../appscript/bvt_slack.gs') },
+];
+const SLACK_CONFIG_PATH = path.join(__dirname, 'slack_config.json'); // __SLACK_TOKEN__ 치환용
 
 const SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -86,6 +91,7 @@ async function getAuthClient() {
 }
 
 async function getOrCreateScriptId(auth) {
+    // 기존에 생성한 scriptId가 있으면 재사용
     if (fs.existsSync(SCRIPT_ID_PATH)) {
         const saved = JSON.parse(fs.readFileSync(SCRIPT_ID_PATH, 'utf-8'));
         if (saved[SPREADSHEET_ID]) {
@@ -94,6 +100,7 @@ async function getOrCreateScriptId(auth) {
         }
     }
 
+    // 새 프로젝트 생성 (스프레드시트에 바인딩)
     const response = await auth.request({
         method: 'POST',
         url: 'https://script.googleapis.com/v1/projects',
@@ -106,6 +113,7 @@ async function getOrCreateScriptId(auth) {
     const scriptId = response.data.scriptId;
     console.log(`✔ 새 Apps Script 프로젝트 생성: ${scriptId}`);
 
+    // scriptId 저장 (다음 배포 시 재사용)
     const saved = fs.existsSync(SCRIPT_ID_PATH)
         ? JSON.parse(fs.readFileSync(SCRIPT_ID_PATH, 'utf-8'))
         : {};
@@ -116,18 +124,28 @@ async function getOrCreateScriptId(auth) {
 }
 
 async function uploadCode(auth, scriptId) {
-    const source = fs.readFileSync(GS_FILE, 'utf-8');
+    if (!fs.existsSync(SLACK_CONFIG_PATH)) {
+        throw new Error(`slack_config.json을 찾을 수 없습니다: ${SLACK_CONFIG_PATH} (bvt_slack.gs의 __SLACK_TOKEN__ 치환에 필요)`);
+    }
+    const slackToken = JSON.parse(fs.readFileSync(SLACK_CONFIG_PATH, 'utf-8')).token;
+    if (!slackToken) {
+        throw new Error(`slack_config.json에 token 필드가 없습니다: ${SLACK_CONFIG_PATH}`);
+    }
+
+    const gsFiles = GS_FILES.map(({ name, path: filePath }) => ({
+        name,
+        type: 'SERVER_JS',
+        source: fs.readFileSync(filePath, 'utf-8')
+            .replace(/__SPREADSHEET_ID__/g, SPREADSHEET_ID)
+            .replace(/__SLACK_TOKEN__/g, slackToken)
+    }));
 
     await auth.request({
         method: 'PUT',
         url: `https://script.googleapis.com/v1/projects/${scriptId}/content`,
         data: {
             files: [
-                {
-                    name: 'tab_manager',
-                    type: 'SERVER_JS',
-                    source
-                },
+                ...gsFiles,
                 {
                     name: 'appsscript',
                     type: 'JSON',
@@ -138,7 +156,8 @@ async function uploadCode(auth, scriptId) {
                         runtimeVersion: 'V8',
                         oauthScopes: [
                             'https://www.googleapis.com/auth/spreadsheets',
-                            'https://www.googleapis.com/auth/script.scriptapp'
+                            'https://www.googleapis.com/auth/script.scriptapp',
+                            'https://www.googleapis.com/auth/script.external_request'
                         ]
                     }, null, 2)
                 }
@@ -146,7 +165,7 @@ async function uploadCode(auth, scriptId) {
         }
     });
 
-    console.log('✔ tab_manager.gs 코드 업로드 완료');
+    console.log(`✔ 코드 업로드 완료 (${gsFiles.map(f => f.name + '.gs').join(', ')})`);
 }
 
 async function main() {
@@ -158,10 +177,13 @@ async function main() {
     console.log('\n═══════════════════════════════════════════════');
     console.log('✅ 배포 완료!');
     console.log(`\n📝 Apps Script 편집기: ${editorUrl}`);
-    console.log('\n⚠️  마지막으로 아래 2개 함수를 Apps Script에서 1회 실행해주세요:');
-    console.log('   1. setupDailyTrigger()  ← 매일 09:00 자동 실행 트리거 등록');
-    console.log('   2. setupM3Button()      ← 대시보드 M3 체크박스 삽입');
-    console.log('\n방법: 편집기 열기 → 함수 드롭다운 선택 → ▶ 실행');
+    console.log('\n⚠️  셋업 함수 1회 실행이 필요합니다 (편집기 → 함수 드롭다운 → ▶ 실행):');
+    console.log('   - setupAll()          ← 탭 색상 정렬: M3 체크박스 + onEdit + 일일 09:00 (최초 1회만)');
+    console.log('   - setupBvtSlackAll()  ← BVT Slack 전송: M5 라벨 + M6 체크박스 + onM6Edit 트리거');
+    console.log('\n   개별 실행도 가능:');
+    console.log('   - setupM3Button() / setupOnEditTrigger() / setupDailyTrigger()');
+    console.log('   - setupM6Button() / setupBvtSlackTrigger()');
+    console.log('\n   ⚠ 스코프 추가(외부 요청)로 실행 시 권한 재승인 창이 뜹니다 — 허용해주세요.');
     console.log('═══════════════════════════════════════════════\n');
 }
 

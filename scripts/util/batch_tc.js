@@ -20,8 +20,8 @@ const path = require('path');
 
 // ── 경로 설정 ─────────────────────────────────────────────────────────────
 const NODE    = '{NODE_PATH}';
-const CLI_JS  = '{USER_APPDATA}/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js';
-const CONFIG  = '{PROJECT_ROOT}/team/batch_config.json';
+const CLI_JS  = '~/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js';
+const CONFIG  = '{WORK_ROOT}/team/batch_config.json';
 
 // ── 인수 파싱 ─────────────────────────────────────────────────────────────
 function parseArgs() {

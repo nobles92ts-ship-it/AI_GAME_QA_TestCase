@@ -28,8 +28,8 @@ model: sonnet
 작업 시작 전 반드시 아래 파일들을 읽고 모든 규칙을 따른다:
 
 ```
-C:\Users\Admin\.claude\tc-team-v2\skills\tc-생성\tc-생성.md   ← 서식 단일 소스
-C:\Users\Admin\.claude\tc-team-v2\skills\tc-수정\tc-수정.md   ← 수정 규칙 (처방 전수 대조 포함)
+{CLAUDE_HOME}\tc-team-v2\skills\tc-생성\tc-생성.md   ← 서식 단일 소스
+{CLAUDE_HOME}\tc-team-v2\skills\tc-수정\tc-수정.md   ← 수정 규칙 (처방 전수 대조 포함)
 ```
 
 ## 필수: C~F열 자동검증 (모든 시트 쓰기에 적용)
@@ -38,7 +38,7 @@ C:\Users\Admin\.claude\tc-team-v2\skills\tc-수정\tc-수정.md   ← 수정 규
 
 ```js
 const { validatePreWrite, validatePostWrite, formatViolations } =
-  require('{PROJECT_ROOT}/scripts/util/validate_tc_rows.js');
+  require('{WORK_ROOT}/scripts/util/validate_tc_rows.js');
 
 // 적재 직전 (신규 행이 있을 때만 의미 있음 — 셀 단위 수정은 pre 생략 가능)
 if (newRows.length > 0) {
@@ -59,7 +59,7 @@ if (!post.ok) { console.error(formatViolations(post.violations)); process.exit(2
 
 ```
 ["대분류", "중분류", "소분류", "검증단계", "재현스탭", "플랫폼", "비고"]
-   A열      B열       C열      D열(E열)    F열(index 4)  G열(index 5)   J열
+//  B열      C열       D열      E열        F열(index 4)  G열(index 5)  J열   ※ A열=TC ID 수식 — 배열에 없음
 ```
 
 **절대 금지**: `["...", "플랫폼", "재현스탭", ...]` 순서로 배치 — 시트에서 F/G 열이 뒤바뀜.
@@ -76,7 +76,7 @@ if (!post.ok) { console.error(formatViolations(post.violations)); process.exit(2
 1. 시트 스냅샷이 없으면 읽기:
 ```bash
 NODE="{NODE_PATH}"
-UTIL="{PROJECT_ROOT}/scripts/util"
+UTIL="{WORK_ROOT}/scripts/util"
 "$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" > "$SPECS/[기능명]/tc_current.json"
 ```
 
@@ -92,8 +92,8 @@ UTIL="{PROJECT_ROOT}/scripts/util"
 ## 핵심 경로
 
 - Node.js: `{NODE_PATH}`
-- 서식 스크립트: `{PROJECT_ROOT}/scripts/util/apply_format_tab.js`
-- specs: `{PROJECT_ROOT}/team/specs/[기능명]/`
+- 서식 스크립트: `{WORK_ROOT}/scripts/util/apply_format_tab.js`
+- specs: `{WORK_ROOT}/team/specs/[기능명]/`
 
 ## v2 추가 — 행 쓰기 직후 자체 검증 (S3, 2026-04-17 사고 재발 방지)
 
@@ -101,7 +101,7 @@ UTIL="{PROJECT_ROOT}/scripts/util"
 
 ```bash
 NODE="{NODE_PATH}"
-UTIL="{PROJECT_ROOT}/scripts/util"
+UTIL="{WORK_ROOT}/scripts/util"
 
 # 수정한 행 번호의 min/max를 계산해 하나의 range로 묶어 읽기 (API 호출 1회)
 START_ROW=<최소행>
@@ -147,8 +147,8 @@ fi
 
 ```bash
 NODE="{NODE_PATH}"
-UTIL="{PROJECT_ROOT}/scripts/util"
-SNAPSHOT="{PROJECT_ROOT}/team/specs/[기능명]/tc_after_fix[N].json"
+UTIL="{WORK_ROOT}/scripts/util"
+SNAPSHOT="{WORK_ROOT}/team/specs/[기능명]/tc_after_fix[N].json"
 
 # stdout 전체 캡처 후 JSON 부분만 추출 (첫 번째 '{' 이후부터)
 "$NODE" "$UTIL/read_gsheet_data.js" [SHEET_ID] "[TAB_NAME]" 2>/dev/null \
@@ -168,7 +168,7 @@ python -m json.tool "$SNAPSHOT" > /dev/null 2>&1 || echo "[ERROR] 스냅샷 JSON
 **작업 시작 직후 즉시** progress.log에 기록한다. 이후 각 마일스톤마다 append:
 
 ```bash
-SPECS="{PROJECT_ROOT}/team/specs/[기능명]"
+SPECS="{WORK_ROOT}/team/specs/[기능명]"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 6 | tc-fixer-v2 | <현재 작업>" >> "$SPECS/progress.log"
 ```
 
