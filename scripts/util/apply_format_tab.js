@@ -21,7 +21,7 @@ const { google } = require('googleapis');
 const { getAuthClient } = require('./google_auth');
 const { addResultCondFormat, addVerifCondFormat } = require('./tc_utilities');
 
-const DEFAULT_SHEET_ID = '1-ICt7w5haohb4S1r3cwX7Z8ZY1tnYCQ6Xawysaocl3E';
+const DEFAULT_SHEET_ID = 'YOUR_SPREADSHEET_ID';
 
 async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEFAULT_SHEET_ID) {
   const auth = await getAuthClient();
@@ -39,17 +39,33 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
 
   const sheetId = sheetMeta.properties.sheetId;
 
-  // 데이터 행 수 파악
+  // 데이터 행 수 + 기본기능 행 파악
   const rowRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${tabName}!A:A`,
+    range: `${tabName}!A:B`,
   });
-  const dataCount = Math.max(0, (rowRes.data.values || []).length - 1);
+  const rows = rowRes.data.values || [];
+  const dataCount = Math.max(0, rows.length - 1);
   if (dataCount === 0) {
     console.log(`⚠️ [${tabName}] 데이터 없음`);
     return;
   }
   const endRow = dataCount + 1;
+
+  // 기본기능 섹션 행 인덱스 수집 (헤더 제외, 0-based 시트 행)
+  // 기본기능 대분류 행부터 다음 대분류가 나오기 전까지 모든 행 포함
+  const basicFuncRowIndices = [];
+  let inBasicFunc = false;
+  for (let i = 1; i < rows.length; i++) {
+    const category = (rows[i][1] || '').trim();
+    if (category === '기본기능') {
+      inBasicFunc = true;
+    } else if (category !== '' && inBasicFunc) {
+      // 다음 대분류 등장 → 기본기능 섹션 종료
+      inBasicFunc = false;
+    }
+    if (inBasicFunc) basicFuncRowIndices.push(i);
+  }
 
   const requests = [];
 
@@ -240,6 +256,25 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
       fields: 'dataValidation'
     }
   });
+
+  // ── 기본기능 행 B~F열 배경색 (#D9D9D9) ─────────
+  // 흰색으로 초기화 후 재적용해야 유지됨
+  if (basicFuncRowIndices.length > 0) {
+    basicFuncRowIndices.forEach(rowIdx => {
+      requests.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 1, endColumnIndex: 6 },
+          cell: {
+            userEnteredFormat: {
+              backgroundColor: { red: 0.851, green: 0.851, blue: 0.851 }, // #D9D9D9
+            }
+          },
+          fields: 'userEnteredFormat(backgroundColor)',
+        }
+      });
+    });
+    console.log(`  → 기본기능 행 색상 재적용 (${basicFuncRowIndices.length}개 행)`);
+  }
 
   // ── 조건부 서식 ───────────────────────────────
 

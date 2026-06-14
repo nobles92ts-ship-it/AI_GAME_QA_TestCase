@@ -53,6 +53,22 @@ async function createTcTab() {
     const sheetId = addRes.data.replies[0].addSheet.properties.sheetId;
     console.log(`  → 탭 추가 완료! sheetId: ${sheetId}`);
 
+    // BVT 탭 다음 위치로 이동 (없으면 맨 앞)
+    const bvtSheet = meta.data.sheets.find(s => s.properties.title === 'BVT');
+    const insertIndex = bvtSheet ? bvtSheet.properties.index + 1 : 0;
+    await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: MASTER_SPREADSHEET_ID,
+        resource: {
+            requests: [{
+                updateSheetProperties: {
+                    properties: { sheetId, index: insertIndex },
+                    fields: 'index'
+                }
+            }]
+        }
+    });
+    console.log(`  → BVT 다음 위치(index ${insertIndex})로 이동 완료`);
+
     // ─── STEP 2: TC 데이터 업로드 ───
     // 이 스크립트는 템플릿입니다. 실제 TC 데이터는 tc-writer 에이전트가
     // 이 스크립트를 복사하여 tc() 함수 호출을 커스텀합니다.

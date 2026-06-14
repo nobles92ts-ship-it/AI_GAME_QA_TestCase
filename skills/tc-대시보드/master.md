@@ -1,8 +1,8 @@
 # 마스터 대시보드 (DX 전체 TC 현황)
 
 ## 기본 정보
-- **스프레드시트**: `https://docs.google.com/spreadsheets/d/1Q-CsPTRB2UO9hPxG50aigBBEEXi4uQuVAMeTFHCP_hY`
-- **스프레드시트 ID**: `1Q-CsPTRB2UO9hPxG50aigBBEEXi4uQuVAMeTFHCP_hY`
+- **스프레드시트**: `https://docs.google.com/spreadsheets/d/YOUR_MASTER_DASHBOARD_ID`
+- **스프레드시트 ID**: `YOUR_MASTER_DASHBOARD_ID`
 - **대시보드 시트명**: `대시보드`
 - **스크립트**: `{WORK_ROOT}\scripts\util\update_dashboard.js`
 

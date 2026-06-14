@@ -14,23 +14,25 @@ model: sonnet
 작업 시작 전 반드시 아래 파일을 읽고 모든 규칙을 따른다:
 
 ```
-C:\Users\Admin\.claude\tc-team-v2\skills\tc-설계검수\tc-설계검수.md    ← 검수 기준 단일 소스
-C:\Users\Admin\.claude\tc-team-v2\skills\tc-학습\tc-학습.md            ← 설계 패턴 + 작성 패턴 전체 읽기
+{CLAUDE_HOME}\tc-team-v2\skills\tc-설계검수\tc-설계검수.md    ← 검수 기준 단일 소스
+{CLAUDE_HOME}\tc-team-v2\skills\tc-학습\tc-학습.md            ← 활성 패턴(설계+작성) 읽기. 관찰/이력은 매번 읽지 않음
 ```
 
-> 이 에이전트는 얇은 포인터다. 모든 검수 기준(C-01~C-10, Pass Gate, 보고서 형식)은 위 스킬 파일이 단일 소스(Single Source of Truth)다.
+> 이 에이전트는 얇은 포인터다. 모든 검수 기준(C-01~C-13, Pass Gate, 보고서 형식)은 위 스킬 파일이 단일 소스(Single Source of Truth)다.
 > **학습 패턴 활용**: tc-학습.md의 "설계 패턴"으로 설계물을 검증하고, "작성 패턴"을 writer에게 전달할 구체적 지시로 변환하여 보고서에 포함한다.
 
 ## 핵심 경로
 
-- specs 위치: `{PROJECT_ROOT}/team/specs/[기능명]/`
-- 검수 기준: `C:\Users\Admin\.claude\tc-team-v2\skills\tc-설계검수\tc-설계검수.md`
-- 분석 기준: `C:\Users\Admin\.claude\tc-team-v2\skills\tc-분석\tc-분석.md`
-- 설계 기준: `C:\Users\Admin\.claude\tc-team-v2\skills\tc-설계\tc-설계.md`
+- specs 위치: `{WORK_ROOT}/team/specs/[기능명]/`
+- 검수 기준: `{CLAUDE_HOME}\tc-team-v2\skills\tc-설계검수\tc-설계검수.md`
+- 분석 기준: `{CLAUDE_HOME}\tc-team-v2\skills\tc-분석\tc-분석.md`
+- 설계 기준: `{CLAUDE_HOME}\tc-team-v2\skills\tc-설계\tc-설계.md`
 
 ## 작업 흐름
 
-tc-설계검수.md의 검수 항목(C-01~C-10)과 Pass Gate를 그대로 따른다.
+tc-설계검수.md의 검수 항목(C-01~C-14)과 Pass Gate를 그대로 따른다. (C-14 직변환 기계 게이트는 LLM 판단 없이 direct_convert convert 실행 결과로만 판정)
+
+**보고서 작성 시 (S4-4ⓐ — 체인 출발점)**: design_review.md 템플릿의 "### writer 전달 지시 (STEP 4 작성 시 주의)" 섹션을 반드시 채운다. tc-학습.md의 "작성 패턴" 중 이번 설계에 적용되는 주의사항(예: P-14 기본기능 큰따옴표 인용, GlobalDefine 키 명시)을 writer가 실행할 지시문으로 변환해 기록. 해당 없으면 "특이사항 없음".
 
 ## 진행률 보고 (S7 heartbeat)
 
@@ -38,7 +40,7 @@ tc-설계검수.md의 검수 항목(C-01~C-10)과 Pass Gate를 그대로 따른�
 ```bash
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 2 | tc-설계검수-v2 | <현재 작업>" >> "$SPECS/[기능명]/progress.log"
 ```
-최소 체크포인트: analysis/tc_design 읽기, C-01~C-10 각 항목, Pass Gate 판정, 보고서 저장.
+최소 체크포인트: analysis/tc_design 읽기, C-01~C-14 각 항목, Pass Gate 판정, 보고서 저장.
 
 ---
 
@@ -49,6 +51,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 2 | tc-설계검수-v2 | <현재 작�
 ```json
 {
   "status": "success",
+  "step": 2,
   "issues": {
     "critical": 0,
     "high": 0,
@@ -56,9 +59,12 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 2 | tc-설계검수-v2 | <현재 작�
     "low": 0
   },
   "total_issues": 0,
+  "analysis_gap": 0,
   "needs_fix": false,
   "review_path": "team/specs/[기능명]/design_review.md"
 }
 ```
+
+> `analysis_gap` = C-13 HIGH 건수(기획서→분석 누락 요소 수). **누락 금지** — 팀장이 STEP 3 모델 라우팅(>0이면 opus 재분석, 0이면 sonnet 설계수정)에 사용한다. 필드 정의 SSoT: tc-설계검수.md "step_result.json 형식".
 
 실패 시: `{"status": "fail", "error": "[에러 메시지]"}`

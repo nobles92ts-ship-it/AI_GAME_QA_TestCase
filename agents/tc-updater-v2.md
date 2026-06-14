@@ -9,20 +9,21 @@ model: sonnet
 
 모든 답변과 보고는 한국어로 작성해.
 
-## 필수: 기존 updater 규칙 참조
+## 필수: 스킬 파일 먼저 읽기
 
-작업 규칙은 기존 tc-updater.md와 동일하다. 필요 시 아래 파일을 참조:
+작업 시작 전 반드시 아래 파일들을 읽고 모든 규칙을 따른다:
 
 ```
-C:\Users\Admin\.claude\agents\tc-updater.md
+{CLAUDE_HOME}\tc-team-v2\skills\tc-갱신\tc-갱신.md   ← 갱신 규칙 단일 소스 (탭 정책·diff·변경 이력·결과 리셋·specs 버전)
+{CLAUDE_HOME}\tc-team-v2\skills\tc-생성\tc-생성.md   ← 시트 입력 서식 단일 소스
 ```
 
-> 이 에이전트(v2)는 기존 tc-updater와 동일한 로직을 사용하며, tc-팀-v2에서 호출된다.
+> 이 에이전트는 얇은 포인터다. 갱신 규칙은 tc-갱신.md가 단일 소스(Single Source of Truth)다. (구 `agents/tc-updater.md`는 폐기됨 — 참조 금지, 2026-06-10 죽은 포인터 정리)
 
 ## 핵심 경로
 
 - Node.js: `{NODE_PATH}`
-- specs: `{PROJECT_ROOT}/team/specs/[기능명]/`
+- specs: `{WORK_ROOT}/team/specs/[기능명]/`
 - sheet_info.txt에서 스프레드시트 ID 읽기 (하드코딩 금지)
 
 ## 필수: C~F열 자동검증 (시트 쓰기 전후)
@@ -31,7 +32,7 @@ C:\Users\Admin\.claude\agents\tc-updater.md
 
 ```js
 const { validatePreWrite, validatePostWrite, formatViolations } =
-  require('{PROJECT_ROOT}/scripts/util/validate_tc_rows.js');
+  require('{WORK_ROOT}/scripts/util/validate_tc_rows.js');
 
 const pre = validatePreWrite(rows, { startRow: insertStartRow });
 if (!pre.ok) { console.error(formatViolations(pre.violations)); process.exit(1); }

@@ -1,6 +1,6 @@
 // ─── 상수 설정 ─────────────────────────────────────────────────────────────
 const FIXED_TABS_ORDER = ['대시보드', 'BVT(Trunk)'];
-const SPREADSHEET_ID   = ''; // TODO: 배포 후 setupM3Button() / setupDailyTrigger() 실행 전 입력
+const SPREADSHEET_ID   = '__SPREADSHEET_ID__'; // deploy_appscript.js가 배포 시 자동 치환
 const PC_COL           = 8;   // H열 (1-based)
 const DATA_START_ROW   = 2;
 const DASHBOARD_TAB    = '대시보드';
@@ -10,12 +10,13 @@ const STATUS_CELL      = 'M4';
 const COLORS = {
   YELLOW: '#FBBC04',
   RED:    '#EA4335',
-  BLUE:   '#4285F4',  // 전부 통과 (파란색, 적녹색맹 대응)
+  BLUE:   '#4285F4',  // 전부 통과 (적녹색맹 대응)
 };
 
-// ─── 단순 onEdit 트리거 ────────────────────────────────────────────────────
-// e.source 사용 → 별도 인증 불필요, 자동 등록됨
-function onEdit(e) {
+// ─── 설치형 onEdit 트리거 (6분 한도) ───────────────────────────────────────
+// 단순 onEdit은 30초 제한 → 탭 40개+ 처리 시 중간에 끊김
+// 설치형 트리거(setupOnEditTrigger)를 통해 등록해야 6분 한도 적용됨
+function onM3Edit(e) {
   if (e.range.getSheet().getName() !== DASHBOARD_TAB) return;
   if (e.range.getA1Notation() !== BUTTON_CELL) return;
   if (e.value !== 'TRUE') return;
@@ -27,9 +28,11 @@ function onEdit(e) {
   SpreadsheetApp.flush();
 
   try {
-    colorAndSortTabs(ss);
+    const stats = colorAndSortTabs(ss);
     const now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'MM/dd HH:mm');
-    sheet.getRange(STATUS_CELL).setValue('✅ 마지막 실행: ' + now);
+    sheet.getRange(STATUS_CELL).setValue(
+      '✅ ' + now + ' (' + stats.total + '탭, 색상' + stats.colorChanged + '/이동' + stats.moved + ')'
+    );
   } catch (err) {
     sheet.getRange(STATUS_CELL).setValue('❌ 오류: ' + err.message);
   } finally {
@@ -38,8 +41,32 @@ function onEdit(e) {
   }
 }
 
+// ─── 일일 스케줄 트리거 (매일 09:00 KST) ─────────────────────────────────
+// SpreadsheetApp.openById 경로 사용. M4에 자동 실행 결과도 기록.
+function dailyColorAndSort() {
+  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(DASHBOARD_TAB);
+
+  try {
+    const stats = colorAndSortTabs(ss);
+    const now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'MM/dd HH:mm');
+    if (sheet) {
+      sheet.getRange(STATUS_CELL).setValue(
+        '🕘 자동 ' + now + ' (' + stats.total + '탭, 색상' + stats.colorChanged + '/이동' + stats.moved + ')'
+      );
+      SpreadsheetApp.flush();
+    }
+  } catch (err) {
+    if (sheet) {
+      sheet.getRange(STATUS_CELL).setValue('❌ 자동 오류: ' + err.message);
+      SpreadsheetApp.flush();
+    }
+    throw err;
+  }
+}
+
 // ─── 메인 함수 ─────────────────────────────────────────────────────────────
-// onEdit에서는 ss를 직접 전달, 시간 트리거에서는 openById 사용
+// 색상/순서 변경이 실제 필요한 경우에만 API 호출 → 성능 최적화
 function colorAndSortTabs(ss) {
   if (!ss) ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const allSheets = ss.getSheets();
@@ -49,51 +76,67 @@ function colorAndSortTabs(ss) {
   const redSheets     = [];
   const blueSheets    = [];
 
+  let colorChanged = 0;
+
+  // ─ 색상 판정 + 변경 필요 시에만 적용
   for (const sheet of allSheets) {
     const name = sheet.getName();
     if (FIXED_TABS_ORDER.includes(name)) continue;
 
     const colorKey = getTabColor(sheet);
+    const targetColor = colorKey === 'DEFAULT' ? null : COLORS[colorKey];
+
+    // 현재 탭 색상 안전하게 추출 (RGB가 아닌 테마 색상일 수도 있음 → try/catch)
+    let currentHex = null;
+    try {
+      const obj = sheet.getTabColorObject();
+      if (obj && obj.getColorType() === SpreadsheetApp.ColorType.RGB) {
+        currentHex = obj.asRgbColor().asHexString().toLowerCase();
+      }
+    } catch (e) {
+      currentHex = null; // 비RGB → 강제 갱신 유도
+    }
+    const targetHex = targetColor ? targetColor.toLowerCase() : null;
+
+    if (currentHex !== targetHex) {
+      sheet.setTabColor(targetColor);
+      colorChanged++;
+    }
+
     switch (colorKey) {
-      case 'RED':
-        sheet.setTabColor(COLORS.RED);
-        redSheets.push(sheet);
-        break;
-      case 'BLUE':
-        sheet.setTabColor(COLORS.BLUE);
-        blueSheets.push(sheet);
-        break;
-      case 'YELLOW':
-        sheet.setTabColor(COLORS.YELLOW);
-        yellowSheets.push(sheet);
-        break;
-      default:
-        sheet.setTabColor(null);
-        noColorSheets.push(sheet);
+      case 'RED':    redSheets.push(sheet);    break;
+      case 'BLUE':   blueSheets.push(sheet);   break;
+      case 'YELLOW': yellowSheets.push(sheet); break;
+      default:       noColorSheets.push(sheet);
     }
   }
 
-  // ① 대시보드(1) → BVT(2) 먼저 고정
-  const dashSheet = ss.getSheetByName('대시보드');
-  const bvtSheet  = ss.getSheetByName('BVT(Trunk)');
-  if (dashSheet) { ss.setActiveSheet(dashSheet); ss.moveActiveSheet(1); }
-  if (bvtSheet)  { ss.setActiveSheet(bvtSheet);  ss.moveActiveSheet(2); }
+  // ─ 목표 순서 (1-based index)
+  const desiredOrder = [];
+  const dashSheet = ss.getSheetByName(FIXED_TABS_ORDER[0]);
+  const bvtSheet  = ss.getSheetByName(FIXED_TABS_ORDER[1]);
+  if (dashSheet) desiredOrder.push(dashSheet);
+  if (bvtSheet)  desiredOrder.push(bvtSheet);
+  desiredOrder.push(...noColorSheets, ...yellowSheets, ...redSheets, ...blueSheets);
 
-  // ② TC 탭들을 3번 자리부터 순서대로 배치
-  const tcOrdered = [
-    ...noColorSheets,
-    ...yellowSheets,
-    ...redSheets,
-    ...blueSheets,
-  ];
-
-  for (let i = 0; i < tcOrdered.length; i++) {
-    ss.setActiveSheet(tcOrdered[i]);
-    ss.moveActiveSheet(3 + i);
+  // ─ 위치가 다른 경우에만 이동 (이미 정렬된 탭은 건너뜀)
+  let moved = 0;
+  for (let i = 0; i < desiredOrder.length; i++) {
+    const sheet = desiredOrder[i];
+    const targetIdx = i + 1; // 1-based
+    if (sheet.getIndex() !== targetIdx) {
+      ss.setActiveSheet(sheet);
+      ss.moveActiveSheet(targetIdx);
+      moved++;
+    }
   }
+
+  return { total: desiredOrder.length, colorChanged: colorChanged, moved: moved };
 }
 
 // ─── 탭 색상 판정 ───────────────────────────────────────────────────────────
+// ⚠ SSoT 동기화: scripts/util/color_rules.js의 getColorKey와 동일 로직 유지할 것.
+//   (Slack 위젯, QA 위젯도 동일 임계값 사용)
 function getTabColor(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < DATA_START_ROW) return 'DEFAULT';
@@ -114,25 +157,44 @@ function getTabColor(sheet) {
   const total = pending + failed + completed;
   if (total === 0)                               return 'DEFAULT';
   if (pending > 0 && (failed + completed) === 0) return 'DEFAULT';
-  if (pending > 0 && (failed + completed) > 0)  return 'YELLOW';
+  if (pending > 0 && (failed + completed) > 0)   return 'YELLOW';
   if (pending === 0 && failed > 0)               return 'RED';
   return 'BLUE';
 }
 
-// ─── 시간 트리거 설정 (1회 실행) ───────────────────────────────────────────
-function setupDailyTrigger() {
+// ─── 설치형 onEdit 트리거 등록 (1회 실행) ─────────────────────────────────
+// 단순 onEdit(e) 트리거(30초 제한)를 대체. 설치형은 6분 한도.
+function setupOnEditTrigger() {
+  // 기존 onM3Edit 트리거 제거
   for (const t of ScriptApp.getProjectTriggers()) {
-    if (t.getHandlerFunction() === 'colorAndSortTabs') {
+    if (t.getHandlerFunction() === 'onM3Edit') {
       ScriptApp.deleteTrigger(t);
     }
   }
-  ScriptApp.newTrigger('colorAndSortTabs')
+  // 신규 설치형 onEdit 트리거 등록
+  ScriptApp.newTrigger('onM3Edit')
+    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
+    .onEdit()
+    .create();
+  Logger.log('✔ 설치형 onM3Edit 트리거 등록 완료 (6분 한도)');
+}
+
+// ─── 일일 시간 트리거 설정 (1회 실행) ─────────────────────────────────────
+function setupDailyTrigger() {
+  // 기존 일일 트리거 제거 (옛 이름 colorAndSortTabs + 새 이름 dailyColorAndSort 모두)
+  for (const t of ScriptApp.getProjectTriggers()) {
+    const h = t.getHandlerFunction();
+    if (h === 'colorAndSortTabs' || h === 'dailyColorAndSort') {
+      ScriptApp.deleteTrigger(t);
+    }
+  }
+  ScriptApp.newTrigger('dailyColorAndSort')
     .timeBased()
     .atHour(9)
     .everyDays(1)
     .inTimezone('Asia/Seoul')
     .create();
-  Logger.log('✔ 매일 09:00 KST 트리거 등록 완료');
+  Logger.log('✔ 매일 09:00 KST 트리거 등록 완료 (dailyColorAndSort)');
 }
 
 // ─── M3 체크박스 삽입 (1회 실행) ───────────────────────────────────────────
@@ -145,7 +207,7 @@ function setupM3Button() {
   btn.clearContent();
   btn.insertCheckboxes();
   btn.setValue(false);
-  btn.setNote('체크 → 탭 색상/정렬 갱신');
+  btn.setNote('체크 → 탭 색상/정렬 갱신 (설치형, 6분 한도)');
 
   const status = dashboard.getRange(STATUS_CELL);
   status.setValue('');
@@ -153,4 +215,13 @@ function setupM3Button() {
   status.setFontSize(9);
 
   Logger.log('✔ M3 체크박스 삽입 완료');
+}
+
+// ─── 전체 셋업 (1회 실행) ─────────────────────────────────────────────────
+// setupM3Button + setupOnEditTrigger + setupDailyTrigger를 한 번에
+function setupAll() {
+  setupM3Button();
+  setupOnEditTrigger();
+  setupDailyTrigger();
+  Logger.log('✅ 전체 셋업 완료');
 }

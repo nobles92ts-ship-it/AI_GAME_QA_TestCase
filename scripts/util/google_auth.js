@@ -7,16 +7,17 @@ const http = require('http');
 const url = require('url');
 const open = require('child_process').exec;
 const fs = require('fs');
+const path = require('path');
 
-const OAUTH_PATH = process.env.GOOGLE_OAUTH_CLIENT_SECRET_PATH || './credentials/client_secret.json';
-const TOKEN_PATH = process.env.GOOGLE_OAUTH_TOKEN_PATH || './credentials/oauth_token.json';
+const OAUTH_PATH = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../credentials/client_secret.json');
+const TOKEN_PATH = process.env.GOOGLE_TOKEN_PATH || path.join(__dirname, '../credentials/oauth_token.json');
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 
 async function getAuthClient() {
     const credentials = JSON.parse(fs.readFileSync(OAUTH_PATH, 'utf-8'));
     const { client_id, client_secret, redirect_uris } = credentials.installed;
 
-    const oauth2Client = new google.auth.OAuth2(client_id, client_secret, 'http://localhost:3000/callback');
+    const oauth2Client = new google.auth.OAuth2(client_id, client_secret, 'http://localhost:3004');
 
     // 이미 저장된 토큰이 있으면 재사용
     if (fs.existsSync(TOKEN_PATH)) {
@@ -30,15 +31,18 @@ async function getAuthClient() {
             saved.access_token = tokens.access_token;
             saved.expiry_date = tokens.expiry_date;
             fs.writeFileSync(TOKEN_PATH, JSON.stringify(saved, null, 2));
-            console.log('  [토큰 자동 갱신 완료]');
+            // stdout 금지: 이 모듈을 쓰는 스크립트들이 stdout으로 JSON을 내보냄 —
+            // 로그가 섞이면 파이프라인 가드가 스냅샷을 0행 오판 (F4-A1/L4-04 사고 계열).
+            // 'OAuth' 단어 금지: pipeline_retry.sh 에러 분류 패턴(bare 'OAuth')에 오매칭됨.
+            console.error('  [구글 토큰 자동 갱신 완료]');
         });
 
-        console.log('✔ 저장된 OAuth 토큰으로 인증 완료');
+        console.error('✔ 저장된 구글 토큰으로 인증 완료');
         return oauth2Client;
     }
 
-    // 최초 인증: 브라우저에서 구글 로그인
-    console.log('🔐 최초 인증이 필요합니다. 브라우저가 열립니다...');
+    // 최초 인증: 브라우저에서 구글 로그인 (대화형 안내도 stderr — stdout은 데이터 전용)
+    console.error('🔐 최초 인증이 필요합니다. 브라우저가 열립니다...');
 
     const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -56,16 +60,16 @@ async function getAuthClient() {
                 server.close();
                 resolve(query.code);
             }
-        }).listen(3000, () => {
-            console.log(`\n👉 아래 URL을 브라우저에서 열어 구글 로그인 해주세요:\n`);
-            console.log(authUrl);
-            console.log('\n(자동으로 브라우저를 엽니다...)\n');
+        }).listen(3004, () => {
+            console.error(`\n👉 아래 URL을 브라우저에서 열어 구글 로그인 해주세요:\n`);
+            console.error(authUrl);
+            console.error('\n(자동으로 브라우저를 엽니다...)\n');
             // Windows에서 자동으로 브라우저 열기
-            open(`start "" "${authUrl}"`);
+            open(`cmd /c start "" "${authUrl}"`);
         });
 
-        // 3분 타임아웃
-        setTimeout(() => { server.close(); reject(new Error('인증 타임아웃 (3분)')); }, 180000);
+        // 10분 타임아웃
+        setTimeout(() => { server.close(); reject(new Error('인증 타임아웃 (10분)')); }, 600000);
     });
 
     const { tokens } = await oauth2Client.getToken(code);
@@ -73,7 +77,7 @@ async function getAuthClient() {
 
     // 토큰 저장 (다음부터 자동 인증)
     fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
-    console.log('✔ OAuth 토큰 저장 완료 (다음부터 자동 인증)');
+    console.error('✔ 구글 토큰 저장 완료 (다음부터 자동 인증)');
 
     return oauth2Client;
 }

@@ -11,6 +11,21 @@ const https = require('https');
 
 const JIRA_CONFIG_FILE = path.join(__dirname, 'jira_config.json');
 
+// ── CLI 파라미터 파싱 (--config qa_config_6차.json) ──
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const idx = args.indexOf('--config');
+  if (idx !== -1 && args[idx + 1]) {
+    const configPath = path.resolve(__dirname, args[idx + 1]);
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+  }
+  return null;
+}
+
+const milestoneConfig = parseArgs();
+
 // Jira 스프린트 기반 이슈 조회
 async function fetchSprintIssues(sprintName) {
   if (!fs.existsSync(JIRA_CONFIG_FILE)) return null;
@@ -18,7 +33,7 @@ async function fetchSprintIssues(sprintName) {
   if (!cfg.email || !cfg.token || cfg.token === 'your-atlassian-api-token') return null;
 
   const jql = `project = 버그ID AND sprint = "${sprintName}" ORDER BY created DESC`;
-  const body = JSON.stringify({ jql, fields: ['status', 'summary'], maxResults: 500 });
+  const body = JSON.stringify({ jql, fields: ['status', 'summary', 'priority'], maxResults: 500 });
   const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
   const baseUrl = new URL(cfg.baseUrl);
 
@@ -41,7 +56,25 @@ async function fetchSprintIssues(sprintName) {
           const issues = r.issues || [];
           const total = issues.length;
           const resolved = issues.filter(i => i.fields?.status?.statusCategory?.key === 'done').length;
-          resolve({ total, resolved, open: total - resolved });
+          const open = total - resolved;
+          const openIssues = issues.filter(i => i.fields?.status?.statusCategory?.key !== 'done');
+          const priorityMap = { '매우 높음': 0, 'Highest': 0, '높음': 0, 'High': 0, '보통': 0, 'Medium': 0, '낮음': 0, 'Low': 0, '매우 낮음': 0, 'Lowest': 0 };
+          const priorityKo = { 'Highest': '매우 높음', 'High': '높음', 'Medium': '보통', 'Low': '낮음', 'Lowest': '매우 낮음' };
+          for (const i of openIssues) {
+            const p = i.fields?.priority?.name || 'Medium';
+            const key = priorityKo[p] || p;
+            if (key in priorityMap) priorityMap[key]++;
+          }
+          resolve({
+            total, resolved, open,
+            priority: {
+              critical: priorityMap['매우 높음'],
+              high: priorityMap['높음'],
+              medium: priorityMap['보통'],
+              low: priorityMap['낮음'],
+              lowest: priorityMap['매우 낮음'],
+            }
+          });
         } catch { resolve(null); }
       });
     });
@@ -51,12 +84,17 @@ async function fetchSprintIssues(sprintName) {
   });
 }
 
-const SPREADSHEET_ID = process.env.MASTER_SPREADSHEET_ID || 'your_spreadsheet_id';
-const OUTPUT_PATH = path.join(__dirname, '..', 'qa_status.json');
+const SPREADSHEET_ID = milestoneConfig?.spreadsheetId || 'YOUR_SPREADSHEET_ID';
+const STATUS_FILENAME = milestoneConfig?.statusFile || 'qa_status.json';
+const OUTPUT_PATH = path.join(__dirname, STATUS_FILENAME);
 
-// 대시보드, 템플릿 등 제외할 시트명
-const EXCLUDE = ['대시보드', '템플릿', 'Template', 'Sheet1',
-  '범위_발사체', '보스 TC run+-'];
+// 제외할 시트명: config의 excludeTabs 우선, 없으면 기본값 (하위 호환)
+const EXCLUDE = milestoneConfig?.excludeTabs || [
+  '대시보드', '템플릿', 'Template', 'Sheet1',
+  '범위_발사체', '보스 TC run+-',
+  '필드_보스_시스템_개선', '즉시_이동_예외_처리', '공격_스킬_시전_이동_속도',
+  '사망_및_부활_시스템', '수영_시스템', '빌드_안정성',
+];
 
 async function fetchStatus() {
   const auth = await getAuthClient();
@@ -72,14 +110,33 @@ async function fetchStatus() {
   const result = { updated: new Date().toISOString(), sheets: [] };
   let totalPass = 0, totalFail = 0, totalBlock = 0, totalPending = 0, totalNA = 0, totalTC = 0;
 
-  // 2. 각 탭 데이터 읽기
-  for (const tab of tabNames) {
+  // 2. 모든 탭 데이터를 batchGet 1회 호출로 수집 (Quota 절약)
+  // 429(Quota) 시 지수 백오프 재시도
+  const ranges = tabNames.map(t => `'${t}'!A:J`);
+  async function batchGetWithRetry(maxAttempts = 5) {
+    let waitMs = 5000;
+    for (let i = 1; i <= maxAttempts; i++) {
+      try {
+        return await sheets.spreadsheets.values.batchGet({
+          spreadsheetId: SPREADSHEET_ID,
+          ranges,
+        });
+      } catch (e) {
+        const isQuota = (e.message || '').includes('Quota exceeded') || e.code === 429;
+        if (!isQuota || i === maxAttempts) throw e;
+        console.error(`[Quota] ${i}/${maxAttempts} 재시도 대기 ${waitMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        waitMs = Math.min(waitMs * 2, 60000);
+      }
+    }
+  }
+  const batchRes = await batchGetWithRetry();
+  const valueRanges = batchRes.data.valueRanges || [];
+
+  for (let t = 0; t < tabNames.length; t++) {
+    const tab = tabNames[t];
     try {
-      const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `'${tab}'!A:J`,
-      });
-      const rows = res.data.values || [];
+      const rows = valueRanges[t]?.values || [];
       if (rows.length < 2) continue;
 
       // H열(PC결과), I열(모바일결과) 집계
@@ -148,21 +205,45 @@ async function fetchStatus() {
     }
   }
 
-  const pcTarget = totalTC - totalNA;
-  const pcDone = totalPass + totalFail + totalBlock;
-  const pcRate = pcTarget > 0 ? (pcDone / pcTarget * 100) : 0;
+  // 대시보드 탭에서 공식 집계값 직접 읽기 (C5:D9 = PASS/FAIL/BLOCK/미진행/N/A × PC/모바일)
+  const dashRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: '대시보드!C5:D9',
+  });
+  const dashRows = dashRes.data.values || [];
+  const toNum = v => parseInt((v || '0').toString().replace(/,/g, ''), 10) || 0;
+  const dashPC = {
+    PASS:    toNum(dashRows[0]?.[0]),
+    FAIL:    toNum(dashRows[1]?.[0]),
+    BLOCK:   toNum(dashRows[2]?.[0]),
+    pending: toNum(dashRows[3]?.[0]),
+    NA:      toNum(dashRows[4]?.[0]),
+  };
+  const dashMob = {
+    PASS:    toNum(dashRows[0]?.[1]),
+    FAIL:    toNum(dashRows[1]?.[1]),
+    BLOCK:   toNum(dashRows[2]?.[1]),
+    pending: toNum(dashRows[3]?.[1]),
+    NA:      toNum(dashRows[4]?.[1]),
+  };
+  const dashPcTotal  = dashPC.PASS + dashPC.FAIL + dashPC.BLOCK + dashPC.pending + dashPC.NA;
+  const dashPcTarget = dashPcTotal - dashPC.NA;
+  const dashPcDone   = dashPC.PASS + dashPC.FAIL + dashPC.BLOCK;
+  const dashPcRate   = dashPcTarget > 0 ? Math.round(dashPcDone / dashPcTarget * 1000) / 10 : 0;
 
   result.summary = {
-    totalTC,
-    pc: { PASS: totalPass, FAIL: totalFail, BLOCK: totalBlock, pending: totalPending, NA: totalNA },
-    pcTarget,
-    pcDone,
-    pcRate: Math.round(pcRate * 10) / 10,
-    naText: `N/A(플랫폼 미해당) ${totalNA}건 제외`,
+    totalTC: dashPcTotal,
+    pc: dashPC,
+    mob: dashMob,
+    pcTarget: dashPcTarget,
+    pcDone: dashPcDone,
+    pcRate: dashPcRate,
+    naText: `N/A(플랫폼 미해당) ${dashPC.NA}건 제외`,
   };
 
   // Jira 스프린트 기반 버그 집계
-  const sprintResult = await fetchSprintIssues('(DX Bug) 5차 스프린트');
+  const jiraSprintName = milestoneConfig?.jiraSprintName || '(DX Bug) 5차 스프린트';
+  const sprintResult = await fetchSprintIssues(jiraSprintName);
   if (sprintResult) {
     result.jira = sprintResult;
     console.log(`Jira: 총 ${sprintResult.total}종 / resolved ${sprintResult.resolved}종 / open ${sprintResult.open}종`);

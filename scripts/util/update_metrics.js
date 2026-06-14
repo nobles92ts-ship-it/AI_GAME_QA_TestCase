@@ -16,9 +16,9 @@ const SPECS_DIR = path.resolve(__dirname, '../../team/specs');
 
 // 토큰 로그 위치 (Claude Code 세션 로그)
 const TOKEN_LOG_DIRS = [
-  'C:/Users/Admin/.claude/projects/c--Users-Admin-Downloads',
-  'C:/Users/Admin/.claude/projects/C--Users-Admin-Downloads-AI-AntiGravity',
-  'C:/Users/Admin/.claude/projects/C--Users-Admin-Downloads-AI-AntiGravity-scripts-util',
+  '{CLAUDE_HOME}/projects/c--Users-Admin-Downloads',
+  '{CLAUDE_HOME}/projects/C--Users-Admin-Downloads-AI-AntiGravity',
+  '{CLAUDE_HOME}/projects/C--Users-Admin-Downloads-AI-AntiGravity-scripts-util',
 ];
 const TOKEN_RECENT_DAYS = 30; // 최근 N일 토큰만 집계
 

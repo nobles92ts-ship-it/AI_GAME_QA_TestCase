@@ -33,8 +33,8 @@ user-invocable: false
 | ✅   | 추상적 표현 금지 ("정상 동작", "정상적으로" 등)     | "정상 동작하는지 확인" → FAIL                             |
 | ✅   | 재현 스탭에 플랫폼 중복 기재 금지                   | "PC/모바일에서 ~하면" → FAIL                              |
 | ✅   | 경계값 TC에 구체적 수치 필수                        | "마나가 부족할 때" → "마나 49/소모 50인 상태에서"         |
-| ✅   | 부정 + 예외 합계 49~60% (권장 55%)                  | 49% 미만 → 엣지 부족, 60% 초과 → 정상 경로 부족           |
-| ✅   | 정상 케이스 ≥ 40%                                   | 기본 기능 검증 최소 보장 (40% 미만 시 보강)               |
+| ✅   | 부정 + 예외 합계 ≥ 49% — **하한**. 배분표(분석 후보)가 60%를 넘기면 그 값이 정답 (천장화 금지, ⚠SSoT: tc-설계 기준) | 49% 미만 → 엣지 부족. 비율 맞추려 후보 케이스 쳐내기 금지 |
+| ✅   | 소분류별 정상 ≥ 1 (전체 정상 비율 고정 하한 없음 — 배분표 따름) | 정상 0개 소분류 발견 시 보강                              |
 | ✅   | 소분류별 정상·부정·예외 최소 1개씩                  | 예외 케이스 유형 표 참조                                  |
 | ✅   | 동일 분류 연속 배치 (흩어짐 금지)                   | groupByCategory 함수로 처리                               |
 | ✅   | 분류 중복 표기 금지 (최상단 1회만)                  | renumberAndDedup 함수로 처리                              |
@@ -63,7 +63,7 @@ user-invocable: false
 
 ### tc_data.json 행 형식 (writer 공통 — 순서 엄수)
 
-모든 writer(haiku_tc_writer.py 포함)가 생성하는 JSON 배열 각 행은 **7개 문자열**:
+모든 writer가 생성하는 JSON 배열 각 행은 **7개 문자열**:
 
 ```
 ["대분류", "중분류", "소분류", "검증단계", "재현스탭", "플랫폼", "비고"]
@@ -76,12 +76,14 @@ user-invocable: false
 > 반대로 쓰면 시트에 F열=플랫폼, G열=재현스탭으로 뒤바뀜.
 > 과거 사고: 2026-04-17 한 기능 TC 176~196(21개)에서 컬럼 꼬임 발생. 2차 리뷰까지 놓쳐 배포됨.
 
-**배열 조립 직전 자가 점검 (의무)**:
-- [ ] index 3 위치 값이 **`정상` / `부정` / `예외`** 중 하나인가? (검증단계)
-- [ ] index 4 위치 값이 **긴 한글 서술문**인가? (재현스탭 — "~하면 ~되는지 확인")
-- [ ] index 5 위치 값이 **`PC` / `모바일` / `PC/모바일`** 중 하나인가? (플랫폼)
-- [ ] index 6 위치 값이 **짧은 메모** 또는 **빈 문자열**인가? (비고)
-- 위 4개 중 **하나라도 어긋나면 배열 즉시 수정 후 쓰기**. 이 점검 없이는 write 호출 금지.
+> **⚠ 전 행 채움(full-fill) 계약 (Phase1·L4-02)**: B/C/D(대/중/소분류)는 **모든 행에 값**을 쓴다.
+> "그룹 첫 행만 쓰고 이후 빈칸" 방식은 **시트 표시 규칙**(create_gsheet가 자동 dedup)이지
+> 데이터 계약이 아님 — 빈칸 tc_data는 validateFull이 `CONTRACT` 위반(차단)으로 처리한다.
+
+**배열 조립 점검 — 기계 백스톱 (수기 행별 전수 점검 의무 폐지)**:
+- 검증단계/플랫폼 enum·F빈값·분류 동사·진입 중복·그룹 분산·**F 번호 매김/태그 분리·동일 내용 PC/모바일 분리쌍**은
+  `create_gsheet_tc_from_json.js`에 내장된 `validatePreWrite`가 업로드 전에 기계 차단한다 (exit 4 — idx4↔5 스왑도 G열 enum 위반으로 검출).
+- writer는 위반 시 **열 그룹 분기 (L2P3-05)**: F열 위반 = 해당 행만 재문장화 후 재실행 / 골격 열(B~E·G·J) 위반 = 직변환·설계 결함이므로 **정지**(LLM 패치 금지, blocker 경로). 행별 수기 재점검 금지 (토큰 낭비).
 
 **BAD 예시** (컬럼 꼬임):
 ```json
@@ -128,6 +130,7 @@ user-invocable: false
 - **구체적 결과 필수**: "정상 동작", "올바르게" 등 추상 표현 절대 금지
 - **플랫폼 미중복**: G열에 이미 표기 → 재현 스탭에 "PC에서", "모바일에서" 시작 금지
 - **1 TC = 1 검증 포인트**: "A되고 B되는지" → TC 분리
+- **번호 매김 금지 ⚠ (기계 차단 — v8 사고: 201행 전부 번호 형식)**: `1. ~ 2. ~` 다단계 번호·대괄호 태그 분리 전부 금지 — 사전 상태·행동·기대 결과를 조사로 잇는 **한 문장**. validatePreWrite가 HIGH로 차단(시트 진입 불가)
 
 ```
 BAD:  "아이템이 인벤토리에 추가되고 보상 UI가 표시되는지 확인"
@@ -140,6 +143,10 @@ GOOD: "마나 50인 상태에서 소모량 50의 스킬을 사용하면 쿨타�
 BAD:  "[사전조건] 마나 50 [행동] 스킬 사용 [기대결과] 쿨타임 표시"
       → 대괄호 태그 분리 표기 금지. 하나의 서술문으로 통합할 것.
 GOOD: "마나 50인 상태에서 스킬을 사용하면 쿨타임 3초 UI가 표시되는지 확인"
+
+BAD:  "1. 인벤토리에 소환권을 보유한다 2. 소환권을 사용한다 → 결과 화면이 표시되는지 확인"
+      → 번호 다단계 금지 (v8 사고 실물 유형). 한 문장으로 통합할 것.
+GOOD: "인벤토리에 소환권을 보유한 상태에서 소환권을 사용하면 결과 화면이 표시되는지 확인"
 
 # 옵션 1-A: 정상 케이스 사전상태 생략 예시
 정상 (분류 자명 → 생략): "레벨업 시 화면 상단에 연출이 노출되고 화면 전체를 가리지 않는지 확인"
@@ -240,6 +247,7 @@ const { validatePreWrite, validatePostWrite, formatViolations } =
 - writer: pre + post 둘 다
 - fixer: 신규 행 있으면 pre, 모든 수정에 post
 - updater: pre + post 둘 다
+- **reviewer2 (STEP 6): 자기 수정분(신규/셀)에 post 필수** — 2차 수정분 컬럼꼬임 차단 (S7-2)
 
 검증 실패 = 즉시 STOP. LLM 판단으로 skip 금지.
 
@@ -247,7 +255,7 @@ const { validatePreWrite, validatePostWrite, formatViolations } =
 
 - **플랫폼 결정은 tc-설계(설계 단계)에서 확정** — text_2.md의 소분류별 `[PC/모바일]` / `[PC]` / `[모바일]` 태그를 그대로 G열에 반영
 - 태그 누락 시 기본값: `PC/모바일`
-- PC와 모바일 조작이 다를 경우 별도 행으로 분리
+- **`[PC/모바일]` 태그 = G열 `PC/모바일` 한 행이 기본 ⚠ (v8 사고: 90쌍 일괄 분리로 TC 2배 부풀림)**. 별도 행 분리는 **플랫폼별 조작/동작이 실제로 달라 F열 서술 자체가 달라질 때만** — 조작 단어만 치환(클릭↔탭)한 동일 문장의 PC/모바일 2행 분리는 validatePreWrite가 HIGH로 차단 (V-07d)
 
 | 플랫폼 값 | H열(PC) | I열(모바일) |
 | --------- | ------- | ----------- |
@@ -305,6 +313,38 @@ const { validatePreWrite, validatePostWrite, formatViolations } =
 
 ---
 
+## F열 데이터 식별자 주어화 금지 ⚠ [CRITICAL]
+
+데이터 테이블명·Enum 타입명·내부 판정변수가 **재현스탭(F열) 문장의 주어/술어**가 되면 QA·기획자가 동작을 못 알아본다(기능 QA는 테이블 구조를 뜯지 않는다). **사람 언어 동작·조건·결과를 주어로** 쓰고, 식별자는 **필요할 때만**(자동화 fixture 추적·미지정 키·기본기능 섹션) 괄호로 병기한다.
+
+**BAD vs GOOD**:
+
+```
+❌ BAD — 데이터 식별자가 주어/술어:
+  F: "RewardGroup_Package의 모든 보상이 ClassType 불일치인 패키지"
+  F: "VisibleConditionType 0(None)~6(LevelReached) Enum이 각각 정상 적용되어
+      SpawnCondition 판정이 타입별로 올바르게 처리되는지 확인"
+
+✅ GOOD — 사람 언어 주어 + 필요시 괄호 병기:
+  F: "받은 패키지의 보상이 전부 내 직업과 맞지 않을 때(RewardGroup_Package·ClassType
+      불일치) 받기/사용이 차단되는지 확인"
+  F: "노출 조건이 '레벨 도달'일 때, 조건을 충족하면 표시되고 미충족 시 표시되지
+      않는지 확인 (VisibleConditionType=LevelReached)"
+```
+
+**처리 규칙**:
+1. 식별자(영문 테이블명·Enum·변수)가 **괄호 밖 주어/술어**면 → 사람 언어로 풀어 쓰기
+2. 풀어 쓴 뒤 **구분·추적이 필요하면** 괄호 병기 `(식별자)` — 없어도 동작이 자명하면 생략
+3. Enum 값 나열(`0~6 각각`)은 한 TC에 뭉치지 말고 **타입별/대표값으로 분리** (1 TC = 1 검증 포인트)
+4. 풀어쓸 근거가 기획서에 없으면 임의 추론 금지 → **J="기획 확인 필요" + H/I=`미진행`**
+5. **미지정 키(`N=미지정`)도 동일** — 값이 없어도 **사람 언어 주어 + 키 괄호 병기**(예: `고등급 강조 조건(Summon_HighGradeCondition, 미지정) 값 이상 등급…`). ⚠ 미지정 키를 문장 첫 주어로 raw 노출 금지(`Summon_HighGradeCondition(N=미지정) 등급 이상…` 식 금지 — 소환권 v6 025 사례). 미지정 키는 값이 없어 키로만 표현되다 주어화되기 가장 쉬운 회색지대
+
+> 키 병기 자체가 금지가 아니다. GOOD `친구 50명(Friend_Relationship_MaxCount) 상태에서 추가 시 차단`처럼 **사람 언어가 주어, 식별자는 괄호 보조**면 정상. 금지 대상은 식별자가 문장을 끌고 가는 화이트박스 서술.
+
+> **예외 (허용)**: 토스트·UI 텍스트 키 + 큰따옴표 문구 인용(`Summon_TOAST_X "보유한 소환권이 없습니다."`, `Tooltip_BTN_ProbInfo "확률 정보"`)은 문구로 QA가 이해 가능하고 자동화 메시지 추적용이라 **허용**(기본기능 문구 인용 규칙과 동일). 금지 대상은 데이터 테이블·Enum·확률/수치 로직 변수(`RewardGroup`·`GroupProb`·`Summon_HighGradeCondition` 등)가 큰따옴표 문구 없이 주어/술어가 되는 경우.
+
+---
+
 ## F열 "또는" 표현 규칙 (사전조건·결과 분기 금지) ⚠ [CRITICAL]
 
 **한 TC = 사전조건 1 + 과정 1 + 기대결과 1**. "또는" 분기 = 1NF 위반.
@@ -340,13 +380,13 @@ const { validatePreWrite, validatePostWrite, formatViolations } =
 - 빈 행 수동 정리: `{WORK_ROOT}/scripts/util/trim_empty_rows.js`
 - 대시보드 갱신: `{WORK_ROOT}/scripts/util/update_dashboard.js`
 - **로컬 specs 폴더**: `{WORK_ROOT}/team/specs/[기능명]/`
-- Node.js 경로: `{WORK_ROOT}/node-v20.11.1-win-x64/node.exe`
+- Node.js 경로: `{NODE_PATH}`
 
 ---
 
 ## 작업 흐름
 
-1. MD 파일 경로 받으면 파일 내용 읽기
+1. MD 파일 경로 받으면 파일 내용 읽기 (tc_design.md). **핸드오프에 design_review.md 경로가 있으면 함께 Read → "writer 전달 지시" 섹션의 주의사항을 이후 작성(3~7)에 반영 (S4-4ⓐ: 설계검수가 짚은 패턴 — 예: 기본기능 큰따옴표 인용, GlobalDefine 키 명시)**
 2. 기능 구조(대/중/소분류) 파악
 3. **기본기능 TC 먼저 도출**: text_2.md의 "기본기능 검증 항목" 참조하여 기본기능 TC 작성
 4. 각 기능별 QA 상세 TC 케이스 도출 (검증단계별 분류):
@@ -355,60 +395,62 @@ const { validatePreWrite, validatePostWrite, formatViolations } =
    - 예외/경계값 케이스
 5. 플랫폼별 행 분리 적용
 6. **분류 그룹핑 필수**: 동일 대분류/중분류/소분류는 반드시 한 곳에 모아서 연속 배치
-7. **분류 중복 표기 제거**: 최상단 1회만 표기, 이후 행은 빈칸
+7. **분류 중복 표기는 시트 표시 규칙**: create_gsheet 스크립트가 업로드 시 자동 dedup(최상단 1회만 표기) — **tc_data.json에는 전 행에 분류 값을 그대로 쓴다** (full-fill 계약)
 8. **마스터 스프레드시트에 새 탭으로 생성** (`create_gsheet_tc_from_json.js` 사용)
 
    **JSON 파일로 TC 데이터 생성 (필수)**:  JS 보일러플레이트 없이 데이터만 작성하여 토큰 절감.
 
    ```
-   Step A: specs/[기능명]/tc_data.json 파일에 TC 데이터를 JSON 배열로 작성
-           형식: [["대분류","중분류","소분류","검증단계","재현스탭","플랫폼","비고"], ...]
-           ⚠️ 헤더 행 포함 금지 — 데이터 행만 작성 (스크립트가 헤더를 자동 생성)
-           ※ index 4=재현스탭, index 5=플랫폼 — 시트 F/G열 순서와 동일
-           비고는 없으면 "" 또는 생략 가능
-           대분류별로 청크 나눠 append 작성 (컨텍스트 부하 방지)
-   Step B: 스크립트 실행
-           node create_gsheet_tc_from_json.js "탭명" "스프레드시트ID" "tc_data.json경로"
+   Step A0: 직변환 골격 생성 (Phase 3 — 기계, 재진입 시에도 무조건 재실행)
+           node scripts/util/direct_convert.js convert "team/specs/[기능명]/tc_design.md" "team/specs/[기능명]"
+           exit 0=tc_skeleton.json (B~E/G/J 골격 확정 — LLM 수정 금지)
+           exit 4=conversion_blocker.json 저장 — fail-closed 정지. step_result fail(conversion_blocked) 저장 후 종료 (팀장이 STEP 3 재진입)
+   Step A: F열 문장화 → tc_f_map.json 작성 → merge로 tc_data.json 기계 생성 (Phase 3 — 수기 JSON 조립 폐지)
+           ① tc_skeleton.json rows[].leaf + tc_design.md 'GlobalDefine 키 목록'·'기획 확인 필요 항목' 표를 입력으로 (L4-F3)
+           ② 행마다 재현스탭 형식(아래 규칙 전부)대로 완성 문장 작성 → tc_f_map.json = [{"idx":N,"d":"소분류 echo","f":"문장"}]
+              ⚠ **기본기능 행(골격 `b`(대분류)=`기본기능`)은 1차 문장부터** 일반 규칙에 추가로 ④GlobalDefine 키 인용 — 키 미지정 기획서면 **영문 리소스명/식별자 + 수치를 괄호 병기** (예: `(Attack_01, 타격수=2회)`. 기계 판정 ④는 영문 식별자 3자 이상 존재 검사 — 한글 수치만 병기하면 차단됨) + ⑤기획서 안내 문구 큰따옴표 인용 포함 필수 — "기본기능 섹션" 규칙 5·V-18 ④⑤의 1차 통과 조건. design_review.md "writer 전달 지시"에 같은 항목이 있으면 행별 적용 (L4-F8: 보스 TC run 실측 — 1차 누락 24행 → Step A2 차단 → 재문장화 루프 14분)
+              ⚠ **분할 생성 필수 (L4-F9)**: tc_f_map을 단일 턴에 일괄 생성 금지 — **한 턴에 최대 25행** 단위로 `tc_f_map_part1.json`, `tc_f_map_part2.json`…에 나눠 Write한 뒤 기계 병합:
+              `node -e "const fs=require('fs');const a=process.argv.slice(1).flatMap(f=>JSON.parse(fs.readFileSync(f,'utf8')));fs.writeFileSync('[specDir]/tc_f_map.json',JSON.stringify(a,null,1));console.log('merged',a.length)" [specDir]/tc_f_map_part1.json [specDir]/tc_f_map_part2.json …(part 전부 명시)`
+              > 근거 (보스 TC run_v2 트랜스크립트 포렌식 2026-06-12): 83행 일괄 생성 시도 → thinking이 출력 상한 32,000 토큰을 정확히 소진(stop_reason=max_tokens) → 재시도 턴도 99% thinking 소진 → rc=0 silent exit. 성공 런도 상한의 96% 도달 — 분할은 턴당 출력을 상한의 ~30%로 제한한다.
+           ③ node scripts/util/direct_convert.js merge "team/specs/[기능명]"
+              exit 0=tc_data.json 생성 / 5=f_violations.json 행만 재문장화 후 merge 재실행 / 4=골격·시프트·해시 결함 — 정지
+           ※ tc_data.json 형식(7요소: 대분류~비고, index 4=재현스탭·5=플랫폼)은 merge가 보장 — 형식 정의는 fixer/updater 공용 참조로 유지
+   Step A2: 기계 자가검증 — 업로드 전 (전 행 재검토 금지)
+           node scripts/util/validate_tc_rows.js --full "team/specs/[기능명]/tc_data.json" --design "team/specs/[기능명]/tc_design.md"
+           exit 0=PASS → Step B / 4=차단 위반 → F열 위반행만 재문장화 후 재실행 (골격 열 위반=정지·팀장 보고) / 1=치명 → 팀장 보고
+
+   Step B: 스크립트 실행 (검증·스냅샷 내장 — Phase1)
+           node create_gsheet_tc_from_json.js "탭명" "스프레드시트ID" "tc_data.json경로" --snapshot-dir "team/specs/[기능명]"
+           exit 0=성공 (tc_snapshot.json/tc_snapshot_full.json 자동 저장 — 별도 덤프 불필요)
+           exit 3=탭 이미 존재 (v2 접미사 정책 확인) / 4=Pre-Write 위반 (탭 미생성 — F열 위반행만 재문장화 후 재실행, 골격 열 위반=정지)
+           exit 5=Post-Write 불일치 (STOP — 팀장 보고) / 1=입력·일반 에러
    ```
 
    > JS 파일(헤더/푸터/함수정의) 생성 불필요. JSON 데이터만 작성하면 스크립트가 처리.
    > 전체 TC를 한 번에 작성하면 컨텍스트 부하로 속도 저하 및 누락 발생 — 대분류 단위로 나눠 append.
 
-9. **서식 일괄 적용**: `node apply_format_tab.js "[탭명]" --spreadsheet [전달받은 스프레드시트 ID]`
+9. **서식**: create_gsheet가 내장 적용 — 별도 실행 불필요. 서식 깨짐 보정이 필요할 때만 `node apply_format_tab.js "[탭명]" --spreadsheet [ID]` 재실행
 
    > K~L열 프로젝트 정보 패널은 tc-팀-v2 완료 처리 단계에서 `add_project_info.js`로 일괄 적용. 여기서는 실행 금지.
 
-10. **시트 ID와 탭명을 specs 폴더에 저장**:
+10. **시트 ID와 탭명을 specs 폴더에 저장** (4필드 표준 — 기존 값 보존 쓰기):
+
+> sheet_info.txt는 팀장 초기화가 먼저 생성한다(CONFLUENCE_URL·FEATURE_NAME 포함). writer는 **통째로 덮어쓰지 말고** 기존 CONFLUENCE_URL을 보존한다 — writer 핸드오프에는 Confluence URL이 없어 새로 쓸 수 없음.
 
 ```bash
-echo "SHEET_ID=[전달받은 스프레드시트 ID]" > "{WORK_ROOT}/team/specs/[기능명]/sheet_info.txt"
-echo "TAB_NAME=[탭명]" >> "{WORK_ROOT}/team/specs/[기능명]/sheet_info.txt"
-echo "CONFLUENCE_URL=[원본 Confluence URL]" >> "{WORK_ROOT}/team/specs/[기능명]/sheet_info.txt"
+SPEC="{WORK_ROOT}/team/specs/[기능명]"
+OLD_URL=$(grep -E "^CONFLUENCE_URL=" "$SPEC/sheet_info.txt" 2>/dev/null | head -1)
+{
+  echo "SHEET_ID=[전달받은 스프레드시트 ID]"
+  echo "TAB_NAME=[탭명]"
+  echo "${OLD_URL:-CONFLUENCE_URL=}"
+  echo "FEATURE_NAME=[기능명]"
+} > "$SPEC/sheet_info.txt"
 ```
 
-11. **TC 데이터 로컬 백업** (specs 폴더에 엑셀 스냅샷 저장):
-    ```bash
-    cd "{WORK_ROOT}"
-    node -e "
-    const {google}=require('googleapis'); const {getAuthClient}=require('./scripts/util/google_auth');
-    const XLSX=require('xlsx');
-    (async()=>{
-      const auth=await getAuthClient();
-      const sheets=google.sheets({version:'v4',auth});
-      const res=await sheets.spreadsheets.values.get({spreadsheetId:'[전달받은 스프레드시트 ID]',range:'[탭명]!A1:K'});
-      const rows=res.data.values||[];
-      const header=['대분류','중분류','소분류','검증단계','재현 스탭','플랫폼'];
-      const colIdx=[1,2,3,4,5,6];
-      const data=[header,...rows.slice(1).map(r=>colIdx.map(i=>(r[i]||'')))];
-      const ws=XLSX.utils.aoa_to_sheet(data);
-      ws['!cols']=[{wch:15},{wch:15},{wch:15},{wch:10},{wch:60},{wch:10}];
-      const wb=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb,ws,'TC');
-      XLSX.writeFile(wb,'{WORK_ROOT}/team/specs/[기능명]/tc_snapshot.xlsx');
-      console.log('TC 스냅샷(xlsx) 저장 완료');
-    })();
-    "
-    ```
+11. **TC 데이터 로컬 백업**: Step B의 `--snapshot-dir`가 `tc_snapshot.json`(슬림)/`tc_snapshot_full.json`(풀)을 자동 저장 — 별도 작업 불필요.
+    (구 xlsx 백업 절차는 폐기 — 실물 미생성 사문이었음, Phase1 정리)
+    ⚠ **재덤프 의무 (I5)**: Step B 이후 시트를 직접 수정했다면(위반 보정 등) 스냅샷이 stale — `node scripts/util/read_gsheet_data.js [ID] "[탭명]" --columns A,B,C,D,E,F,G,H,I,J --minify > team/specs/[기능명]/tc_snapshot.json`으로 갱신 (STEP 5 리뷰 입력이므로 필수)
 12. **완료 전 자가 검증** — 아래 체크리스트를 전부 통과해야 완료 보고 가능
 13. 완료 보고
 
@@ -416,10 +458,21 @@ echo "CONFLUENCE_URL=[원본 Confluence URL]" >> "{WORK_ROOT}/team/specs/[기능
 
 ---
 
-## 완료 전 자가 검증 (verification-loop)
+## 완료 전 자가 검증 (verification-loop — Phase1: 스크립트 1회 + 위반행만)
 
-TC 데이터 생성 + 서식 적용 완료 후, 완료 보고 전 아래 항목 **반드시 직접 확인**.
-하나라도 FAIL이면 즉시 수정 후 재확인. 전부 PASS일 때만 완료 보고 가능.
+**절차 (LLM 전수 점검 의무 폐지 — v7 실증: LLM 셀프체크가 V-20 위반 3건을 PASS로 오보고, STEP 6에서야 검출)**:
+1. **기계 판정 1회**: 작업 흐름 Step A2의 `validate_tc_rows.js --full` 결과(JSON)를 그대로 사용 — 기계 항목(아래 ⚙)의 행별 수기 재점검 금지
+2. **위반행만 수정** 후 재실행 (위반 0건까지). Step B 이후 시트를 직접 수정했다면 스냅샷 재덤프 (작업 흐름 11)
+3. **LLM-only 직접 확인은 V-11(플랫폼 적정성)만** — G=PC 행만 스캔. **나머지 llmFlags·LLM-only 항목(V-12·13 잔여 / V-18 ⑤ / V-15·21 분류 / V-23 ④)은 판정하지 말 것** — JSON 그대로 보고만 한다. STEP 5/6 precheck가 같은 validateFull을 공유해 동일 플래그를 재생성하고 리뷰어가 판정한다(tc-리뷰.md '기계 EVAL 사전 패스'에 의무화됨). 근거: 보스 TC run_v4 실측 — writer가 llmFlags 8건을 14분간 직접 판정했으나 전부 적격(수정 0건)이었고 같은 8건이 리뷰 단계에 그대로 재도착해 리뷰어가 재판정 = 순수 중복 (2026-06-12 렌즈 C 분석)
+4. 보고서에는 기계 판정 JSON(stats/violations/llmFlags)을 **그대로 인용** — 통계 표 재계산·재서술 금지
+
+**판정 주체 분담**: ⚙기계(validateFull + create_gsheet 내장) = V-01~04·05기계부·06~10·14·16비율·17·18①~④·19·20·21추출·22·23①~③ / 🧠writer LLM = **V-11만** / 🔁리뷰 위임(precheck round1·2 → 리뷰어) = V-12/13잔여·15분류·18⑤·21분류·23④ — 전체 매핑표: `~/.claude/tc-team-v2/docs/stability.md` 부록 3.
+⚠ 기계 스크립트는 판정불가 시 silent pass 금지 — JSON의 llmFlags/notes에 명시 출력되며, 그 항목은 **리뷰 단계 LLM**이 판정한다 (F4-A1 교훈 + 중복 제거 2026-06-12).
+
+**병행 검증 기간 (직변환 도입 첫 1~2런 한정 — Phase 3, 카운터 단일화 L2P3-07)**: writer는 merge 산출 tc_data.json의 골격(B~E/G/J)이 설계 트리·기본기능 표와 일치하는지 **표본 대조**(대분류마다 1행 이상)하고 불일치는 보고만 한다 — 기계 결과 우선, 수정 금지. 1~2런 연속 불일치 0건 확인 후 이 단락을 삭제한다. 차단 권위는 validateFull(--design)의 단계별 부등식(V-10)으로 일원화 — 직변환의 3자 동치(checkAllotmentStrict)는 그 상류 게이트.
+> (구) Phase 1 병행 단락(기계 vs 수기 2런)은 v8·v9 2런 불일치 0건으로 종료 — 2026-06-11.
+
+(아래 체크리스트는 **항목 정의 SSoT** — 수행은 위 절차를 따른다. 하나라도 미해소면 완료 보고 불가.)
 
 ```
 VERIFICATION REPORT
@@ -428,31 +481,31 @@ VERIFICATION REPORT
 [ ] V-02 TC ID: =TEXT(ROW()-1,"000") 수식 입력, 001부터 연속 표시, 중복 없음
 [ ] V-03 플랫폼 값: PC / 모바일 / PC/모바일 만 사용
 [ ] V-04 검증단계 값: 정상 / 부정 / 예외 만 사용
-[ ] V-05 재현 스탭: "정상 동작", "정상적으로" 등 추상 표현 없음 / 3요소(사전상태·행동·기대결과)가 개행 없는 단일 서술문으로 통합되어 있음
+[ ] V-05 재현 스탭: "정상 동작", "정상적으로" 등 추상 표현 없음 / 3요소(사전상태·행동·기대결과)가 개행 없는 단일 서술문으로 통합되어 있음 / 번호 매김(`1.~ 2.~`)·태그 분리(`[사전조건]`) 0건 — 전부 기계 검출(validateFull)
 [ ] V-06 분류 그룹핑: 동일 소분류 TC 연속 배치 (분산 없음)
 [ ] V-07 분류 표기: 동일 분류 최상단 1회만, 이후 행 빈칸
 [ ] V-08 서식 적용: apply_format_tab.js 실행 완료
 [ ] V-09 플랫폼별 결과 열 초기값: PC→I열 N/A, 모바일→H열 N/A, PC/모바일→H/I 미진행
-[ ] V-10 검증단계 분포: 부정+예외 49~60% (권장 55%), 정상 ≥ 40% — ※ 기본기능 섹션 제외하고 QA 상세 TC만 집계
+[ ] V-10 검증단계 분포: 부정+예외 ≥49% 하한 + 배분표 수치와 일치 (배분표가 60% 초과면 그 값이 정답 — 천장화 금지) + 소분류별 정상 ≥1 — ※ 기본기능 섹션 제외하고 QA 상세 TC만 집계
 [ ] V-11 플랫폼 결정: UI/서버 기능은 PC/모바일이 기본값. PC-only는 키보드/마우스 전용에만 한정
 [ ] V-12 GlobalDefine 참조: 기획서에 GlobalDefine 키가 있는 TC의 재현스탭에 해당 키가 포함되어 있는지 확인
 [ ] V-13 시간/수량 세분화: 시간 표시, 수량 단위 등 표시 규칙이 있는 기능에서 단위별 TC 분리 여부
 [ ] V-14 Output Format 잔류: F열에 "Output Format:" 문자열이 남아 있으면 FAIL — 완성 문장으로 교체 필수
 [ ] V-15 1NF 위반: F열에 "~되고 ~되는지", "~표시되고 ~차단되는지" 등 복합 기대결과 패턴 0건 확인
-[ ] V-16 HIGH 리스크 비율: HIGH 태그 소분류의 부정+예외 비율이 60% 이상인지 개별 확인
+[ ] V-16 HIGH 리스크 비율: HIGH 태그 소분류의 부정+예외 비율이 60% 이상인지 개별 확인 (⚠SSoT 비율 60/49/30%: tc-설계 기준, 4파일 동기)
 [ ] V-17 추가 케이스 분산: tc_data.json 내 동일 소분류가 비연속 위치에 존재하면 FAIL
-[ ] V-18 기본기능 섹션 CRITICAL: G열=`PC` + I열=`N/A` + F열에 GlobalDefine 키 + 기획서 안내 문구 인용 — 4가지 모두 충족
+[ ] V-18 기본기능 섹션 CRITICAL: ①대분류(B열)=`기본기능` + ②G열=`PC` + ③I열=`N/A` + ④F열에 GlobalDefine 키 + ⑤기획서 안내 문구 큰따옴표 인용 — 5가지 모두 충족 (EVAL-16 5조건과 동일)
 [ ] V-19 J열 화이트리스트: 비고 값이 [`""`, `추후 구현`, `구현 우선순위 낮음`, `기획 확인 필요`, `버그ID-XXXX`] 5가지 외 0건. BVA·동시성·시간조작·세션·기획 변경 사항 등 메타정보 0건
-[ ] V-20 J열 값별 H/I 정합성: `추후 구현`→H/I 모두 N/A, `구현 우선순위 낮음`/`기획 확인 필요`→H/I 미진행
+[ ] V-20 J열 값별 H/I 정합성: 기대값=expectedHI(J, G열, 기본기능여부) 단일함수 — `추후 구현`→H/I 모두 N/A(플랫폼 무관) / 그 외→플랫폼 파생(PC 포함→H 미진행, 모바일 포함→I 미진행, 미포함 열은 N/A — V-09와 결합, L4-01)
 [ ] V-21 F열 "또는" 분기 검출: F열 grep `또는` → 사전조건/과정/결과 분기 0건. 분기 발견 시 분리하거나 J=`기획 확인 필요`
 [ ] V-22 F열 내부 설계 태그 잔류 0건: F열 정규식 `\((ST|DT|C|B)-\d+(\s*#\d+)*\)` / `\(§\d+-\d+\)` / `` `[A-Za-z_]+`\(미지정\) `` 매칭 0건. 발견 시 자연어로 풀어쓰기 + 미지정은 J=`기획 확인 필요`
 [ ] V-23 분류 계층 적합성: ①대분류 동사/기능 표현 0건 (카테고리·진입 컨텍스트만) ②소분류 동작 표현 0건 (현재 화면명만) ③F열에 진입 동작(`HUD에서`, `~ Tab을 클릭`, `~ 화면 진입 후 ~ 화면에서`) 중복 기재 0건 ④같은 소분류 내 셋업 불일치 0건
 
-Overall: PASS (23/23) → 완료 보고 진행
-         FAIL (N/23) → 해당 항목 수정 후 재검증
+Overall: 기계 판정 위반 0건 + V-11 PASS (llmFlags는 판정 없이 보고만 — 리뷰 위임) → 완료 보고 진행
+         위반 잔존 → 해당 행만 수정 후 기계 판정 재실행
 ```
 
-검증 결과는 완료 보고서의 "자가 검증" 항목에 포함.
+검증 결과는 완료 보고서의 "자가 검증" 항목에 기계 판정 JSON 인용으로 포함.
 
 ---
 
@@ -465,24 +518,12 @@ Overall: PASS (23/23) → 완료 보고 진행
 - 시트명: [탭명]
 - 구글 스프레드시트 URL: [링크]
 - 로컬 specs: `team/specs/[기능명]/sheet_info.txt` 저장 완료
-- TC 스냅샷: `team/specs/[기능명]/tc_snapshot.xlsx` 저장 완료
+- TC 스냅샷: `team/specs/[기능명]/tc_snapshot.json` / `tc_snapshot_full.json` 저장 완료 (create_gsheet --snapshot-dir)
 
 ### 자가 검증 (verification-loop)
-위 V-01~V-16 체크리스트 결과를 표로 기록 (항목 | 결과)
+- 기계 판정: `validate_tc_rows.js --full` 결과 JSON **그대로 인용** (stats / violations / llmFlags — 재서술 금지)
+- LLM-only 판정: V-11 1줄 + llmFlags 건수·rule만 인용 (판정 생략 — 리뷰 단계 위임)
 
 ### TC 통계
-- 총 TC 수: N개
-- 대분류: N개 / 중분류: N개
-
-### 검증단계별 분포
-| 검증단계 | TC 수 |
-| -------- | ----- |
-| 정상     | N개   |
-| 부정     | N개   |
-| 예외     | N개   |
-
-### 대분류별 TC 수
-| 대분류 | TC 수 |
-| ------ | ----- |
-| ...    | ...   |
+기계 판정 JSON의 `stats`(total/basic/qa/byStage/negRatio/subCount)를 그대로 인용 — 별도 재집계 금지
 ```

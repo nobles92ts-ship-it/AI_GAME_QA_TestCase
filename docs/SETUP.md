@@ -1,8 +1,8 @@
 # Setup Walkthrough
 
-End-to-end setup guide for a fresh machine. Follow in order.
+End-to-end setup for a fresh machine. Follow in order. Most of this is automated by one script — `setup.ps1` (Windows) or `setup.sh` (macOS/Linux).
 
-> **Assumption**: Claude Code is already installed. If not, see [PREREQUISITES.md](./PREREQUISITES.md) section 6.
+> **Assumption**: [Claude Code](https://claude.com/claude-code) is already installed. If not, install it first — see [PREREQUISITES.md](./PREREQUISITES.md#4-claude-code-cli).
 
 ---
 
@@ -15,107 +15,98 @@ cd AI_GAME_QA_TestCase
 
 ---
 
-## Step 2 — Run preflight
+## Step 2 — Place your Google OAuth credentials
+
+The pipeline reads/writes Google Sheets and uploads spec MDs to Google Drive, so it needs a Google OAuth desktop client:
+
+1. Go to https://console.cloud.google.com/apis/credentials
+2. Create an **OAuth 2.0 Client ID** → application type **Desktop app**
+3. Download the JSON and save it as **`credentials/client_secret.json`** (this folder is gitignored)
+4. In the same Google Cloud project, enable **Google Sheets API** and **Google Drive API**
+
+> No environment variables are required for this — the scripts default to `./credentials/client_secret.json`. To use a different location, see [Optional: `.env` overrides](#optional-env-overrides).
+
+---
+
+## Step 3 — Run the setup script
 
 **Windows (PowerShell):**
 ```powershell
-.\scripts\preflight\preflight.ps1
+.\setup.ps1
 ```
 
 **macOS / Linux / Git Bash:**
 ```bash
-bash ./scripts/preflight/preflight.sh
+bash ./setup.sh
 ```
 
-Preflight will:
-1. Check for Node.js, `gh` — offer to install missing ones
-2. Run `npm install`
-4. Check for `credentials/client_secret.json`
-5. Create `.env` from `.env.example` if missing
+The script automatically:
+1. Detects your **Node.js** and **Claude Code `cli.js`** paths
+2. Resolves all path placeholders (`{NODE_PATH}`, `{CLI_JS}`, `{PROJECT_ROOT}`, `{WORK_ROOT}`, `{CLAUDE_HOME}`, `{CLAUDE_AGENTS_DIR}`, `{CLAUDE_SKILLS_DIR}`) inside the agent / skill / script files
+3. Installs **agents** → `~/.claude/agents/` and **skills** → `~/.claude/skills/`
+4. Runs `npm install` (installs `googleapis` + `xlsx`)
+5. Creates an optional `.env` from `.env.example` (you can leave it untouched)
 
-On first run, preflight will **stop after creating `.env`** and open it in your editor. Fill in the real values then re-run preflight.
-
----
-
-## Step 3 — Fill in `.env`
-
-Edit `.env` and provide real values for:
-
-| Variable | What to put |
-|----------|-------------|
-| `WORK_ROOT` | Absolute path to a runtime data directory (e.g. `C:/Users/You/tc-work`). Can be the repo root itself. |
-| `CLAUDE_HOME` | Absolute path to your Claude Code user directory (`~/.claude`). |
-| `NODE_PATH` | `node` (if on PATH) or full path to `node.exe`. |
-| `CLI_JS` | Absolute path to `claude-code/cli.js`. Find it with `where claude` (Windows) or `which claude` (Unix) and walk up to `cli.js`. |
-| `GOOGLE_OAUTH_CLIENT_SECRET_PATH` | Leave as default (`./credentials/client_secret.json`) and place the file there. |
-| `MASTER_DASHBOARD_ID` | Google Sheets ID of your master dashboard (from the sheet URL). |
-| `INTEGRATION_TC_ID`, `GAME_QA_ID` | Other dashboard targets (optional — leave placeholder if unused). |
-| `CONFLUENCE_SITE` | Your Atlassian site, e.g. `https://acme.atlassian.net`. |
-| `CONFLUENCE_SITE_HOST` | Host only, e.g. `acme.atlassian.net`. |
+If Node.js or Claude Code can't be found, the script tells you exactly what to install and stops.
 
 ---
 
-## Step 4 — Place OAuth credentials
+## Step 4 — Register MCP servers
 
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Create OAuth 2.0 Client ID (Desktop app)
-3. Download JSON → save as `credentials/client_secret.json`
-4. Enable **Google Sheets API** and **Google Drive API** in your project
+The pipeline uses two MCP integrations inside Claude Code:
 
----
-
-## Step 5 — Re-run preflight
-
-```powershell
-.\scripts\preflight\preflight.ps1
-```
-
-This time preflight will proceed past the `.env` check and run `install.mjs`, which:
-- Substitutes `{{NODE_PATH}}`, `{{WORK_ROOT}}`, `{{CLAUDE_HOME}}`, etc. in all `.claude/**/*.md` files
-- Copies the `.claude/` subtree into your `CLAUDE_HOME` (agents, commands, skills, scripts)
-
----
-
-## Step 6 — Register MCP servers
-
-If you use a Google Sheets MCP server and an Atlassian MCP server, register them:
+| MCP | Purpose | How to set up |
+|-----|---------|---------------|
+| **google-sheets** | Read/write the TC sheet | Install any Google Sheets MCP server and add it to `~/.claude/.mcp.json` — see [`.mcp.json.example`](../.mcp.json.example) |
+| **Atlassian / Confluence** | Read spec pages | Easiest path is Claude Code's **built-in Atlassian connector** (no `.mcp.json` entry needed). A community `mcp-atlassian` server also works. |
 
 ```bash
-claude mcp add google-sheets <your-server-command>
+# Verify what Claude Code currently has registered:
 claude mcp list
 ```
 
+> Confluence is only needed if you feed the pipeline Confluence URLs. PDF / Word / Excel specs need **no** MCP server — Claude Code reads those files directly.
+
 ---
 
-## Step 7 — First-run OAuth authorization
+## Step 5 — First-run OAuth authorization
 
-Run the auth helper once to generate `oauth_token.json`:
+Run the auth helper once to generate `credentials/oauth_token.json`:
 
 ```bash
-node scripts/util/google_auth.js
+npm run auth
+# equivalent to: node scripts/util/google_auth.js
 ```
 
-A browser window opens. Log in to Google and authorize the app. The token is saved to `credentials/oauth_token.json` automatically.
+A browser window opens. Log in to Google and authorize the app. The token is cached automatically; you won't be prompted again unless it expires.
 
 ---
 
-## Step 8 — Run the pipeline
+## Step 6 — Run the pipeline
 
-Open Claude Code and run:
+Open Claude Code in the repo and either use the slash command or the natural-language trigger:
 
 ```
-/tc-v2 <spreadsheet-url> <spec-source-1> <spec-source-2> ...
+/tc-v2 <google-sheets-url> <spec-source-1> [<spec-source-2> ...]
+```
+or simply:
+```
+TC 팀 v2로 진행
+Spreadsheet: https://docs.google.com/spreadsheets/d/<ID>/edit
+Confluence: https://your-site.atlassian.net/wiki/spaces/PROJECT/pages/111
 ```
 
-**Spec sources can be any of**:
-- Confluence URL (`atlassian.net/wiki/...`)
-- PDF file path (`*.pdf`)
-- Word file path (`*.doc`, `*.docx`)
-- Excel file path (`*.xlsx`, `*.xls`)
+**A spec source can be any of**:
 
-You can mix multiple types in a single batch run.
+| Type | How it's read |
+|------|---------------|
+| Confluence URL (`atlassian.net/wiki/...`) | Atlassian MCP / built-in connector |
+| PDF (`*.pdf`) | Claude Code reads it natively |
+| Word (`*.doc`, `*.docx`) | Claude Code reads it natively |
+| Excel (`*.xlsx`, `*.xls`) | parsed by the `xlsx` Node module |
 
-Examples:
+You can mix multiple types in one batch run — each feature gets its own isolated run with independent checkpoint state.
+
 ```bash
 # Confluence
 /tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit https://your.atlassian.net/wiki/spaces/PROJECT/pages/111
@@ -123,10 +114,7 @@ Examples:
 # PDF
 /tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit C:/specs/my_feature.pdf
 
-# Word docx
-/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit /home/user/specs/feature.docx
-
-# Mixed batch
+# Mixed batch (quote paths that contain spaces)
 /tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit \
        https://your.atlassian.net/wiki/.../pages/111 \
        C:/specs/feature2.pdf \
@@ -134,11 +122,23 @@ Examples:
 ```
 
 **Notes**:
-- Paths with spaces must be quoted.
-- Prefer absolute paths — relative paths are resolved from Claude Code's working directory.
+- Prefer absolute paths — relative paths resolve from Claude Code's working directory.
 - If a file doesn't exist, the pipeline skips that item and logs a warning.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full pipeline flow.
+
+---
+
+## Optional: `.env` overrides
+
+The pipeline works without a `.env` file. It exists only to override defaults, and the keys are read straight from the **process environment** (there is no auto-`.env` loader by design), so export them in the shell that runs the pipeline if you need non-default values:
+
+| Variable | Default | When to set |
+|----------|---------|-------------|
+| `GOOGLE_OAUTH_PATH` | `./credentials/client_secret.json` | Credentials stored elsewhere |
+| `GOOGLE_TOKEN_PATH` | `./credentials/oauth_token.json` | Token cached elsewhere |
+| `SPREADSHEET_ID` | (passed as CLI arg) | A default sheet for `npm run dashboard` |
+| `SLACK_BOT_TOKEN` | (disabled) | Enable Slack QA notifications |
 
 ---
 
@@ -146,7 +146,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full pipeline flow.
 
 | Problem | Solution |
 |---------|----------|
-| `node: command not found` | Node.js not on PATH. Use full path in `NODE_PATH`. |
-| `client_secret.json not found` | Complete Step 4 above. |
-| `Placeholder {{...}} not substituted` | Re-run preflight after editing `.env`. |
-| `/tc-v2` not recognized in Claude Code | Confirm `.claude/commands/tc-v2.md` was copied to `$CLAUDE_HOME/commands/`. |
+| `node: command not found` | Install Node.js 20 LTS, then re-run the setup script. |
+| `client_secret.json not found` | Complete Step 2. |
+| Placeholder `{WORK_ROOT}` still visible in an installed file | Re-run `setup.ps1` / `setup.sh` — it resolves tokens in place. |
+| `/tc-v2` not recognized in Claude Code | Confirm `commands/tc-v2.md` was copied to `$CLAUDE_HOME/commands/` (re-run setup). |
+| Confluence page can't be read | Register the Atlassian connector (Step 4), or feed the spec as a PDF/Word/Excel file instead. |
