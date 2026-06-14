@@ -91,7 +91,7 @@ function renumberAndDedup(tcRows) {
     return tcRows;
 }
 
-// 결과 열 조건부 서식 (PC/모바일/콘솔 결과)
+// 결과 열 조건부 서식 (PC/모바일/콘솔 결과) — PASS #2173DB / FAIL #C00000 / BLOCK #000000 / N/A #EFEFEF (tc-생성·tc-수정 스킬 hex와 동일)
 function addResultCondFormat(sheetId, colIdx, totalDataRows) {
     const range = { sheetId, startRowIndex: 1, endRowIndex: totalDataRows + 1, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 };
     return [
@@ -102,7 +102,7 @@ function addResultCondFormat(sheetId, colIdx, totalDataRows) {
     ];
 }
 
-// 검증단계 조건부 서식
+// 검증단계 조건부 서식 — 정상 #D9EBD3 / 부정 #EACBCB / 예외 #FFF2CC (tc-생성·tc-수정 스킬 hex와 동일)
 function addVerifCondFormat(sheetId, totalDataRows) {
     const range = { sheetId, startRowIndex: 1, endRowIndex: totalDataRows + 1, startColumnIndex: 4, endColumnIndex: 5 };
     return [

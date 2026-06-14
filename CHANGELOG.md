@@ -4,6 +4,65 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.0] — 2026-06-14
+
+A pipeline-architecture + usability release. The review/fix stages were merged, the
+pipeline shrank from 7 to 6 steps, and the published repo was reworked so a fresh
+clone is fully self-configurable.
+
+### Added
+- **`tc-리뷰1수정1-v2` agent** — STEP 5 now performs the 1st-round structural review **and**
+  applies its fixes in a single context (Phase 2-B merge).
+- **`scripts/util/expander/`** — analysis→design expander infrastructure (Phase A).
+- **`appscript/bvt_slack.gs`** — BVT results → Slack push (dashboard M6 button).
+- **Design gates C-12 / C-13** — analysis→design expansion-rate gate, and Opus
+  re-analysis when an analysis gap is detected at STEP 2.
+- **Slash-command install** — `setup.ps1` / `setup.sh` now install `commands/*.md` to
+  `~/.claude/commands/`, so `/tc-v2` works after setup.
+
+### Changed
+- **Pipeline 7 → 6 steps.** STEP 5 = merged R1 review+fix (`tc-리뷰1수정1-v2`),
+  STEP 6 = merged R2 review+fix (`tc-리뷰2수정2-v2`). The old split agents
+  `qa-reviewer-v2` / `tc-fixer-v2` are retained for rollback but no longer called.
+- **`setup.ps1` / `setup.sh`** — resolve all 7 path placeholders
+  (`{NODE_PATH}`, `{CLI_JS}`, `{PROJECT_ROOT}`, `{WORK_ROOT}`, `{CLAUDE_HOME}`,
+  `{CLAUDE_AGENTS_DIR}`, `{CLAUDE_SKILLS_DIR}`) across agents, skills, scripts and
+  commands at clone time, so shipped `.sh`/`.js`/`.py` run without manual path edits.
+- **`package.json`** — version bumped to `2.3.0`; dependencies corrected to the
+  actually-used set (`googleapis`, `xlsx`); script paths fixed to `scripts/util/`.
+- **`.env.example`** — keys realigned to what the scripts actually read
+  (`GOOGLE_OAUTH_PATH`, `GOOGLE_TOKEN_PATH`, `SPREADSHEET_ID`, `SLACK_BOT_TOKEN`),
+  all optional with documented defaults.
+- **Docs rewritten** — `SETUP.md`, `PREREQUISITES.md`, `ARCHITECTURE.md` updated to the
+  real `setup.ps1`/`setup.sh` flow, the 6-step pipeline, and native PDF/Word reading.
+
+### Removed
+- **`pipeline_config.json.template`** — no script or agent ever read it (dead config trap).
+- **Gemma4 / Ollama remnants** — removed the `gemma4` MCP block from `.mcp.json.example`
+  and the Ollama/Google-AI sections from `.env.example` (v2 is Claude Code CLI-only).
+- **`docs/tc_pipeline_v2.html`** — orphaned visual showing the deprecated v1
+  (Gemma4, 7-step) architecture.
+- **`pdf-parse` / `pdfjs-dist` / `mammoth`** references — PDF and Word are read natively
+  by Claude Code; only `xlsx` (Excel) is an actual npm parser dependency.
+
+### Security
+- `scripts/util/confluence_image_downloader.py` — config path now read from
+  `CLAUDE_DESKTOP_CONFIG` env (falls back to the default user path) instead of a
+  hardcoded absolute path.
+
+---
+
+## [v2.2.9] — 2026-05-12
+
+### Changed
+- `update_dashboard.js` — dashboard clear range limited to `A:L` so manually-maintained
+  columns beyond L are preserved on refresh.
+
+### Added
+- Restored several pipeline utility scripts that were missing from the published tree.
+
+---
+
 ## [v2.2.8] — 2026-05-11
 
 ### Added
