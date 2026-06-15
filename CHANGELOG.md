@@ -4,6 +4,20 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.1] — 2026-06-15
+
+A patch release that adds a gentle post-completion notice for the **optional, manual** image-matching step.
+
+### Added
+- **FINAL-6 image-matching notice** — when all requested test cases are complete, the completion step now appends a one-line reminder that visual references can be added manually via `/tc-이미지매칭`. Image matching is **not** auto-run — it stays on-demand (avoids per-run cost, token, and attachment-token dependency); the notice only surfaces the option. In batch runs it appears once, after the last feature.
+
+### Changed
+- `완료처리` skill — documents FINAL-6 (notice only, no execution).
+- `run_pipeline.sh` — chain completion emits the FINAL-6 notice line.
+- `tc-팀-v2` agent — final report appends the image-matching notice line.
+
+---
+
 ## [v2.3.0] — 2026-06-14
 
 A pipeline-architecture + usability release. The review/fix stages were merged, the
