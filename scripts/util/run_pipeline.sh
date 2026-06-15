@@ -377,4 +377,6 @@ BACKUP=$(cat "$SPEC/backup_tab.txt" 2>/dev/null || true)
 "$NODE" -e "require('fs').rmSync(process.argv[1],{force:true})" "$LOCK"
 S=$(cat "$SPEC/.pipeline_start_epoch"); E=$(( $(date +%s) - S ))
 log "[CHAIN] 완주 — ${TOTAL_TC}행, 진행시간 $(printf '%02d:%02d:%02d' $((E/3600)) $((E%3600/60)) $((E%60)))"
+# FINAL-6 이미지 매칭 안내 (선택·수동 — 파이프라인 자동 미포함)
+log "[안내] 🖼 이미지 매칭(선택): 시각자료가 필요한 TC가 있으면 \"/tc-이미지매칭\"으로 수동 추가 가능 — 비-기본기능 TC의 10~20% 권장 (파이프라인엔 자동 미포함)"
 exit 0
