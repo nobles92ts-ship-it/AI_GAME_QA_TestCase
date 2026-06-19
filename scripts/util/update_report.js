@@ -26,7 +26,7 @@ const configArg = process.argv.includes('--config')
 const STATUS_FILE = path.join(__dirname, milestoneConfig?.statusFile || 'qa_status.json');
 const HTML_TEMPLATE = milestoneConfig?.htmlTemplate
   || path.join(__dirname, '..', '..', '..', 'QA_결과서', 'QA_테스트_결과서_20260317.html');
-const DEPLOY_DIR = milestoneConfig?.deployDir || 'C:/work/qa-report-deploy';
+const DEPLOY_DIR = milestoneConfig?.deployDir || '{WORK_ROOT}/../qa-report-deploy';
 const MILESTONE = milestoneConfig?.milestone || '';
 const VERCEL_SCOPE = milestoneConfig?.vercelScope || 'nobles92ts-7686s-projects';
 
@@ -274,7 +274,7 @@ html = html.replace(/QA Team[^<]*/, `QA Team &nbsp;|&nbsp; ${today}`);
 const outputName = `QA_테스트_결과서_${today.replace(/\./g, '')}.html`;
 const outputDir = milestoneConfig?.htmlTemplate
   ? path.dirname(milestoneConfig.htmlTemplate)
-  : 'C:/work/QA_결과서';
+  : '{WORK_ROOT}/../QA_결과서';
 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 const outputPath = path.join(outputDir, outputName);
 fs.writeFileSync(outputPath, html, 'utf-8');

@@ -18,6 +18,7 @@ set -uo pipefail
 NODE="{NODE_PATH}"
 UTIL="{WORK_ROOT}/scripts/util"
 SPECS="{WORK_ROOT}/team/specs"
+CONFIG="{WORK_ROOT}/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
 RUNAGENT="$UTIL/run-agent.sh"
 RETRY="$UTIL/pipeline_retry.sh"
 GUARD="$UTIL/silent_exit_guard.sh"
@@ -137,6 +138,34 @@ fi
 NEEDS_FIX=0; GAP=0
 if [[ $START -le 2 ]]; then
 do_transition design_reviewing 0 1
+# ── STEP 2-대조 (조건부·결정론) — bash가 DXR 뇌 대조를 강제 호출 (LLM 자율 의존 제거, 2026-06-19) ──
+# off/파일없음/뇌 미탑재 = 스킵(현행 동작 100% 동일). on = 전용 tc-대조-v2 에이전트 무조건 호출 + fail-safe(비차단).
+CROSSREF=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_brain==='on'?'on':'off')}catch(e){process.stdout.write('off')}" 2>/dev/null)
+[[ -z "$CROSSREF" ]] && CROSSREF=off
+"$NODE" -e "require('fs').rmSync('$SPEC/dxr_crossref.json',{force:true})" 2>/dev/null || true
+if [[ "$CROSSREF" == "on" ]]; then
+  log "[STEP 2-대조] DXR 뇌 대조 시작 (crossref_brain=on)"
+  XHANDOFF="## HANDOFF
+- 기능명: $FEAT
+- specs 경로: $SPEC
+- 분석 파일: $SPEC/analysis.md (입력 = C-1 미지정값 '필수' + B-2 외부 의존성)
+- 산출: $SPEC/dxr_crossref.json (tc-대조.md §2.1 스키마)
+
+## 작업 지시
+tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2의 뇌(DXR 위키 색인, ctx_search source=\"brain-corpus\")에 대조 → dxr_crossref.json 생성.
+4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep) + 스코프경계(로컬 데이터테이블 실제값은 가져오지 말고 locate=위치만).
+§1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."
+  RUNAGENT_DEBUG_FILE="$SPEC/crossref_debug.log" bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-대조-v2 "$XHANDOFF" >>"$CHAIN_LOG" 2>&1 \
+    || log "[STEP 2-대조][경고] 대조 에이전트 비정상 종료 — fail-safe 스킵(비차단)"
+  if [[ -f "$SPEC/dxr_crossref.json" ]]; then
+    XC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const lo=it.filter(x=>x.branch==='locate').length+it.filter(x=>x.branch==='apply'&&x.approved!==true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;const ke=it.filter(x=>x.branch==='keep').length;process.stdout.write('apply='+ap+' locate='+lo+' discover='+di+' keep='+ke)}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)
+    log "[STEP 2-대조] 완료 — $XC"
+  else
+    log "[STEP 2-대조] 산출 없음 — 뇌 미적중/미탑재로 간주(비차단, 현행 동작)"
+  fi
+else
+  log "[STEP 2-대조] 스킵 (crossref_brain=$CROSSREF)"
+fi
 # 전개기 완전성 게이트 (결정론 floor) — candidates.json 있을 때만, 비차단(advisory)
 GATE_LINE="- (전개기 게이트 미산출 — candidates.json 없음)"
 if [[ -f "$SPEC/candidates.json" ]]; then
@@ -153,6 +182,7 @@ HANDOFF="## HANDOFF
 - 설계 파일: $SPEC/tc_design.md
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 $GATE_LINE
+- DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 소비 — discover→C-05/C-12 커버리지 분모 포함, apply/locate→중복 재지적 금지. 없으면 현행대로. 규칙 SSoT=tc-설계검수.md 'DXR 대조 연동')
 - ⚠ C-05 분모 완전성 교차 시 tc-학습.md P-18·P-19·P-20으로 원문 대비 누락 확인."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
 RUNAGENT_DEBUG_FILE='$SPEC/step2_debug.log' bash '$RETRY' '$SPEC/step2_stderr.log' -- \
@@ -163,6 +193,11 @@ rc=$?
 [[ "$(check_step 2)" == "ok" ]] || { log "[STEP 2] 실패"; exit 1; }
 NEEDS_FIX=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8')).needs_fix===true?'1':'0')")
 GAP=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8')).analysis_gap||0)")
+# 대조 결정론 OR: apply(approved:true) 또는 discover ≥1 → needs_fix 강제 (검수 LLM 누락 방지). locate/keep은 트리거 아님.
+if [[ -f "$SPEC/dxr_crossref.json" ]]; then
+  XFIX=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;process.stdout.write((ap+di)>0?'1':'0')}catch(e){process.stdout.write('0')}" 2>/dev/null)
+  if [[ "$XFIX" == "1" && "$NEEDS_FIX" != "1" ]]; then NEEDS_FIX=1; log "[STEP 2-대조] apply(approved)/discover ≥1 → needs_fix=1 강제 (STEP3 반영)"; fi
+fi
 log "[STEP 2] 완료 — needs_fix=$NEEDS_FIX analysis_gap=$GAP"
 fi
 
@@ -182,10 +217,11 @@ run_step3() { # $1=모드 라벨 (review|blocker)
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 - specs 경로: $SPEC
 - 검수 보고서: $SPEC/design_review.md
+- DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 직접 소비) — apply(approved:true)→커버리지 매핑표에 확정 규칙+출처, discover→TC 후보 추가. approved:false·locate·keep은 기획확인 블록 유지(설계 변경 아님). 규칙 SSoT=tc-대조.md §3. 분석누락 아닌 설계보강이라 sonnet.
 - 직변환 차단 보고서: $SPEC/conversion_blocker.json (존재 시 최우선 — 차단 항목 외과 수정)
 
 ## 작업 지시
-design_review.md 이슈(존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.
+design_review.md 이슈(존재 시) + DXR 대조 결과(apply/discover, 존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.
 수정 후 직변환 사전 게이트(tc-설계.md Step 11.5) 재실행 — exit 0 필수 (배분표 3자 동치 재계산).
 드라이브 재업로드."
   bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
@@ -347,7 +383,7 @@ const {loadSnapshot}=require('$UTIL/load_snapshot.js');
 const rows=loadSnapshot('$SPEC/_final_dump.json').rows;
 let B='';const body=rows.map(r=>{if(r[1])B=r[1];return{B,E:r[4],F:r[5]||'',G:r[6],J:(r[9]||'').trim(),raw:r};});
 const bad=[];
-const abs=body.filter(r=>/올바르게|정상적으로|적절히|제대로|문제없이/.test(r.F)).length; if(abs)bad.push('추상'+abs);
+const abs=body.filter(r=>/올바르게|(?<!비)정상적으로|적절히|제대로|문제없이/.test(r.F)).length; if(abs)bad.push('추상'+abs);
 const err=body.filter(r=>r.raw.some(v=>typeof v==='string'&&(v.includes('#ERROR!')||v.includes('Output Format:')))).length; if(err)bad.push('ERROR'+err);
 const g=body.filter(r=>!['PC','모바일','PC/모바일'].includes(r.G)).length; if(g)bad.push('G'+g);
 const jW=['','추후 구현','구현 우선순위 낮음','기획 확인 필요'];
@@ -377,6 +413,6 @@ BACKUP=$(cat "$SPEC/backup_tab.txt" 2>/dev/null || true)
 "$NODE" -e "require('fs').rmSync(process.argv[1],{force:true})" "$LOCK"
 S=$(cat "$SPEC/.pipeline_start_epoch"); E=$(( $(date +%s) - S ))
 log "[CHAIN] 완주 — ${TOTAL_TC}행, 진행시간 $(printf '%02d:%02d:%02d' $((E/3600)) $((E%3600/60)) $((E%60)))"
-# FINAL-6 이미지 매칭 안내 (선택·수동 — 파이프라인 자동 미포함)
+# FINAL-6 이미지 매칭 안내 (선택·수동 — 파이프라인 자동 미포함, 2026-06-15)
 log "[안내] 🖼 이미지 매칭(선택): 시각자료가 필요한 TC가 있으면 \"/tc-이미지매칭\"으로 수동 추가 가능 — 비-기본기능 TC의 10~20% 권장 (파이프라인엔 자동 미포함)"
 exit 0

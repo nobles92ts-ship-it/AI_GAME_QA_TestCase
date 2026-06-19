@@ -17,6 +17,7 @@ oauth_token.json
 # 런타임 산출물
 team/specs/
 team/state.json
+team/tc_config.json
 team/status/
 team/timing.csv
 team/lessons/

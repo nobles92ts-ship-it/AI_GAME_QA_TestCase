@@ -1,0 +1,4 @@
+{
+  "crossref_brain": "off",
+  "_comment": "DXR 대조(crossref) 토글. off=대조 스킵(기본값·DXR 뇌 없는 환경 안전, 현행 동작 100% 동일). on=DXR 기획서를 색인한 '뇌'(context-mode source=brain-corpus) 보유 시에만. 이 파일을 tc_config.json 으로 복사해 사용. tc_config.json 은 머신-로컬 설정이라 .gitignore 대상."
+}
