@@ -182,6 +182,7 @@ AI_GAME_QA_TestCase/
 │   ├── tc-팀-v2.md                # Orchestrator — state.json + worker spawning
 │   ├── tc-designer-v2.md          # STEP 1 (Opus) + STEP 3 design fix
 │   ├── tc-설계검수-v2.md          # STEP 2 — design quality gate (C-01~C-13)
+│   ├── tc-대조-v2.md              # STEP 2 — optional DXR cross-reference (off by default)
 │   ├── tc-writer-v2.md            # STEP 4 — TC authoring (Sonnet)
 │   ├── tc-리뷰1수정1-v2.md        # STEP 5 — merged R1 review + fix
 │   ├── tc-리뷰2수정2-v2.md        # STEP 6 — merged R2 review + fix
@@ -192,7 +193,7 @@ AI_GAME_QA_TestCase/
 │   └── tc-v2.md                   # /tc-v2 slash command (entry point)
 │
 ├── skills/                        # Per-stage SSoT skill files
-│   ├── tc-분석/  tc-설계/  tc-생성/  tc-리뷰/  tc-수정/  tc-갱신/  tc-설계검수/
+│   ├── tc-분석/  tc-설계/  tc-생성/  tc-리뷰/  tc-수정/  tc-갱신/  tc-설계검수/  tc-대조/
 │   ├── tc-학습/  tc-모니터/       # Pattern learning + run monitoring
 │   ├── haiku/                     # Sonnet writer/fixer skill definitions (STEP 4, 5)
 │   └── 완료처리/  tc-대시보드/    # Pipeline-tail skills

@@ -29,6 +29,7 @@ RETRY      = $UTIL/pipeline_retry.sh
 GUARD      = $UTIL/silent_exit_guard.sh   # step_result.json 미갱신 감지 시 backoff(30/60/120초) 최대 3회 자동 재호출
 TRANSITION = $UTIL/transition.sh          # STEP 전환 매크로 (Phase2-C) — rc 0=완료/1=기록실패(중단)/2=attempts한도(후속 CLI 금지)
 STABILITY_DOC = {CLAUDE_HOME}/tc-team-v2/docs/stability.md
+CONFIG     = {WORK_ROOT}/team/tc_config.json   # DXR 대조 토글 {"crossref_brain":"off"|"on"} — on이면 STEP 2 검수 前에 전용 tc-대조-v2 에이전트를 결정론 호출(체인=run_pipeline.sh, 수동=팀장 ⓐ블록). off=현행 동작
 ```
 
 > 팀원 CLI 호출은 항상 `bash $UTIL/run-agent.sh` 경유 — `--agent`를 `--system-prompt`로 변환하는 래퍼 (CLI 2.1.121 버그 우회용. 2.1.170 현재 버그 잔존 여부 미검증 — 우회 유지, 부작용 없음).
@@ -232,7 +233,7 @@ bash "{WORK_ROOT}/scripts/util/run_pipeline.sh" \
 PREFLIGHT_LOG="/tmp/.tcv2_preflight.log"
 claude -p --model haiku --permission-mode bypassPermissions "ping" >"$PREFLIGHT_LOG" 2>&1
 if grep -qE "Invalid API key|invalid_grant|401|authentication_error|Please run /login|UNAUTHENTICATED" "$PREFLIGHT_LOG"; then
-  echo "[PREFLIGHT][CRITICAL] CLI 인증 만료 — /login 실행 후 재시도 필요" >&2
+  echo "[PREFLIGHT][CRITICAL] CLI 인증 만료 — /login-Nobles92 또는 /login-Dexar_Studio 실행 후 재시도 필요" >&2
   cat "$PREFLIGHT_LOG" >&2
   exit 10
 fi
@@ -439,8 +440,22 @@ Confluence MCP 재호출 금지.
 → transition(`--prev-step 1 --state design_reviewing --review-round 0`) → STEP 2
 
 #### STEP 2 — 설계 검수 (항상)
+
+> 🔌 **DXR 대조 (2026-06-19 결정론화)**: STEP 2 검수 **前에 별도 `tc-대조-v2` 에이전트를 먼저 호출**한다. (검수 에이전트가 self-gate로 실행하던 방식 폐기 — 검수원이 자기 핵심 업무에 집중하며 대조를 자율 스킵 → **미발화하던 버그 픽스, v4·v5 실측**.) `crossref_brain=on`이면 ⓐ 대조→`dxr_crossref.json` 생성 후 ⓑ 검수가 소비. off/뇌 미탑재면 ⓐ SKIP(현행 동작 100% 동일). 규칙 SSoT=tc-설계검수.md "DXR 대조 연동".
 ```bash
-# Bash 툴 호출 시 timeout: 600000 (10분) 필수
+# ⓐ DXR 대조 (조건부·결정론) — crossref_brain=on일 때만, fail-safe(비차단)
+CROSSREF=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_brain==='on'?'on':'off')}catch(e){process.stdout.write('off')}")
+"$NODE" -e "require('fs').rmSync('$SPECS/[기능명]/dxr_crossref.json',{force:true})" 2>/dev/null || true
+if [ "$CROSSREF" = "on" ]; then
+  bash "{WORK_ROOT}/scripts/util/run-agent.sh" $CLI_BASE --model sonnet --agent tc-대조-v2 "
+## HANDOFF
+- 기능명: [기능명]
+- specs 경로: $SPECS/[기능명]
+- 분석 파일: $SPECS/[기능명]/analysis.md (C-1 미지정·B-2)
+- 산출: $SPECS/[기능명]/dxr_crossref.json (tc-대조.md §2.1)
+" || echo "[대조][경고] 비정상 종료 — fail-safe 스킵(비차단)"
+fi
+# ⓑ 설계 검수 (dxr_crossref.json 있으면 소비) — Bash 툴 호출 시 timeout: 600000 (10분) 필수
 bash "$GUARD" "$SPECS/[기능명]/step_result.json" -- \
   bash "$RETRY" "$SPECS/[기능명]/step2_stderr.log" -- \
   bash "{WORK_ROOT}/scripts/util/run-agent.sh" $CLI_BASE --model sonnet --agent tc-설계검수-v2 "
@@ -450,9 +465,10 @@ bash "$GUARD" "$SPECS/[기능명]/step_result.json" -- \
 - 분석 파일: $SPECS/[기능명]/analysis.md
 - 설계 파일: $SPECS/[기능명]/tc_design.md
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
+- DXR 대조 결과: $SPECS/[기능명]/dxr_crossref.json (있으면 소비 — discover→C-05/C-12 분모, apply/locate→중복 재지적 금지)
 "
 ```
-→ step_result.json을 Read해 `needs_fix` 판단 → transition(`--prev-step 2` + true면 `--state design_fixing`, false면 `--state writing`) → STEP 3 또는 STEP 4
+→ step_result.json을 Read해 `needs_fix` 판단. **⚠ dxr_crossref.json 있으면 apply(`approved:true`)/discover ≥1건도 needs_fix=true로 OR**(검수 LLM 누락 대비). → transition(`--prev-step 2` + true면 `--state design_fixing`, false면 `--state writing`) → STEP 3 또는 STEP 4
 
 #### STEP 3 — 설계 수정 (조건부, 최대 1회)
 
@@ -480,6 +496,7 @@ bash "$GUARD" "$SPECS/[기능명]/step_result.json" -- \
 - 기획서 원문 파일: $SPECS/[기능명]/confluence_raw.md
 - specs 경로: $SPECS/[기능명]
 - 검수 보고서: $SPECS/[기능명]/design_review.md
+- DXR 대조 결과: $SPECS/[기능명]/dxr_crossref.json (있으면 직접 소비) — apply(approved:true)→커버리지 매핑표에 확정 규칙+출처, discover→TC 후보 추가. approved:false·locate·keep은 기획확인 블록 유지. 분석누락 아닌 설계보강이라 sonnet. 규칙 SSoT=tc-대조.md §3.
 - 직변환 차단 보고서: $SPECS/[기능명]/conversion_blocker.json (존재 시에만 — 차단 leaf 복합문 분해·배분표 단계수/합계 정정·미인식 구문 수정을 최우선 반영)
 
 ## 작업 지시

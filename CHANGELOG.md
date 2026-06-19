@@ -4,6 +4,22 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.2] — 2026-06-19
+
+A patch release adding an **optional, off-by-default** DXR design cross-reference stage, plus a quality-gate fix.
+
+### Added
+- **DXR cross-reference (대조) — optional plugin, off by default.** A new `tc-대조-v2` agent runs just before the STEP 2 review, **deterministically invoked by the pipeline runner** (not left to LLM discretion) when `crossref_brain=on`. It cross-checks unresolved / under-specified design items against an indexed design-wiki "brain" (context-mode `brain-corpus`) and classifies each as **apply / locate / discover / keep**; `discover` and approved `apply` findings deterministically trigger the STEP 3 design-fix. Fully **fail-safe**: with no brain — the default for cloners (`crossref_brain=off`) — the stage is skipped and behavior is identical to v2.3.1. Brain corpus data is never published; only the toggle + skill rules ship.
+- `team/tc_config.json.example` — documents the `crossref_brain` off/on toggle (the runtime `tc_config.json` is git-ignored, machine-local).
+
+### Fixed
+- **FINAL-4 integrity gate false positive** — the abstract-phrasing regex matched `정상적으로` ("normally", a vague qualifier) as a substring of `비정상적으로` ("abnormally", a concrete negative-test term), wrongly stopping clean runs. Added a negative-lookbehind so concrete negative-test wording no longer trips the gate.
+
+### Changed
+- `tc-설계검수`, `tc-분석`, `tc-설계` skills — DXR cross-reference consumption contract + boss combat decal/AoE design rules.
+
+---
+
 ## [v2.3.1] — 2026-06-15
 
 A patch release that adds a gentle post-completion notice for the **optional, manual** image-matching step.
