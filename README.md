@@ -18,6 +18,25 @@
 
 ---
 
+## ⚡ 딸깍 설치 (한 줄) — 당신의 Claude로, 무료로
+
+> **이 도구는 "당신의" Claude Code 로그인(구독)으로 "당신 PC에서" 실행됩니다.**
+> 추가 요금 0원 — 평소 Claude 쓰던 **구독 사용량만 약간 소모**됩니다. 로그인 토큰은 **이 PC를 절대 벗어나지 않습니다.**
+
+PowerShell을 열고 아래 한 줄을 붙여넣으세요:
+
+```powershell
+irm https://raw.githubusercontent.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/main/install.ps1 | iex
+```
+
+- **권장 플랜: `Max (5x / 20x)`** — TC 한 세트 생성은 사용량이 꽤 들어 `Pro`는 사용 한도에 빨리 닿을 수 있습니다. (Pro도 동작은 합니다.)
+- **요구사항**: Windows · [Node.js LTS](https://nodejs.org) · Claude Code 로그인(`claude` → `/login`). 설치기가 Claude Code는 없으면 자동 설치합니다.
+- **결과를 구글 시트로 받으려면** 최초 1회 구글 연결이 필요합니다 → [docs/PREREQUISITES.md](docs/PREREQUISITES.md).
+
+설치 후: 터미널에서 `claude` 실행 → **스프레드시트 링크 + 기획서 링크**를 함께 주면 TC 팀 v2가 자동으로 테스트케이스를 생성합니다.
+
+---
+
 ## ⚡ TL;DR
 
 - **6-stage multi-agent pipeline** — Claude Opus for analysis/design, Sonnet for all other stages
