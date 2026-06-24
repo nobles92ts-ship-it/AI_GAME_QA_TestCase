@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # run_pipeline.sh — tc-v2 체인 러너 (2026-06-12, 용어 개정판: STEP 1~6 + 완료처리)
 #
 # 목적: STEP 사이 LLM(팀장) 턴 경유를 제거 — 시작 시퀀스→STEP 1~6→완료처리를 단일 프로세스로
@@ -15,26 +15,29 @@
 
 set -uo pipefail
 
-NODE="{NODE_PATH}"
-UTIL="{WORK_ROOT}/scripts/util"
-SPECS="{WORK_ROOT}/team/specs"
-CONFIG="{WORK_ROOT}/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
+NODE="C:/Program Files/nodejs/node.exe"
+UTIL="C:/work/_qa/clone/scripts/util"
+SPECS="C:/work/_qa/clone/team/specs"
+CONFIG="C:/work/_qa/clone/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
 RUNAGENT="$UTIL/run-agent.sh"
 RETRY="$UTIL/pipeline_retry.sh"
 GUARD="$UTIL/silent_exit_guard.sh"
 CLI_BASE='-p --permission-mode bypassPermissions'
 
-FEAT="" ; SHEET_ID="" ; CONF_URL="" ; RESUME=""
+FEAT="" ; SHEET_ID="" ; CONF_URL="" ; RESUME="" ; LOCAL=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --feature)  FEAT="$2"; shift 2 ;;
     --sheet-id) SHEET_ID="$2"; shift 2 ;;
     --conf-url) CONF_URL="$2"; shift 2 ;;
     --resume-from) RESUME="$2"; shift 2 ;;
+    --local)    LOCAL=1; shift ;;   # 로컬 .xlsx 출력 모드 (Google Sheets 미사용): STEP 4까지만, 5/6·완료처리 스킵
     *) echo "알 수 없는 인자: $1" >&2; exit 1 ;;
   esac
 done
-[[ -n "$FEAT" && -n "$SHEET_ID" ]] || { echo "사용법: --feature <명> --sheet-id <ID> [--conf-url <URL>] [--resume-from step3-blocker|step4|step5|step6|final]" >&2; exit 1; }
+# 로컬 모드: 시트 ID 없이도 동작 (create_gsheet argv 자리만 채움 — 로컬 분기에서 무시됨)
+[[ "$LOCAL" == "1" && -z "$SHEET_ID" ]] && SHEET_ID="LOCAL_XLSX"
+[[ -n "$FEAT" && -n "$SHEET_ID" ]] || { echo "사용법: --feature <명> --sheet-id <ID> [--conf-url <URL>] [--resume-from step3-blocker|step4|step5|step6|final] [--local]" >&2; exit 1; }
 
 # 정지 예외 후 구간 재개 (--resume-from): 시작 시퀀스·앞 STEP 스킵, 산출물은 specs 기존 파일 사용
 START=0
@@ -89,7 +92,7 @@ if [[ $START -eq 0 ]]; then log "[CHAIN] 시작 — $FEAT (체인 모드)"; else
 
 if [[ $START -eq 0 ]]; then
 FEATURE_NAME="$FEAT" "$NODE" -e "
-const fs=require('fs');const f='{WORK_ROOT}/team/state.json';
+const fs=require('fs');const f='C:/work/_qa/clone/team/state.json';
 const d=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):{specs:[]};
 const feat=process.env.FEATURE_NAME;
 const allDone=!d.specs.length||d.specs.every(s=>s.state==='done');
@@ -240,10 +243,13 @@ if [[ $START -eq 3 ]]; then GAP=0; run_step3 blocker; PREV_FOR_4=3; fi
 if [[ $START -eq 4 && -f "$SPEC/step3_result.json" ]]; then PREV_FOR_4=3; fi
 
 # ── STEP 4 작성 (silent exit 자동 재진입 P1-2b + blocker→STEP 3 루프) ─────────
+# 로컬 모드: 작성기의 create_gsheet 호출이 시트 대신 .xlsx 를 쓰도록 출력 경로 전달
+[[ "$LOCAL" == "1" ]] && export TC_LOCAL_XLSX="$SPEC/${FEAT}.xlsx"
 if [[ $START -le 4 ]]; then
 while true; do
   do_transition writing 0 "$PREV_FOR_4" "$SPEC/step4_attempts.txt" 3
-  # S2 백업 (기존 탭 존재 시)
+  # S2 백업 (기존 탭 존재 시) — 로컬 모드는 시트가 없으므로 스킵
+  if [[ "$LOCAL" != "1" ]]; then
   TS=$(date +%Y%m%d_%H%M%S)
   if "$NODE" "$UTIL/duplicate_tab.js" "$SHEET_ID" "$TAB" "${TAB}_backup_${TS}" >>"$CHAIN_LOG" 2>&1; then
     echo "${TAB}_backup_${TS}" > "$SPEC/backup_tab.txt"
@@ -252,6 +258,7 @@ while true; do
     fi
   else
     brc=$?; [[ $brc -eq 10 ]] && stop_auth "S2 백업"
+  fi
   fi
   log "[STEP 4] 작성 시작 (attempts=$(cat "$SPEC/step4_attempts.txt" 2>/dev/null))"
   HANDOFF="## HANDOFF
@@ -272,7 +279,7 @@ convert/merge exit 4 = blocker 저장 → LLM 패치 금지, step_result fail �
   rc=$?
   [[ $rc -eq 10 ]] && stop_auth "STEP 4"
   ST=$(check_step 4)
-  if [[ "$ST" == "ok" && -f "$SPEC/tc_snapshot.json" ]]; then
+  if [[ "$ST" == "ok" && -f "$SPEC/tc_snapshot.json" ]] || [[ "$LOCAL" == "1" && "$ST" == "ok" && -f "$TC_LOCAL_XLSX" ]]; then
     log "[STEP 4] 완료"; break
   fi
   if [[ -f "$SPEC/conversion_blocker.json" ]]; then
@@ -281,7 +288,7 @@ convert/merge exit 4 = blocker 저장 → LLM 패치 금지, step_result fail �
   fi
   if [[ "$ST" == "silent" && ! -f "$SPEC/tc_snapshot.json" ]]; then
     # P1-2b 4조건: step≠4 ✓ / blocker 없음 ✓ / snapshot 없음 ✓ / 시트 부작용 검사
-    if "$NODE" "$UTIL/duplicate_tab.js" "$SHEET_ID" "$TAB" "__p12b_probe__" >>"$CHAIN_LOG" 2>&1; then
+    if [[ "$LOCAL" != "1" ]] && "$NODE" "$UTIL/duplicate_tab.js" "$SHEET_ID" "$TAB" "__p12b_probe__" >>"$CHAIN_LOG" 2>&1; then
       "$NODE" "$UTIL/duplicate_tab.js" "$SHEET_ID" "__p12b_probe__" --delete >>"$CHAIN_LOG" 2>&1 || true
       stop_integrity "STEP 4 silent exit인데 탭 존재 (부분 업로드 의심)"
     fi
@@ -291,6 +298,13 @@ convert/merge exit 4 = blocker 저장 → LLM 패치 금지, step_result fail �
   fi
   log "[STEP 4] 실패 (status=$ST)"; exit 1
 done
+fi
+
+# 로컬 모드: STEP 4(작성)까지만 — 시트 기반 리뷰(STEP 5/6)·완료처리는 스킵, .xlsx 경로 보고 후 종료
+if [[ "$LOCAL" == "1" ]]; then
+  log "[로컬] 완료 — 엑셀 파일: $TC_LOCAL_XLSX"
+  echo "$TC_LOCAL_XLSX"
+  exit 0
 fi
 
 # ── STEP 5 리뷰1+수정1 ───────────────────────────────────────────────────────
