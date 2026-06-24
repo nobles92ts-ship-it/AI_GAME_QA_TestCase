@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # run_pipeline.sh — tc-v2 체인 러너 (2026-06-12, 용어 개정판: STEP 1~6 + 완료처리)
 #
 # 목적: STEP 사이 LLM(팀장) 턴 경유를 제거 — 시작 시퀀스→STEP 1~6→완료처리를 단일 프로세스로
@@ -15,10 +15,10 @@
 
 set -uo pipefail
 
-NODE="C:/Program Files/nodejs/node.exe"
-UTIL="C:/work/_qa/clone/scripts/util"
-SPECS="C:/work/_qa/clone/team/specs"
-CONFIG="C:/work/_qa/clone/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
+NODE="{NODE_PATH}"
+UTIL="{WORK_ROOT}/scripts/util"
+SPECS="{WORK_ROOT}/team/specs"
+CONFIG="{WORK_ROOT}/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
 RUNAGENT="$UTIL/run-agent.sh"
 RETRY="$UTIL/pipeline_retry.sh"
 GUARD="$UTIL/silent_exit_guard.sh"
@@ -92,7 +92,7 @@ if [[ $START -eq 0 ]]; then log "[CHAIN] 시작 — $FEAT (체인 모드)"; else
 
 if [[ $START -eq 0 ]]; then
 FEATURE_NAME="$FEAT" "$NODE" -e "
-const fs=require('fs');const f='C:/work/_qa/clone/team/state.json';
+const fs=require('fs');const f='{WORK_ROOT}/team/state.json';
 const d=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):{specs:[]};
 const feat=process.env.FEATURE_NAME;
 const allDone=!d.specs.length||d.specs.every(s=>s.state==='done');
