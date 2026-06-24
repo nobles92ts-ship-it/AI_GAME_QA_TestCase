@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Game QA Testcase - Setup Script (Windows PowerShell)
 # =============================================================================
 # 사용법: PowerShell에서 이 스크립트가 있는 폴더로 이동 후
@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force -Path $AgentsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
 
 # 2. Node.js 경로 감지
-$NodePath = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+$NodePath = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $NodePath) {
     Write-Host "[ERROR] Node.js를 찾을 수 없습니다. https://nodejs.org 에서 설치 후 다시 실행해주세요." -ForegroundColor Red
     exit 1
@@ -31,7 +31,7 @@ if (-not $NodePath) {
 Write-Host "[OK] Node.js: $NodePath"
 
 # 3. Claude Code cli.js 경로 감지 (npm global root 기반)
-$NpmRoot = (npm root -g 2>$null)?.Trim()
+$NpmRoot = "$(npm root -g 2>$null)".Trim()
 $CliPath = if ($NpmRoot) { "$NpmRoot/@anthropic-ai/claude-code/cli.js" } else { "" }
 if (-not $CliPath -or -not (Test-Path $CliPath)) {
     Write-Host "[WARN] Claude Code cli.js를 찾을 수 없습니다. 설치 후 {CLI_JS}를 직접 수정해주세요." -ForegroundColor Yellow
@@ -105,12 +105,18 @@ if ($scriptDirs) {
 Write-Host "[OK] 스크립트 토큰 치환 완료"
 
 # 7. npm 의존성 설치
+#    npm은 deprecation/funding 경고를 stderr로 출력한다. $ErrorActionPreference='Stop'
+#    상태의 Windows PowerShell 5.1은 네이티브 stderr를 치명 오류로 처리해 설치를 중단시킨다.
+#    → npm 호출 구간만 'Continue'로 완화하고, 실제 실패는 종료코드로만 판단한다.
 Write-Host ""
 Write-Host "[STEP 4] npm 패키지 설치..."
 Push-Location $RepoDir
-npm install
+$eapOld = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+npm install --no-fund --no-audit 2>&1 | ForEach-Object { Write-Host $_ }
+$npmRc = $LASTEXITCODE
+$ErrorActionPreference = $eapOld
 Pop-Location
-Write-Host "[OK] 패키지 설치 완료"
+if ($npmRc -ne 0) { Write-Host "[WARN] npm 경고/오류 (rc=$npmRc) — 무시하고 계속" -ForegroundColor Yellow } else { Write-Host "[OK] 패키지 설치 완료" }
 
 # 8. .env 생성 (선택 — 기본값만으로도 동작)
 Write-Host ""
