@@ -9,7 +9,7 @@
 </a>
 
 > **Multi-agent, multi-model game-QA test-case automation pipeline.**
-> Drop in a spec (Confluence / PDF / Word / Excel) — get back a fully reviewed **~100-TC Google Sheet** — fully automated, zero manual click-through.
+> Drop in a spec (Confluence / PDF / Word / Excel) — get back a fully reviewed **~100-TC test sheet** as a local **Excel (`.xlsx`)** file (no Google needed) — or a Google Sheet if you want one. Fully automated, zero manual click-through.
 
 [![Landing](https://img.shields.io/badge/Landing-tc--team--v2--landing.vercel.app-10B981?style=flat)](https://tc-team-v2-landing.vercel.app/)
 [![Docs — Architecture](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue?style=flat)](docs/ARCHITECTURE.md)
@@ -31,9 +31,11 @@ irm https://raw.githubusercontent.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/mai
 
 - **권장 플랜: `Max (5x / 20x)`** — TC 한 세트 생성은 사용량이 꽤 들어 `Pro`는 사용 한도에 빨리 닿을 수 있습니다. (Pro도 동작은 합니다.)
 - **요구사항**: Windows · [Node.js LTS](https://nodejs.org) · Claude Code 로그인(`claude` → `/login`). 설치기가 Claude Code는 없으면 자동 설치합니다.
-- **결과를 구글 시트로 받으려면** 최초 1회 구글 연결이 필요합니다 → [docs/PREREQUISITES.md](docs/PREREQUISITES.md).
+- **결과는 로컬 엑셀(`.xlsx`)로 바로 나옵니다 — 구글 설정 불필요.** 구글 시트로 받고 싶을 때만 최초 1회 구글 연결 → [docs/PREREQUISITES.md](docs/PREREQUISITES.md).
 
-설치 후: 터미널에서 `claude` 실행 → **스프레드시트 링크 + 기획서 링크**를 함께 주면 TC 팀 v2가 자동으로 테스트케이스를 생성합니다.
+설치 후: 터미널에서 `claude` 실행 →
+- **가장 쉬운 방법 (구글 불필요)**: `/tc-로컬 <기능명> <기획서파일>` → 테스트케이스가 **엑셀(`.xlsx`)** 파일로 자동 생성됩니다.
+- **(선택) 구글 시트**: **스프레드시트 링크 + 기획서 링크**를 함께 주면 TC 팀 v2가 시트에 생성합니다.
 
 ---
 
@@ -135,9 +137,15 @@ The setup script:
 - Runs `npm install` (`googleapis` + `xlsx`)
 - Creates an optional `.env` (the pipeline also runs without it)
 
-Then place your Google OAuth desktop-client JSON at `credentials/client_secret.json` and run `npm run auth` once. Full details: [docs/SETUP.md](docs/SETUP.md).
+**For Google Sheets output (optional)**, place your Google OAuth desktop-client JSON at `credentials/client_secret.json` and run `npm run auth` once — the local `.xlsx` flow needs none of this. Full details: [docs/SETUP.md](docs/SETUP.md).
 
-Then in Claude Code:
+Then in Claude Code — **local Excel output (no Google needed):**
+
+```
+/tc-로컬 <feature-name> <spec-file>
+```
+
+…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (one-time Google connection required):
 
 ```
 /tc-v2 <google-sheets-url> <spec-source> [<spec-source-2> ...]
@@ -188,7 +196,7 @@ Two MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.mcp
 | Agent runtime | Claude Code CLI (Opus + Sonnet, selected via `--model` aliases) |
 | Orchestration | Bash + Node.js (CLI process spawning, state persistence, Bash↔MCP bridging) |
 | Input parsers | `xlsx` (Excel) · Claude Code native file read (PDF, Word) · MCP (Confluence) |
-| Output | Google Sheets API via `googleapis` |
+| Output | Local **Excel (`.xlsx`)** via `xlsx` (default, no Google) · Google Sheets API via `googleapis` (optional) |
 | MCP integrations | `google-sheets` (third-party), `claude_ai_Atlassian` |
 
 ---
@@ -253,7 +261,7 @@ AI_GAME_QA_TestCase/
 ## 🔮 Roadmap
 
 ### ✅ Phase 1 — Multi-source TC automation & auto-completion (shipped)
-- Confluence / PDF / Word / Excel → Google Sheets generation
+- Confluence / PDF / Word / Excel → local Excel (`.xlsx`) by default, or Google Sheets (optional)
 - 6-stage multi-agent pipeline (Claude Opus for STEP 1, Sonnet for STEP 2–6, via CLI)
 - Merged review + fix pass for faster quality cycles
 - Auto-completion tail: dashboard / K·L panel / Drive sync
