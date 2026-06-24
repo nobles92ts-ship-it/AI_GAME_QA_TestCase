@@ -1,4 +1,4 @@
-/**
+﻿/**
  * create_gsheet_tc_from_json.js
  * JSON 파일을 읽어 마스터 스프레드시트에 새 탭으로 TC를 생성하는 스크립트
  *
@@ -62,6 +62,16 @@ async function createTcTab() {
     }
     if (pre.violations.length) {
         console.log(`  ⚠ Pre-Write 경고 ${pre.violations.length}건 (비차단):\n` + formatViolations(pre.violations));
+    }
+
+    // ─── 로컬 모드: Google Sheets 대신 .xlsx 파일로 출력 (OAuth/구글 설정 불필요) ───
+    //   TC_LOCAL_XLSX 환경변수에 출력 경로가 있으면, 시트 업로드 대신 로컬 엑셀로 저장하고 종료한다.
+    //   Pre-Write 검증(위)은 그대로 통과한 뒤이므로 행 품질은 동일하게 보장된다.
+    if (process.env.TC_LOCAL_XLSX) {
+        const { writeXlsx } = require('./create_xlsx_tc_from_json');
+        const outPath = writeXlsx(TAB_NAME, process.env.TC_LOCAL_XLSX, tcData);
+        console.log(`[로컬] Google Sheets 미사용 — 엑셀 파일 생성: ${outPath} (${tcData.length}개 TC)`);
+        return;
     }
 
     const auth = await getAuthClient();
