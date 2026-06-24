@@ -10,6 +10,13 @@
 $ErrorActionPreference = 'Stop'
 try { chcp 65001 > $null; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
+# Windows 전용 — 맥/리눅스의 PowerShell Core 등에서 잘못 실행되면 명확히 안내하고 중단
+# ($env:OS 는 Windows에서만 'Windows_NT'; $IsWindows 는 PS5.1에 없으므로 $env:OS 로 판별)
+if ($env:OS -ne 'Windows_NT') {
+  Write-Host "이 설치 도구는 Windows 전용입니다 (winget/msiexec 사용). Windows PC에서 실행해 주세요." -ForegroundColor Red
+  exit 1
+}
+
 $Owner  = 'nobles92ts-ship-it'
 $Repo   = 'AI_GAME_QA_TestCase'
 $Branch = 'main'
@@ -77,8 +84,8 @@ Write-Host " 설치 위치: $Dest"
 Write-Host "============================================================"
 
 Write-Host ""; Write-Host "[0] 필수 도구 확인 / 자동 설치"
-if (-not (Ensure-Node))   { return }
-if (-not (Ensure-Claude)) { return }
+if (-not (Ensure-Node))   { exit 1 }
+if (-not (Ensure-Claude)) { exit 1 }
 
 Write-Host ""; Write-Host "[1] 도구 내려받기"
 if (Have git) {
@@ -102,7 +109,7 @@ if (Have git) {
 }
 
 $setup = Join-Path $Dest 'setup.ps1'
-if (-not (Test-Path $setup)) { Write-Host "  [X] setup.ps1 없음 — 배포본 손상" -ForegroundColor Red; return }
+if (-not (Test-Path $setup)) { Write-Host "  [X] setup.ps1 없음 — 배포본 손상" -ForegroundColor Red; exit 1 }
 Write-Host ""; Write-Host "[2] setup.ps1 실행 (에이전트·스킬 → ~/.claude)"
 Push-Location $Dest
 try { & $setup } finally { Pop-Location }
@@ -111,9 +118,10 @@ Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host " 설치 완료! 다음 순서로 사용하세요:" -ForegroundColor Green
 Write-Host "   1) 터미널에서  claude  실행 → /login (본인 Pro/Max 계정)" -ForegroundColor Green
-Write-Host "   2) (최초 1회) docs/PREREQUISITES.md 의 구글 시트 연결 설정" -ForegroundColor Green
-Write-Host "   3) Claude Code에 '스프레드시트 링크 + 기획서 링크'를 함께 주면" -ForegroundColor Green
-Write-Host "      TC 팀 v2가 자동으로 테스트케이스를 생성합니다." -ForegroundColor Green
+Write-Host "   2) 가장 쉬운 사용법 (구글 설정 불필요):" -ForegroundColor Green
+Write-Host "        claude 에  /tc-로컬 <기능명> <기획서파일>  → 엑셀(.xlsx) 자동 생성" -ForegroundColor Green
+Write-Host "   3) (선택) 구글 시트로 받으려면 docs/PREREQUISITES.md 의 구글 연결 설정 후" -ForegroundColor Green
+Write-Host "        '스프레드시트 링크 + 기획서 링크'를 주면 TC 팀 v2가 시트에 생성합니다." -ForegroundColor Green
 Write-Host " 비용: 0원 (본인 Claude 구독 사용량만 · 토큰은 이 PC에만)" -ForegroundColor Green
 Write-Host " 폴더: $Dest" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
