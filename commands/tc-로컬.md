@@ -11,7 +11,7 @@
 
 예시:
 ```
-/tc-로컬 소환배너 C:\Users\me\Downloads\소환배너_기획.md
+/tc-로컬 소환배너 %USERPROFILE%\Downloads\소환배너_기획.md
 ```
 
 ## 실행 절차

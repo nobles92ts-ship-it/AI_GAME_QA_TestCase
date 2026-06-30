@@ -29,8 +29,9 @@ const TOKEN_PATH   = path.join(__dirname, '../credentials/appscript_token.json')
 const SCRIPT_ID_PATH = path.join(__dirname, '../credentials/appscript_script_id.json');
 // ⚠ Apps Script content PUT은 전체 교체 — 프로젝트의 모든 .gs 파일을 여기에 포함할 것
 const GS_FILES = [
-    { name: 'tab_manager', path: path.join(__dirname, '../../appscript/tab_manager.gs') },
-    { name: 'bvt_slack',   path: path.join(__dirname, '../../appscript/bvt_slack.gs') },
+    { name: 'tab_manager',      path: path.join(__dirname, '../../appscript/tab_manager.gs') },
+    { name: 'bvt_slack',        path: path.join(__dirname, '../../appscript/bvt_slack.gs') },
+    { name: 'dashboard_builder', path: path.join(__dirname, '../../appscript/dashboard_builder.gs') },
 ];
 const SLACK_CONFIG_PATH = path.join(__dirname, 'slack_config.json'); // __SLACK_TOKEN__ 치환용
 
@@ -151,7 +152,12 @@ async function uploadCode(auth, scriptId) {
                     type: 'JSON',
                     source: JSON.stringify({
                         timeZone: 'Asia/Seoul',
-                        dependencies: {},
+                        dependencies: {
+                            // dashboard_builder.gs가 사용하는 Advanced Sheets Service
+                            enabledAdvancedServices: [
+                                { userSymbol: 'Sheets', serviceId: 'sheets', version: 'v4' }
+                            ]
+                        },
                         exceptionLogging: 'STACKDRIVER',
                         runtimeVersion: 'V8',
                         oauthScopes: [
