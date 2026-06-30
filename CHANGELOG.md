@@ -4,6 +4,25 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.3] — 2026-06-30
+
+A usability + quality release. Headline: a **local `.xlsx` output path** so a fresh clone can generate test cases with **no Google/OAuth/Confluence setup**, a **one-click Windows installer**, an **automatic dashboard rebuild** in Apps Script, and **TC-quality learnings** from production runs.
+
+### Added
+- **Local `.xlsx` output mode (`--local`) + `/tc-로컬`.** Generate test cases as a local Excel file instead of a Google Sheet — no OAuth/Sheets/Confluence required. `run_pipeline.sh --local` (and the new `run_local_xlsx.sh` / `/tc-로컬` command) route through the new `create_xlsx_tc_from_json.js` writer when `TC_LOCAL_XLSX` is set; the same Pre-Write row-quality validation runs first, so row quality matches the Sheets path. Local mode runs through STEP 4 (writing) only — Sheet-based reviews (STEP 5/6) and completion are skipped — and reports the `.xlsx` path. README now documents local `.xlsx` as the default, Google Sheets as optional.
+- **One-click Windows installer (`install.ps1`).** `$0` onboarding on a personal subscription: auto-installs Node.js (winget → MSI LTS fallback) with in-session PATH refresh, with a Windows OS guard and `exit 1` on failure.
+- **Automatic dashboard rebuild (Apps Script).** After tab cleanup, `tab_manager.gs` calls `rebuildDashboard()` from the new `dashboard_builder.gs` (hidden tabs excluded; failure is non-fatal — colors/order preserved). `deploy_appscript.js` adds `dashboard_builder.gs` to the deploy set and enables the Advanced Sheets Service it needs.
+
+### Changed
+- **TC-quality learnings (2026-06-29).** `tc-리뷰`/`tc-생성`/`tc-설계` skills: detect meaningless duplicate TCs that clone a normal case into negative/exception with **no change in expected result** (EVAL-07); for decal-less basic/non-target attacks (always-hit), **do not** create avoid/negative cases (avoidance cannot occur).
+- `validate_tc_rows.js` — adds `유저상태` and `권한` to the recognized tree tags.
+- `tc-학습-관찰` log — records a missed `status_ailment` clear-transition case (2026-06-19).
+
+### Fixed
+- **Setup robustness** — Windows PowerShell 5.1 compatibility fixes (3 clean-PC install blockers); restored `run_pipeline.sh` placeholders after a prior push had shipped a setup-substituted copy (real paths) that broke install.
+
+---
+
 ## [v2.3.2] — 2026-06-19
 
 A patch release adding an **optional, off-by-default** DXR design cross-reference stage, plus a quality-gate fix.
