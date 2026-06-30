@@ -30,8 +30,9 @@ function onM3Edit(e) {
   try {
     const stats = colorAndSortTabs(ss);
     const now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'MM/dd HH:mm');
+    const dash = stats.dashboardRebuilt ? ' / 대시보드🧹' : ' / 대시보드❌';
     sheet.getRange(STATUS_CELL).setValue(
-      '✅ ' + now + ' (' + stats.total + '탭, 색상' + stats.colorChanged + '/이동' + stats.moved + ')'
+      '✅ ' + now + ' (' + stats.total + '탭, 색상' + stats.colorChanged + '/이동' + stats.moved + dash + ')'
     );
   } catch (err) {
     sheet.getRange(STATUS_CELL).setValue('❌ 오류: ' + err.message);
@@ -51,8 +52,9 @@ function dailyColorAndSort() {
     const stats = colorAndSortTabs(ss);
     const now = Utilities.formatDate(new Date(), 'Asia/Seoul', 'MM/dd HH:mm');
     if (sheet) {
+      const dash = stats.dashboardRebuilt ? ' / 대시보드🧹' : ' / 대시보드❌';
       sheet.getRange(STATUS_CELL).setValue(
-        '🕘 자동 ' + now + ' (' + stats.total + '탭, 색상' + stats.colorChanged + '/이동' + stats.moved + ')'
+        '🕘 자동 ' + now + ' (' + stats.total + '탭, 색상' + stats.colorChanged + '/이동' + stats.moved + dash + ')'
       );
       SpreadsheetApp.flush();
     }
@@ -82,6 +84,9 @@ function colorAndSortTabs(ss) {
   for (const sheet of allSheets) {
     const name = sheet.getName();
     if (FIXED_TABS_ORDER.includes(name)) continue;
+    // 숨김 탭은 색상/정렬/이동 대상에서 제외 → 숨김 유지.
+    // (setActiveSheet/moveActiveSheet가 숨김 시트를 활성화하면 숨김이 풀려 대시보드 필터를 통과해버림)
+    if (sheet.isSheetHidden()) continue;
 
     const colorKey = getTabColor(sheet);
     const targetColor = colorKey === 'DEFAULT' ? null : COLORS[colorKey];
@@ -131,7 +136,18 @@ function colorAndSortTabs(ss) {
     }
   }
 
-  return { total: desiredOrder.length, colorChanged: colorChanged, moved: moved };
+  // ─ 대시보드 재구성 (현재 노출 탭만 / 정렬된 순서 반영)
+  //   dashboard_builder.gs의 rebuildDashboard 호출. 실패해도 색상/정렬은 유지.
+  SpreadsheetApp.flush();
+  let dashboardRebuilt = false;
+  try {
+    rebuildDashboard(ss);
+    dashboardRebuilt = true;
+  } catch (e) {
+    console.error('대시보드 재구성 실패: ' + e.message);
+  }
+
+  return { total: desiredOrder.length, colorChanged: colorChanged, moved: moved, dashboardRebuilt: dashboardRebuilt };
 }
 
 // ─── 탭 색상 판정 ───────────────────────────────────────────────────────────
