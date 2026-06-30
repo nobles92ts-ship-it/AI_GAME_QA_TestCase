@@ -3,6 +3,9 @@
  * - TC 시트 자동 감지 후 레이아웃 구성
  * - MAX_TC_PER_BLOCK 초과 시 다음 블록을 아래에 생성
  * - 새 TC 시트 추가 시에만 이 스크립트 재실행
+ *
+ * ⚠ SSoT 동기화: appscript/dashboard_builder.gs (M3 버튼이 호출하는 Apps Script 포팅판)와
+ *   레이아웃/수식/서식 로직 동일하게 유지할 것. 한쪽 수정 시 다른 쪽도 반영.
  */
 const { getAuthClient } = require('./google_auth');
 const { google } = require('googleapis');

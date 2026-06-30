@@ -734,7 +734,7 @@ if (require.main === module) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // F5 — 소분류/leaf 태그 화이트리스트 (리스크·플랫폼·J: 외 허용 어휘)
-const TREE_EXTRA_TAGS = new Set(['데이터', '동시성', '세션', 'UI', '이미지 참조 필요', '연계']);
+const TREE_EXTRA_TAGS = new Set(['데이터', '동시성', '세션', 'UI', '이미지 참조 필요', '연계', '유저상태', '권한']);
 const TREE_RISK = new Set(['HIGH', 'MEDIUM', 'LOW']);
 // F4 — 복합문 leaf 검출 ('하고 있/되고 있' 진행형은 단일 검증이라 제외)
 const COMPOUND_LEAF_RE = /(하고(?!\s*있)|하며|되고(?!\s*있)|되며)\s/;
