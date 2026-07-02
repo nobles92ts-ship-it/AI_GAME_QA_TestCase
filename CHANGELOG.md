@@ -4,6 +4,18 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.5] — 2026-07-02
+
+### Added
+- **`/tc-이미지매칭` now ships.** The image-matching command was referenced by docs and by the post-completion FINAL-6 notice, but the command/skill files were never published — users who followed the notice hit an unknown command. `commands/tc-이미지매칭.md` + `skills/tc-이미지매칭/SKILL.md` are now included (sanitized: site domain/space key derived from the spec URL). Requires the Google Sheets output path + Atlassian MCP; embeds preview links in column K, never touches column J.
+
+### Fixed
+- **`setup.ps1` no longer BOM-corrupts shebang scripts** (#3). Token substitution rewrote files with .NET's BOM-emitting `[Encoding]::UTF8`, breaking `#!`-first scripts (`load_snapshot.js` → completion FINAL-4 `SyntaxError` exit 1; `review_precheck.js` → STEP 5/6 machine pre-pass always fell back to LLM). Writes now use BOM-less UTF-8; re-running the one-liner heals already-corrupted installs (fetch+reset restores clean files, setup re-substitutes without BOM).
+- **One-liner re-run now actually updates.** `install.ps1` used `git pull --ff-only`, which always conflicts once `setup.ps1` has token-substituted tracked files — updates silently failed on top of the old version. Now `git fetch + reset --hard origin/main` (substitutions are re-applied by the setup re-run; untracked `credentials/`, `.env`, `slack_config.json` are preserved), with a loud failure path.
+- Command description now matches actual behavior (links go to column **K**, not the J remark column); PREREQUISITES correctly attributes the Python dependency to STEP 1 image download, not `/tc-이미지매칭`.
+
+---
+
 ## [v2.3.4] — 2026-07-02
 
 A fresh-install integrity patch. A five-perspective install-chain audit (README → `install.ps1` → `setup.ps1` → docs) with adversarial verification confirmed 20 issues; this release fixes the ones that break a guide-following fresh install.
