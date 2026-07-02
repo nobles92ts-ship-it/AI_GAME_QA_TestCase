@@ -217,7 +217,9 @@ AI_GAME_QA_TestCase/
 │   └── qa-reviewer-v2.md / tc-fixer-v2.md   # legacy split R1 agents — rollback only
 │
 ├── commands/
-│   └── tc-v2.md                   # /tc-v2 slash command (entry point)
+│   ├── tc-v2.md                   # /tc-v2 slash command (entry point)
+│   ├── tc-로컬.md                 # /tc-로컬 — local .xlsx output (no Google)
+│   └── tc-이미지매칭.md           # /tc-이미지매칭 — optional spec-image link matching
 │
 ├── skills/                        # Per-stage SSoT skill files
 │   ├── tc-분석/  tc-설계/  tc-생성/  tc-리뷰/  tc-수정/  tc-갱신/  tc-설계검수/  tc-대조/

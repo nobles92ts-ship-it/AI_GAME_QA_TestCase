@@ -53,9 +53,9 @@ On first authorization (`npm run auth`), a browser window opens to authorize the
 
 > The scripts default to `./credentials/client_secret.json` and `./credentials/oauth_token.json`, so **no environment variable is required** if you use those paths.
 
-### Python 3.10+ (only for the Confluence image-matching helper)
+### Python 3.10+ (only for Confluence image download during spec analysis)
 
-**Why**: `scripts/util/confluence_image_downloader.py` (used by the `/tc-이미지매칭` feature) needs Python. It uses the **standard library only** — there is no `pip install` step and no `requirements.txt`.
+**Why**: `scripts/util/confluence_image_downloader.py` — used by STEP 1 spec analysis to download Confluence-embedded images — needs Python. It uses the **standard library only** — there is no `pip install` step and no `requirements.txt`. (The optional `/tc-이미지매칭` command itself uses MCP calls, not Python.)
 
 **Install**: Windows `winget install Python.Python.3.11` · macOS `brew install python@3.11` · Linux `apt-get install python3`
 
