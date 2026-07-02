@@ -14,11 +14,10 @@ const path = require('path');
 // specs 폴더 위치 (스크립트 위치 기준)
 const SPECS_DIR = path.resolve(__dirname, '../../team/specs');
 
-// 토큰 로그 위치 (Claude Code 세션 로그)
+// 토큰 로그 위치 (Claude Code 세션 로그) — 본인 환경의 프로젝트 로그 디렉터리로 교체
+// (~/.claude/projects/ 아래에 작업 디렉터리 경로가 인코딩된 폴더가 생성됨)
 const TOKEN_LOG_DIRS = [
-  '{CLAUDE_HOME}/projects/c--Users-Admin-Downloads',
-  '{CLAUDE_HOME}/projects/C--Users-Admin-Downloads-AI-AntiGravity',
-  '{CLAUDE_HOME}/projects/C--Users-Admin-Downloads-AI-AntiGravity-scripts-util',
+  '{CLAUDE_HOME}/projects/<YOUR-PROJECT-LOG-DIR>',
 ];
 const TOKEN_RECENT_DAYS = 30; // 최근 N일 토큰만 집계
 

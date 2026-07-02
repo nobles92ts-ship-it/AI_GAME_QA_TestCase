@@ -9,8 +9,8 @@ const open = require('child_process').exec;
 const fs = require('fs');
 const path = require('path');
 
-const OAUTH_PATH = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../credentials/client_secret.json');
-const TOKEN_PATH = process.env.GOOGLE_TOKEN_PATH || path.join(__dirname, '../credentials/oauth_token.json');
+const OAUTH_PATH = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../../credentials/client_secret.json');
+const TOKEN_PATH = process.env.GOOGLE_TOKEN_PATH || path.join(__dirname, '../../credentials/oauth_token.json');
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 
 async function getAuthClient() {

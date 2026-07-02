@@ -35,7 +35,7 @@ user-invocable: false
 ## 1.2 핵심 파일 경로
 
 - MD 업로드 스크립트: `{WORK_ROOT}/scripts/util/upload_md_to_drive.js`
-- 구글 드라이브 기획서 폴더 ID: `1YxK2WVH6nr-e0_2qjDb4DSxXgAffsA2q`
+- 구글 드라이브 기획서 폴더 ID: 환경변수 `DRIVE_FOLDER_ID` (미설정 시 업로드 단계 생략 — 선택 기능)
 - MD 파일 저장 위치: `{WORK_ROOT}/`
 - **로컬 specs 저장 위치**: `{WORK_ROOT}/team/specs/[기능명]/`
 - Node.js 경로: `{NODE_PATH}`

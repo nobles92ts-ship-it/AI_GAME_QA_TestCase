@@ -15,7 +15,11 @@ const { getAuthClient } = require('./google_auth');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT_FOLDER_ID = '1YxK2WVH6nr-e0_2qjDb4DSxXgAffsA2q';
+const ROOT_FOLDER_ID = process.env.DRIVE_FOLDER_ID || 'YOUR_DRIVE_FOLDER_ID';
+if (ROOT_FOLDER_ID === 'YOUR_DRIVE_FOLDER_ID') {
+    console.error('드라이브 업로드 미설정 — 환경변수 DRIVE_FOLDER_ID 에 대상 구글 드라이브 폴더 ID를 지정하세요. (업로드는 선택 기능 — 미설정 시 이 단계만 실패하고 파이프라인은 계속됩니다)');
+    process.exit(1);
+}
 const SPECS_BASE = path.resolve(__dirname, '../../team/specs');
 
 async function getOrCreateSubfolder(drive, parentId, folderName) {

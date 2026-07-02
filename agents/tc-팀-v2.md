@@ -28,7 +28,7 @@ CLI_BASE   = -p --permission-mode bypassPermissions   # 모델은 STEP별로 --m
 RETRY      = $UTIL/pipeline_retry.sh
 GUARD      = $UTIL/silent_exit_guard.sh   # step_result.json 미갱신 감지 시 backoff(30/60/120초) 최대 3회 자동 재호출
 TRANSITION = $UTIL/transition.sh          # STEP 전환 매크로 (Phase2-C) — rc 0=완료/1=기록실패(중단)/2=attempts한도(후속 CLI 금지)
-STABILITY_DOC = {CLAUDE_HOME}/tc-team-v2/docs/stability.md
+STABILITY_DOC = {PROJECT_ROOT}/docs/stability.md
 CONFIG     = {WORK_ROOT}/team/tc_config.json   # DXR 대조 토글 {"crossref_brain":"off"|"on"} — on이면 STEP 2 검수 前에 전용 tc-대조-v2 에이전트를 결정론 호출(체인=run_pipeline.sh, 수동=팀장 ⓐ블록). off=현행 동작
 ```
 
@@ -233,7 +233,7 @@ bash "{WORK_ROOT}/scripts/util/run_pipeline.sh" \
 PREFLIGHT_LOG="/tmp/.tcv2_preflight.log"
 claude -p --model haiku --permission-mode bypassPermissions "ping" >"$PREFLIGHT_LOG" 2>&1
 if grep -qE "Invalid API key|invalid_grant|401|authentication_error|Please run /login|UNAUTHENTICATED" "$PREFLIGHT_LOG"; then
-  echo "[PREFLIGHT][CRITICAL] CLI 인증 만료 — /login-Nobles92 또는 /login-Dexar_Studio 실행 후 재시도 필요" >&2
+  echo "[PREFLIGHT][CRITICAL] CLI 인증 만료 — 터미널에서 claude 실행 후 /login 으로 재로그인하고 재시도 필요" >&2
   cat "$PREFLIGHT_LOG" >&2
   exit 10
 fi
@@ -697,7 +697,7 @@ for each url in confluence_urls:
 
 STEP 6 완료 후 **완료처리 스킬** 실행.
 
-> SSoT: `~/.claude/tc-team-v2/skills/완료처리/완료처리.md`
+> SSoT: `{CLAUDE_SKILLS_DIR}/완료처리/완료처리.md`
 
 **실행 절차**:
 0. transition(`--prev-step 6 --state done --review-round 2`) — step6_result.json 복제 + done 마킹 (전환 배선표)
@@ -775,7 +775,7 @@ STEP 6 완료 후 **완료처리 스킬** 실행.
 
 ## 모니터 출력
 
-> **SSoT**: `~/.claude/tc-team-v2/skills/tc-모니터/tc-모니터.md`
+> **SSoT**: `{CLAUDE_SKILLS_DIR}/tc-모니터/tc-모니터.md`
 
 **규칙**:
 - 팀장은 **STEP 전환마다** 위 파일을 Read → 포맷에 맞춰 모니터 블록 렌더 → 화면 + `monitor.log` 출력 (tee 방식)

@@ -16,8 +16,8 @@ model: sonnet
 작업 시작 전 반드시 아래 파일을 읽고 모든 규칙을 따른다:
 
 ```
-{CLAUDE_HOME}\tc-team-v2\skills\tc-리뷰\tc-리뷰.md       ← 리뷰 규칙 단일 소스
-{CLAUDE_HOME}\tc-team-v2\skills\tc-학습\tc-학습.md       ← 활성 패턴 읽기 (관찰/이력은 매번 읽지 않음). 신규 1회 발견 → tc-학습-관찰.md append / 2회+ 재발 → 활성 승격
+{CLAUDE_SKILLS_DIR}\tc-리뷰\tc-리뷰.md       ← 리뷰 규칙 단일 소스
+{CLAUDE_SKILLS_DIR}\tc-학습\tc-학습.md       ← 활성 패턴 읽기 (관찰/이력은 매번 읽지 않음). 신규 1회 발견 → tc-학습-관찰.md append / 2회+ 재발 → 활성 승격
 ```
 
 > 이 에이전트는 얇은 포인터다. 모든 리뷰 규칙(1차 구조 리뷰 역할, EVAL 01~19, Pass Gate)은 위 스킬 파일이 단일 소스(Single Source of Truth)다.
