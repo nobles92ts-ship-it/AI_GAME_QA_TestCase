@@ -4,6 +4,17 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.6] — 2026-07-02
+
+### Fixed
+- **Confluence image download actually works now** (`confluence_image_downloader.py`, STEP 1 image analysis — limitations noted in #3):
+  - Image URLs in MCP-converted markdown often omit the `/wiki` context path, so **every** download 404'd. Failed downloads now retry by resolving the filename against the page's **attachment list (REST)** — this also fixes URL-encoded (Korean) filenames.
+  - `blob:` / scheme-less references are resolved through the same attachment map (`--page-id` optional — auto-detected from page/attachment URLs in the markdown).
+  - **Auth without Claude Desktop**: `CONFLUENCE_URL` + `CONFLUENCE_USERNAME` + `CONFLUENCE_API_TOKEN` env vars are checked first, then `claude_desktop_config.json`; when neither is set, the error message explains both options.
+  - Field validation: a real spec page whose 16 images all 404'd before now downloads **16/16** under their real filenames, via both auth paths.
+
+---
+
 ## [v2.3.5] — 2026-07-02
 
 ### Added
