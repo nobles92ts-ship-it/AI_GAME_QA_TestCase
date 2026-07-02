@@ -57,6 +57,8 @@ On first authorization (`npm run auth`), a browser window opens to authorize the
 
 **Why**: `scripts/util/confluence_image_downloader.py` — used by STEP 1 spec analysis to download Confluence-embedded images — needs Python. It uses the **standard library only** — there is no `pip install` step and no `requirements.txt`. (The optional `/tc-이미지매칭` command itself uses MCP calls, not Python.)
 
+**Auth**: the downloader reads Confluence credentials from the `CONFLUENCE_URL` / `CONFLUENCE_USERNAME` / `CONFLUENCE_API_TOKEN` environment variables, falling back to Claude Desktop's `claude_desktop_config.json` (`mcpServers.mcp-atlassian.env`). Either works — no Claude Desktop required.
+
 **Install**: Windows `winget install Python.Python.3.11` · macOS `brew install python@3.11` · Linux `apt-get install python3`
 
 The core pipeline does **not** require Python.
