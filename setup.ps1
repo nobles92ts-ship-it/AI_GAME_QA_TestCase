@@ -58,12 +58,16 @@ function Resolve-Tokens([string]$c) {
         -replace '\{CLAUDE_SKILLS_DIR\}',  $SkillsFwd
 }
 
+# BOM 없는 UTF-8 — .NET의 [Encoding]::UTF8 은 BOM(EF BB BF)을 방출해
+# 셔뱅(#!)으로 시작하는 스크립트를 깨뜨림 (load_snapshot.js 등 — issue #3)
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 # 4. 에이전트 설치 (토큰 치환 -> ~/.claude/agents)
 Write-Host ""
 Write-Host "[STEP 1] 에이전트 파일 설치..."
 Get-ChildItem "$RepoDir\agents\*.md" | ForEach-Object {
     $content = Resolve-Tokens (Get-Content $_.FullName -Raw -Encoding UTF8)
-    [System.IO.File]::WriteAllText("$AgentsDir\$($_.Name)", $content, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText("$AgentsDir\$($_.Name)", $content, $Utf8NoBom)
     Write-Host "  -> $($_.Name)"
 }
 Write-Host "[OK] 에이전트 설치 완료"
@@ -76,7 +80,7 @@ New-Item -ItemType Directory -Force -Path $CommandsDir | Out-Null
 if (Test-Path "$RepoDir\commands") {
     Get-ChildItem "$RepoDir\commands\*.md" | ForEach-Object {
         $content = Resolve-Tokens (Get-Content $_.FullName -Raw -Encoding UTF8)
-        [System.IO.File]::WriteAllText("$CommandsDir\$($_.Name)", $content, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText("$CommandsDir\$($_.Name)", $content, $Utf8NoBom)
         Write-Host "  -> $($_.Name)"
     }
 }
@@ -87,7 +91,7 @@ Write-Host ""
 Write-Host "[STEP 2] 스킬 파일 설치..."
 Get-ChildItem "$RepoDir\skills" -Recurse -File -Include *.md,*.js,*.py,*.sh | ForEach-Object {
     $content = Resolve-Tokens (Get-Content $_.FullName -Raw -Encoding UTF8)
-    [System.IO.File]::WriteAllText($_.FullName, $content, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($_.FullName, $content, $Utf8NoBom)
 }
 Copy-Item "$RepoDir\skills\*" -Destination $SkillsDir -Recurse -Force
 Write-Host "[OK] 스킬 설치 완료"
@@ -99,7 +103,7 @@ $scriptDirs = @("$RepoDir\scripts", "$RepoDir\commands", "$RepoDir\team") | Wher
 if ($scriptDirs) {
     Get-ChildItem $scriptDirs -Recurse -File -Include *.js,*.sh,*.py,*.md | ForEach-Object {
         $content = Resolve-Tokens (Get-Content $_.FullName -Raw -Encoding UTF8)
-        [System.IO.File]::WriteAllText($_.FullName, $content, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText($_.FullName, $content, $Utf8NoBom)
     }
 }
 Write-Host "[OK] 스크립트 토큰 치환 완료"
