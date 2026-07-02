@@ -90,7 +90,12 @@ if (-not (Ensure-Claude)) { exit 1 }
 Write-Host ""; Write-Host "[1] 도구 내려받기"
 if (Have git) {
   if (Test-Path (Join-Path $Dest '.git')) {
-    Write-Host "    업데이트 (git pull)..."; git -C $Dest pull --ff-only
+    # setup.ps1이 추적 파일을 in-place 치환하므로 pull은 항상 충돌 — fetch+reset으로 강제 동기화.
+    # (치환은 아래 setup.ps1 재실행이 다시 수행. credentials/.env/slack_config.json 등 미추적 파일은 보존됨)
+    Write-Host "    업데이트 (git fetch + reset)..."
+    git -C $Dest fetch origin $Branch
+    git -C $Dest reset --hard "origin/$Branch"
+    if ($LASTEXITCODE -ne 0) { Write-Host "  [X] 업데이트 실패 — 폴더($Dest)를 삭제 후 이 명령을 다시 실행하면 새로 받습니다." -ForegroundColor Red; exit 1 }
   } else {
     Write-Host "    git clone..."; if (Test-Path $Dest) { Remove-Item $Dest -Recurse -Force }
     git clone --depth 1 "$Url.git" $Dest
