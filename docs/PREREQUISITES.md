@@ -1,6 +1,8 @@
 # Prerequisites
 
-The TC Team v2 pipeline coordinates Claude Code, Node.js, Google APIs, and (optionally) Confluence. This document lists every dependency, why it's needed, and how to install it.
+The TC Team v2 pipeline coordinates Claude Code, Node.js, and (optionally) Google APIs and Confluence. This document lists every dependency, why it's needed, and how to install it.
+
+> **Default output is a local Excel (`.xlsx`) file** via `/tc-로컬` — no Google account or OAuth setup needed. The Google section below is **only for the optional Google Sheets output path**.
 
 Assume the target machine has **only Claude Code** installed. The setup script (`setup.ps1` on Windows, `setup.sh` on macOS/Linux) automates the rest — agent/skill installation, path resolution, and `npm install`.
 
@@ -23,23 +25,7 @@ The setup script auto-detects the `node` path. npm dependencies (`googleapis`, `
 
 ---
 
-### 2. Google OAuth credentials
-
-**Why**: The pipeline reads from and writes to Google Sheets for test-case tracking, and uploads MD spec files to Google Drive.
-
-**Obtain**:
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Create an OAuth 2.0 Client ID (application type: **Desktop app**)
-3. Download the JSON and save it as `credentials/client_secret.json` (the folder is gitignored)
-4. Enable **Google Sheets API** and **Google Drive API** in the same project
-
-On first authorization (`npm run auth`), a browser window opens to authorize the app; a token (`credentials/oauth_token.json`) is then cached automatically.
-
-> The scripts default to `./credentials/client_secret.json` and `./credentials/oauth_token.json`, so **no environment variable is required** if you use those paths.
-
----
-
-### 3. Claude Code CLI
+### 2. Claude Code CLI
 
 **Why**: The `tc-팀-v2` orchestrator spawns each sub-agent as a separate `claude` CLI process in its own child shell, keeping each worker's context isolated.
 
@@ -52,6 +38,20 @@ The setup script auto-detects `cli.js` via `npm root -g`. If it can't be found, 
 ---
 
 ## Optional
+
+### Google OAuth credentials (only for Google Sheets output)
+
+**Why**: Only if you want output as a **Google Sheet** instead of the default local `.xlsx`. The pipeline then reads from and writes to Google Sheets for test-case tracking, and uploads MD spec files to Google Drive. **The local `.xlsx` flow (`/tc-로컬`) needs none of this.**
+
+**Obtain**:
+1. Go to https://console.cloud.google.com/apis/credentials
+2. Create an OAuth 2.0 Client ID (application type: **Desktop app**)
+3. Download the JSON and save it as `credentials/client_secret.json` (the folder is gitignored)
+4. Enable **Google Sheets API** and **Google Drive API** in the same project
+
+On first authorization (`npm run auth`), a browser window opens to authorize the app; a token (`credentials/oauth_token.json`) is then cached automatically.
+
+> The scripts default to `./credentials/client_secret.json` and `./credentials/oauth_token.json`, so **no environment variable is required** if you use those paths.
 
 ### Python 3.10+ (only for the Confluence image-matching helper)
 
@@ -111,6 +111,7 @@ The pipeline runs without a `.env` file. The keys below are read straight from t
 | `GOOGLE_TOKEN_PATH` | `./credentials/oauth_token.json` | Cached token location |
 | `SPREADSHEET_ID` | passed as CLI arg | Default sheet for `npm run dashboard` |
 | `SLACK_BOT_TOKEN` | disabled | Enable optional Slack QA notifications |
+| `SLACK_CHANNEL_ID` | disabled | Channel for the pipeline-kickoff notice (or use `scripts/util/slack_config.json` — see `slack_config.json.example`) |
 
 See [`.env.example`](../.env.example) for the annotated template.
 
@@ -120,6 +121,6 @@ See [`.env.example`](../.env.example) for the annotated template.
 
 After setup, open Claude Code in the repo and run:
 ```
-/tc-v2
+/tc-로컬
 ```
-If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. See [SETUP.md](./SETUP.md) for the full first-run walkthrough.
+If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. (`/tc-v2` — the Google Sheets path — should likewise be recognized.) See [SETUP.md](./SETUP.md) for the full first-run walkthrough.
