@@ -1,6 +1,6 @@
 // validate_tc_rows.js
 // TC 검증 룰 단일 소스(SSoT) — 결정적(기계) 검증 전부 이 파일 한 곳에 정의
-// 단일 소스: ~/.claude/tc-team-v2/skills/tc-생성/tc-생성.md (V-항목) + tc-리뷰.md (EVAL 기계부)
+// 단일 소스: ~/.claude/skills/tc-생성/tc-생성.md (V-항목) + tc-리뷰.md (EVAL 기계부)
 //
 // 구성:
 //   [기존 호환] validatePreWrite(rows)        — tc_data 적재 직전 검증 (writer/create_gsheet)

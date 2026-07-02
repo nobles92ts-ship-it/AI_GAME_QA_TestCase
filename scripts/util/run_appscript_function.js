@@ -15,9 +15,9 @@ if (!SPREADSHEET_ID || !FUNCTION_NAME) {
     process.exit(1);
 }
 
-const OAUTH_PATH     = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../credentials/client_secret.json');
-const TOKEN_PATH     = path.join(__dirname, '../credentials/appscript_token.json');
-const SCRIPT_ID_PATH = path.join(__dirname, '../credentials/appscript_script_id.json');
+const OAUTH_PATH     = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../../credentials/client_secret.json');
+const TOKEN_PATH     = path.join(__dirname, '../../credentials/appscript_token.json');
+const SCRIPT_ID_PATH = path.join(__dirname, '../../credentials/appscript_script_id.json');
 
 async function getAuth() {
     const credentials = JSON.parse(fs.readFileSync(OAUTH_PATH, 'utf-8'));

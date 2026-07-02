@@ -4,6 +4,28 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.4] — 2026-07-02
+
+A fresh-install integrity patch. A five-perspective install-chain audit (README → `install.ps1` → `setup.ps1` → docs) with adversarial verification confirmed 20 issues; this release fixes the ones that break a guide-following fresh install.
+
+### Security
+- **Author-specific identifiers sanitized** (pre-push 4-perspective secret/PII audit): the hardcoded Google Drive folder ID is now the `DRIVE_FOLDER_ID` env var (unset → upload step skipped with guidance); a personal Vercel scope fallback, machine-specific token-log paths, and a real Confluence page-ID map were replaced with placeholders/examples.
+- **Generic re-login guidance** — the orchestrator's auth-expiry message no longer references author-personal login skills.
+
+### Added
+- **Configurable Slack kickoff notice.** The pipeline-start notice ("TC 생성 요청 접수") was silently skipped on every non-author install: the shipped script had no token and a placeholder channel ID. `send_slack_tc_request.js` now resolves the channel via `--channel` → `SLACK_CHANNEL_ID` env → `slack_config.json` (`"channel"`), ships a `slack_config.json.example` template (the real config stays gitignored), and prints one-time setup instructions when unconfigured. SETUP.md documents the flow.
+
+### Fixed
+- **CRITICAL — Skill-rule path mismatch.** All 10 worker agents (plus 3 skills and a script comment) pointed their rule SSoT at `{CLAUDE_HOME}/tc-team-v2/skills/…` — a folder the setup scripts never create — so a fresh install ran the pipeline **without its rule files**. All 33 references now use `{CLAUDE_SKILLS_DIR}` (the actual install target, `~/.claude/skills/`). Three same-class dead pointers to `…/tc-team-v2/docs/stability.md` (orchestrator agent + 2 skills) now use `{PROJECT_ROOT}/docs/stability.md`, which ships in the repo.
+- **CRITICAL — OAuth default path.** `google_auth.js` (and the two Apps Script utilities) defaulted to `scripts/credentials/…`, which doesn't exist; every doc directs users to the root `credentials/`. Defaults corrected to `../../credentials/…`, so `npm run auth` works as documented.
+- **HIGH — One-liner install blocked by ExecutionPolicy.** `install.ps1` invoked `setup.ps1` as a plain `.ps1` file call, which the Windows default `Restricted` policy blocks on fresh PCs — the "one-line install" died after Node install + clone, leaving agents/skills uninstalled. Setup now runs via `powershell -NoProfile -ExecutionPolicy Bypass -File` and the installer fails loudly on a non-zero setup exit. README / SETUP.md document the Bypass form for manual runs.
+- **HIGH — Local mode demanded Google Drive.** `--local` (no-Google) runs still handed the designer a mandatory "드라이브 업로드" instruction in the STEP 1/3 handoffs, breaking the "no Google needed" promise. Local-mode handoffs now say to skip the upload (`drive_links: []`); the designer agent and design skill document the exception.
+
+### Changed
+- **Docs aligned to "local `.xlsx` by default, Google optional".** `PREREQUISITES.md` moves Google OAuth from **Required** to **Optional**; `SETUP.md` marks Steps 2/5 as optional, adds the `/tc-로컬` flow to Step 6, and fixes a broken cross-doc anchor. All Google Sheets guidance is retained for teams that want that path.
+
+---
+
 ## [v2.3.3] — 2026-06-30
 
 A usability + quality release. Headline: a **local `.xlsx` output path** so a fresh clone can generate test cases with **no Google/OAuth/Confluence setup**, a **one-click Windows installer**, an **automatic dashboard rebuild** in Apps Script, and **TC-quality learnings** from production runs.

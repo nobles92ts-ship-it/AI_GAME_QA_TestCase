@@ -2,7 +2,7 @@
 
 End-to-end setup for a fresh machine. Follow in order. Most of this is automated by one script — `setup.ps1` (Windows) or `setup.sh` (macOS/Linux).
 
-> **Assumption**: [Claude Code](https://claude.com/claude-code) is already installed. If not, install it first — see [PREREQUISITES.md](./PREREQUISITES.md#4-claude-code-cli).
+> **Assumption**: [Claude Code](https://claude.com/claude-code) is already installed. If not, install it first — see [PREREQUISITES.md](./PREREQUISITES.md#2-claude-code-cli).
 
 ---
 
@@ -15,9 +15,11 @@ cd AI_GAME_QA_TestCase
 
 ---
 
-## Step 2 — Place your Google OAuth credentials
+## Step 2 — (Optional) Place your Google OAuth credentials
 
-The pipeline reads/writes Google Sheets and uploads spec MDs to Google Drive, so it needs a Google OAuth desktop client:
+> **Skip this step for the default local `.xlsx` output (`/tc-로컬`)** — it needs no Google setup. Required only for the optional Google Sheets output path.
+
+The Google Sheets path reads/writes Google Sheets and uploads spec MDs to Google Drive, so it needs a Google OAuth desktop client:
 
 1. Go to https://console.cloud.google.com/apis/credentials
 2. Create an **OAuth 2.0 Client ID** → application type **Desktop app**
@@ -32,8 +34,10 @@ The pipeline reads/writes Google Sheets and uploads spec MDs to Google Drive, so
 
 **Windows (PowerShell):**
 ```powershell
-.\setup.ps1
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
+
+> Plain `.\setup.ps1` is blocked on a fresh PC (default execution policy `Restricted`) — the `-ExecutionPolicy Bypass -File` form works everywhere without changing system policy.
 
 **macOS / Linux / Git Bash:**
 ```bash
@@ -65,11 +69,13 @@ The pipeline uses two MCP integrations inside Claude Code:
 claude mcp list
 ```
 
-> Confluence is only needed if you feed the pipeline Confluence URLs. PDF / Word / Excel specs need **no** MCP server — Claude Code reads those files directly.
+> Confluence is only needed if you feed the pipeline Confluence URLs. PDF / Word / Excel specs need **no** MCP server — Claude Code reads those files directly. The **google-sheets** MCP is likewise only for the Google Sheets output path — the local `.xlsx` flow needs neither.
 
 ---
 
-## Step 5 — First-run OAuth authorization
+## Step 5 — (Optional) First-run OAuth authorization
+
+> Google Sheets output path only — skip for the local `.xlsx` flow.
 
 Run the auth helper once to generate `credentials/oauth_token.json`:
 
@@ -84,7 +90,13 @@ A browser window opens. Log in to Google and authorize the app. The token is cac
 
 ## Step 6 — Run the pipeline
 
-Open Claude Code in the repo and either use the slash command or the natural-language trigger:
+Open Claude Code in the repo. **Easiest — local Excel output, no Google needed:**
+
+```
+/tc-로컬 <feature-name> <spec-file>
+```
+
+…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (Steps 2 & 5 required), use the slash command or the natural-language trigger:
 
 ```
 /tc-v2 <google-sheets-url> <spec-source-1> [<spec-source-2> ...]
@@ -139,6 +151,17 @@ The pipeline works without a `.env` file. It exists only to override defaults, a
 | `GOOGLE_TOKEN_PATH` | `./credentials/oauth_token.json` | Token cached elsewhere |
 | `SPREADSHEET_ID` | (passed as CLI arg) | A default sheet for `npm run dashboard` |
 | `SLACK_BOT_TOKEN` | (disabled) | Enable Slack QA notifications |
+| `SLACK_CHANNEL_ID` | (disabled) | Channel for the pipeline-kickoff notice |
+
+### Optional: Slack kickoff notice
+
+When the pipeline starts, it can post a "TC 생성 요청 접수" notice to **any Slack channel you choose** — useful when several people share one TC sheet and want to see who kicked off which feature. To enable it (one-time, per machine):
+
+1. In your Slack workspace, create a bot: https://api.slack.com/apps → **Create New App** → *OAuth & Permissions* → add the `chat:write` bot scope → **Install to Workspace** → copy the **Bot User OAuth Token** (`xoxb-…`)
+2. Pick the channel to notify, **invite the bot** to it (`/invite @your-bot`), then copy the **channel ID** (channel name → *About* tab → bottom, `C0…`)
+3. Copy `scripts/util/slack_config.json.example` → `scripts/util/slack_config.json` (this file is **gitignored** — the token never reaches the repo) and fill in both values
+
+Environment variables `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` work as an alternative. If unset, the notice is simply skipped with a hint in `chain.log` and the pipeline continues normally.
 
 ---
 

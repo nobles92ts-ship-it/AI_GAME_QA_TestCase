@@ -28,7 +28,7 @@ const HTML_TEMPLATE = milestoneConfig?.htmlTemplate
   || path.join(__dirname, '..', '..', '..', 'QA_결과서', 'QA_테스트_결과서_20260317.html');
 const DEPLOY_DIR = milestoneConfig?.deployDir || '{WORK_ROOT}/../qa-report-deploy';
 const MILESTONE = milestoneConfig?.milestone || '';
-const VERCEL_SCOPE = milestoneConfig?.vercelScope || 'nobles92ts-7686s-projects';
+const VERCEL_SCOPE = milestoneConfig?.vercelScope || 'YOUR_VERCEL_SCOPE';
 
 // ── 1. 최신 데이터 가져오기 ──
 console.log('[1/3] 스프레드시트에서 데이터 수집 중...');

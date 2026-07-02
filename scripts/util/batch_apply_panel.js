@@ -9,24 +9,10 @@ const { addProjectInfo } = require('./add_project_info');
 
 const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
 
-// 탭명 → Confluence URL 매핑
+// 탭명 → Confluence URL 매핑 (본인 프로젝트의 탭명·기획서 URL로 교체)
 const URL_MAP = {
-    '예제 기능 1':              'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000001',
-    '예제 기능 2':                  'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000002',
-    '예제 기능 3':          'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000003',
-    '예제 기능 4':             'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000004',
-    '예제 기능 5':             'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000005',
-    '예제 기능 6':                  'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000006',
-    '예제 기능 7':                 'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000007',
-    '예제 기능 8':               'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000008',
-    '예제 기능 9':           'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000009',
-    '예제 기능 10':           'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000010',
-    '예제 기능 11':           'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000011',
-    '예제 기능 12':             'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000012',
-    '예제 기능 13':             'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000016',
-    '예제 기능 14':          'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000016',
-    '예제 기능 15':  'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000016',
-    '예제 기능 16':          'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/710000016',
+    '기능명_예시_A': 'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/111111111',
+    '기능명_예시_B': 'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/222222222',
 };
 
 const EXCLUDE = ['대시보드', 'BVT(Trunk)'];

@@ -123,8 +123,8 @@ Assumes [Claude Code](https://claude.ai/code) is already installed. Everything e
 git clone https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase.git
 cd AI_GAME_QA_TestCase
 
-# Windows
-.\setup.ps1
+# Windows (fresh PCs default to ExecutionPolicy Restricted — this form works everywhere)
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
 
 # macOS / Linux
 bash ./setup.sh
