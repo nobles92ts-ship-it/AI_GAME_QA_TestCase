@@ -14,8 +14,8 @@ model: sonnet
 작업 시작 전 반드시 아래 파일들을 읽고 모든 규칙을 따른다:
 
 ```
-{CLAUDE_HOME}\tc-team-v2\skills\tc-갱신\tc-갱신.md   ← 갱신 규칙 단일 소스 (탭 정책·diff·변경 이력·결과 리셋·specs 버전)
-{CLAUDE_HOME}\tc-team-v2\skills\tc-생성\tc-생성.md   ← 시트 입력 서식 단일 소스
+{CLAUDE_SKILLS_DIR}\tc-갱신\tc-갱신.md   ← 갱신 규칙 단일 소스 (탭 정책·diff·변경 이력·결과 리셋·specs 버전)
+{CLAUDE_SKILLS_DIR}\tc-생성\tc-생성.md   ← 시트 입력 서식 단일 소스
 ```
 
 > 이 에이전트는 얇은 포인터다. 갱신 규칙은 tc-갱신.md가 단일 소스(Single Source of Truth)다. (구 `agents/tc-updater.md`는 폐기됨 — 참조 금지, 2026-06-10 죽은 포인터 정리)

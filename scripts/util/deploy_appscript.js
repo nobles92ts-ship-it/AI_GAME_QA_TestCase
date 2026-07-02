@@ -24,9 +24,9 @@ if (!SPREADSHEET_ID) {
     process.exit(1);
 }
 
-const OAUTH_PATH   = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../credentials/client_secret.json');
-const TOKEN_PATH   = path.join(__dirname, '../credentials/appscript_token.json');
-const SCRIPT_ID_PATH = path.join(__dirname, '../credentials/appscript_script_id.json');
+const OAUTH_PATH   = process.env.GOOGLE_OAUTH_PATH || path.join(__dirname, '../../credentials/client_secret.json');
+const TOKEN_PATH   = path.join(__dirname, '../../credentials/appscript_token.json');
+const SCRIPT_ID_PATH = path.join(__dirname, '../../credentials/appscript_script_id.json');
 // ⚠ Apps Script content PUT은 전체 교체 — 프로젝트의 모든 .gs 파일을 여기에 포함할 것
 const GS_FILES = [
     { name: 'tab_manager',      path: path.join(__dirname, '../../appscript/tab_manager.gs') },

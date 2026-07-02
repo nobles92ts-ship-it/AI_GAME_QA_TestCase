@@ -10,8 +10,9 @@
  *   # 중복 방지(재개 안전): 요청 내용 해시 마커. 같은 요청 재실행 시 스킵.
  *   node send_slack_tc_request.js --items items.json --sheet "..." --dedup-dir "{WORK_ROOT}/team/specs"
  *
- * 토큰: slack_config.json 또는 환경변수 SLACK_BOT_TOKEN (send_slack_qa.js와 동일)
- * 채널: your-qa-channel (YOUR_SLACK_CHANNEL_ID) — --channel 로 override 가능
+ * 토큰: slack_config.json("token") 또는 환경변수 SLACK_BOT_TOKEN (send_slack_qa.js와 동일)
+ * 채널: --channel > 환경변수 SLACK_CHANNEL_ID > slack_config.json("channel") > 기본값
+ * 미설정 시(토큰 없음/채널 플레이스홀더) 설정 안내 출력 후 종료 — 파이프라인은 비차단으로 계속
  */
 const fs = require('fs');
 const path = require('path');
@@ -35,7 +36,7 @@ function parseArgs() {
     sheet: get('sheet'),
     batch: get('batch'),       // "2/5" 형식 (선택, 단일 모드)
     dedupDir: get('dedup-dir'), // 중복 방지 마커 디렉터리 (선택)
-    channel: get('channel') || DEFAULT_CHANNEL,
+    channel: get('channel') || process.env.SLACK_CHANNEL_ID || loadConfig().channel || DEFAULT_CHANNEL,
   };
 }
 
@@ -71,13 +72,15 @@ function loadItems(cfg) {
   return [];
 }
 
+// ── slack_config.json 로드 (없거나 파싱 실패 시 빈 객체) ──
+function loadConfig() {
+  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')); } catch { return {}; }
+}
+
 // ── Slack 토큰 로드 (send_slack_qa.js와 동일 규칙) ──
 function getToken() {
   if (process.env.SLACK_BOT_TOKEN) return process.env.SLACK_BOT_TOKEN;
-  if (fs.existsSync(CONFIG_FILE)) {
-    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')).token;
-  }
-  return null;
+  return loadConfig().token || null;
 }
 
 // ── Slack API 전송 ──
@@ -182,8 +185,10 @@ async function main() {
   }
 
   const token = getToken();
-  if (!token) {
-    console.error('Slack 토큰이 없습니다. (slack_config.json 또는 SLACK_BOT_TOKEN)');
+  if (!token || cfg.channel.startsWith('YOUR_')) {
+    console.error('Slack 착수 공지 미설정 — 켜려면 scripts/util/slack_config.json 생성 (slack_config.json.example 참고):');
+    console.error('  {"token": "xoxb-...", "channel": "C0XXXXXXXXX"}');
+    console.error('  (또는 환경변수 SLACK_BOT_TOKEN + SLACK_CHANNEL_ID)');
     process.exit(1);
   }
 

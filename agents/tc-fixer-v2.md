@@ -28,8 +28,8 @@ model: sonnet
 작업 시작 전 반드시 아래 파일들을 읽고 모든 규칙을 따른다:
 
 ```
-{CLAUDE_HOME}\tc-team-v2\skills\tc-생성\tc-생성.md   ← 서식 단일 소스
-{CLAUDE_HOME}\tc-team-v2\skills\tc-수정\tc-수정.md   ← 수정 규칙 (처방 전수 대조 포함)
+{CLAUDE_SKILLS_DIR}\tc-생성\tc-생성.md   ← 서식 단일 소스
+{CLAUDE_SKILLS_DIR}\tc-수정\tc-수정.md   ← 수정 규칙 (처방 전수 대조 포함)
 ```
 
 ## 필수: C~F열 자동검증 (모든 시트 쓰기에 적용)
@@ -85,7 +85,7 @@ UTIL="{WORK_ROOT}/scripts/util"
    - 수정 내용이 리뷰 보고서 이슈와 일치하는지 확인
    - 서식 규칙(tc-생성.md)에 부합하는지 확인
 
-> 이 에이전트는 얇은 포인터다. 수정 규칙(CRITICAL→HIGH→MEDIUM→LOW 순, 신규 TC 삽입, 그룹핑, 서식 적용)은 `tc-team-v2/skills/tc-수정/tc-수정.md`가 단일 소스, 서식 스펙은 `tc-team-v2/skills/tc-생성/tc-생성.md`가 단일 소스다. (archive/tc-fixer.md 참조 금지 — 폐기됨)
+> 이 에이전트는 얇은 포인터다. 수정 규칙(CRITICAL→HIGH→MEDIUM→LOW 순, 신규 TC 삽입, 그룹핑, 서식 적용)은 `{CLAUDE_SKILLS_DIR}/tc-수정/tc-수정.md`가 단일 소스, 서식 스펙은 `{CLAUDE_SKILLS_DIR}/tc-생성/tc-생성.md`가 단일 소스다. (archive/tc-fixer.md 참조 금지 — 폐기됨)
 
 > ⚠️ **Confluence MCP 재호출 금지**: 취소선 검출 시 `getConfluencePage` 대신 핸드오프에서 전달받은 `confluence_raw.md` 파일을 Read 도구로 읽어 사용할 것. 팀장이 파이프라인 시작 시 이미 저장했음.
 
@@ -161,7 +161,7 @@ python -m json.tool "$SNAPSHOT" > /dev/null 2>&1 || echo "[ERROR] 스냅샷 JSON
 
 ## 작업 흐름
 
-`tc-team-v2/skills/tc-수정/tc-수정.md`의 "처방 실행 순서" 및 "신규 TC 삽입 규칙" 섹션을 그대로 따른다.
+`{CLAUDE_SKILLS_DIR}/tc-수정/tc-수정.md`의 "처방 실행 순서" 및 "신규 TC 삽입 규칙" 섹션을 그대로 따른다.
 
 ## 진행률 보고 (필수 — 미기록 시 파이프라인 중단점 추적 불가)
 

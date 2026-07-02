@@ -470,7 +470,7 @@ OLD_URL=$(grep -E "^CONFLUENCE_URL=" "$SPEC/sheet_info.txt" 2>/dev/null | head -
 3. **LLM-only 직접 확인은 V-11(플랫폼 적정성)만** — G=PC 행만 스캔. **나머지 llmFlags·LLM-only 항목(V-12·13 잔여 / V-18 ⑤ / V-15·21 분류 / V-23 ④)은 판정하지 말 것** — JSON 그대로 보고만 한다. STEP 5/6 precheck가 같은 validateFull을 공유해 동일 플래그를 재생성하고 리뷰어가 판정한다(tc-리뷰.md '기계 EVAL 사전 패스'에 의무화됨). 근거: 보스 TC run_v4 실측 — writer가 llmFlags 8건을 14분간 직접 판정했으나 전부 적격(수정 0건)이었고 같은 8건이 리뷰 단계에 그대로 재도착해 리뷰어가 재판정 = 순수 중복 (2026-06-12 렌즈 C 분석)
 4. 보고서에는 기계 판정 JSON(stats/violations/llmFlags)을 **그대로 인용** — 통계 표 재계산·재서술 금지
 
-**판정 주체 분담**: ⚙기계(validateFull + create_gsheet 내장) = V-01~04·05기계부·06~10·14·16비율·17·18①~④·19·20·21추출·22·23①~③ / 🧠writer LLM = **V-11만** / 🔁리뷰 위임(precheck round1·2 → 리뷰어) = V-12/13잔여·15분류·18⑤·21분류·23④ — 전체 매핑표: `~/.claude/tc-team-v2/docs/stability.md` 부록 3.
+**판정 주체 분담**: ⚙기계(validateFull + create_gsheet 내장) = V-01~04·05기계부·06~10·14·16비율·17·18①~④·19·20·21추출·22·23①~③ / 🧠writer LLM = **V-11만** / 🔁리뷰 위임(precheck round1·2 → 리뷰어) = V-12/13잔여·15분류·18⑤·21분류·23④ — 전체 매핑표: `{PROJECT_ROOT}/docs/stability.md` 부록 3.
 ⚠ 기계 스크립트는 판정불가 시 silent pass 금지 — JSON의 llmFlags/notes에 명시 출력되며, 그 항목은 **리뷰 단계 LLM**이 판정한다 (F4-A1 교훈 + 중복 제거 2026-06-12).
 
 **병행 검증 기간 (직변환 도입 첫 1~2런 한정 — Phase 3, 카운터 단일화 L2P3-07)**: writer는 merge 산출 tc_data.json의 골격(B~E/G/J)이 설계 트리·기본기능 표와 일치하는지 **표본 대조**(대분류마다 1행 이상)하고 불일치는 보고만 한다 — 기계 결과 우선, 수정 금지. 1~2런 연속 불일치 0건 확인 후 이 단락을 삭제한다. 차단 권위는 validateFull(--design)의 단계별 부등식(V-10)으로 일원화 — 직변환의 3자 동치(checkAllotmentStrict)는 그 상류 게이트.

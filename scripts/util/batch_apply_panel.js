@@ -9,24 +9,10 @@ const { addProjectInfo } = require('./add_project_info');
 
 const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID';
 
-// 탭명 → Confluence URL 매핑
+// 탭명 → Confluence URL 매핑 (본인 프로젝트의 탭명·기획서 URL로 교체)
 const URL_MAP = {
-    '캐릭터선택화면':              'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/36045047',
-    '수영_시스템':                  'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/237797399',
-    '사망_및_부활_시스템':          'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/100106326',
-    '즉시이동예외처리':             'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/254836741',
-    '필드_보스_시스템':             'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/115082403',
-    '버려진_고성':                  'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/210272257',
-    '퀘스트UI개선':                 'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/271450161',
-    '아바타합성확정':               'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/243826783',
-    '월드맵_시스템_개선':           'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/256507927',
-    '버서커_스킬_사양서':           'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/309330005',
-    '버프디버프_UI_개선':           'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/316440818',
-    '장비 분해 시스템':             'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/75956534',
-    '장비 강화 시스템':             'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/57344335',
-    '장비 강화 시스템_v2':          'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/57344335',
-    '장비 강화 시스템_haiku_test':  'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/57344335',
-    '장비 강화 시스템_v3':          'https://YOUR_SITE.atlassian.net/wiki/spaces/DX/pages/57344335',
+    '기능명_예시_A': 'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/111111111',
+    '기능명_예시_B': 'https://YOUR_SITE.atlassian.net/wiki/spaces/YOUR_SPACE/pages/222222222',
 };
 
 const EXCLUDE = ['대시보드', 'BVT(Trunk)'];

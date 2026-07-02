@@ -14,8 +14,8 @@ model: opus
 작업 시작 전 반드시 아래 두 파일을 **순서대로** 읽고 모든 규칙을 따른다:
 
 ```
-1. {CLAUDE_HOME}\tc-team-v2\skills\tc-분석\tc-분석.md   ← 분석 단계 규칙 (Step 1~7)
-2. {CLAUDE_HOME}\tc-team-v2\skills\tc-설계\tc-설계.md   ← 설계 단계 규칙 (Step 8~13)
+1. {CLAUDE_SKILLS_DIR}\tc-분석\tc-분석.md   ← 분석 단계 규칙 (Step 1~7)
+2. {CLAUDE_SKILLS_DIR}\tc-설계\tc-설계.md   ← 설계 단계 규칙 (Step 8~13)
 ```
 
 ## 분석 전략
@@ -44,7 +44,7 @@ python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
 
 ### STEP B — analysis.md 작성 (tc-분석.md Part A + B + C 전수 작성)
 
-> 단일 소스: `{CLAUDE_HOME}\tc-team-v2\skills\tc-분석\tc-분석.md`
+> 단일 소스: `{CLAUDE_SKILLS_DIR}\tc-분석\tc-분석.md`
 > **analysis.md 필수 구조(템플릿 강제)** 섹션을 반드시 따른다.
 
 1. **메타데이터 블록** 작성 (기획서 URL/해시/분석일시)
@@ -59,7 +59,7 @@ python3 "{WORK_ROOT}/scripts/util/confluence_image_downloader.py" \
 
 ### STEP C — tc_design.md 작성 (tc-설계.md Step 8~13)
 
-> 단일 소스: `{CLAUDE_HOME}\tc-team-v2\skills\tc-설계\tc-설계.md`
+> 단일 소스: `{CLAUDE_SKILLS_DIR}\tc-설계\tc-설계.md`
 > analysis.md Part B의 **후보 목록**을 받아 **확정 테이블**로 변환:
 > - B-3 EP 후보 → 검증단계 사전 배분표의 BVA 4포인트
 > - B-5 상태 머신 후보 → 상태 전이 테이블 (실제 엣지 전수)
@@ -136,6 +136,8 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] STEP 1 | tc-designer-v2 | <현재 작업>" 
   }
 }
 ```
+
+> **로컬 모드**: 핸드오프에 "드라이브 업로드 생략"이 명시되면 드라이브 업로드를 건너뛰고 `drive_links`를 빈 배열 `[]`로 기재한다.
 
 - `step`: **이번 호출의 STEP 번호** — 핸드오프의 `STEP:` 값 그대로 기재 (설계=1, 설계 수정=3). transition.sh가 이 필드로 silent exit를 검출하므로 누락·오기재 금지 (L2P3-02)
 - `analysis_parts.part_a/b/c`: 각 Part의 모든 섹션이 작성됐는지 여부

@@ -15,7 +15,7 @@ model: sonnet
 작업 시작 전 `tc-생성.md`의 **ROLE INDEX 표만 먼저 Read**한 뒤, **자기 역할(writer) 섹션만 부분 로드**한다.
 
 ```
-경로: {CLAUDE_HOME}\tc-team-v2\skills\tc-생성\tc-생성.md
+경로: {CLAUDE_SKILLS_DIR}\tc-생성\tc-생성.md
 ```
 
 ### Read 절차 (필수 — 풀 로드 금지)

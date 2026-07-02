@@ -112,7 +112,11 @@ $setup = Join-Path $Dest 'setup.ps1'
 if (-not (Test-Path $setup)) { Write-Host "  [X] setup.ps1 없음 — 배포본 손상" -ForegroundColor Red; exit 1 }
 Write-Host ""; Write-Host "[2] setup.ps1 실행 (에이전트·스킬 → ~/.claude)"
 Push-Location $Dest
-try { & $setup } finally { Pop-Location }
+# .ps1 파일 직접 호출(& $setup)은 기본 실행정책(Restricted)에서 차단됨 — 자식 프로세스로 Bypass 실행
+try {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $setup
+  if ($LASTEXITCODE -ne 0) { Write-Host "  [X] setup.ps1 실패 (rc=$LASTEXITCODE)" -ForegroundColor Red; exit 1 }
+} finally { Pop-Location }
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green

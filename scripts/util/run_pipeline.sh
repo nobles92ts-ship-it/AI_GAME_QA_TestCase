@@ -113,6 +113,14 @@ LOCK="$SPEC/.pipeline.lock"
 date +%s > "$LOCK"
 [[ $START -eq 0 ]] && do_transition designing 0 ""
 
+# 로컬 모드: 드라이브 업로드 지시 생략 — "구글 자격증명 불필요" 약속 유지 (설계자 핸드오프에 반영)
+DRIVE_UP="드라이브 업로드"
+DRIVE_REUP="드라이브 재업로드"
+if [[ "$LOCAL" == "1" ]]; then
+  DRIVE_UP="드라이브 업로드 생략 (로컬 모드 — step_result의 drive_links는 빈 배열 [])"
+  DRIVE_REUP="드라이브 재업로드 생략 (로컬 모드)"
+fi
+
 # ── STEP 1 설계 (opus) ───────────────────────────────────────────────────────
 if [[ $START -le 1 ]]; then
 log "[STEP 1] 설계 시작"
@@ -124,7 +132,7 @@ HANDOFF="## HANDOFF
 - specs 경로: $SPEC
 
 ## 작업 지시
-confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) → 드라이브 업로드.
+confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) → $DRIVE_UP.
 tc-학습.md 활성 설계 패턴 반영 필수 — 특히 P-18(상태이상·연출 상호작용 4유형), P-19(서술형 섹션을 대조표에 분해), P-20(BVA 상·하한 분리, 통합 1건 금지).
 Confluence MCP 재호출 금지."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
@@ -226,7 +234,7 @@ run_step3() { # $1=모드 라벨 (review|blocker)
 ## 작업 지시
 design_review.md 이슈(존재 시) + DXR 대조 결과(apply/discover, 존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.
 수정 후 직변환 사전 게이트(tc-설계.md Step 11.5) 재실행 — exit 0 필수 (배분표 3자 동치 재계산).
-드라이브 재업로드."
+$DRIVE_REUP."
   bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
 RUNAGENT_DEBUG_FILE='$SPEC/step3_debug.log' bash '$RETRY' '$SPEC/step3_stderr.log' -- \
 bash '$RUNAGENT' $CLI_BASE ${model_args[*]} --agent tc-designer-v2 \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1

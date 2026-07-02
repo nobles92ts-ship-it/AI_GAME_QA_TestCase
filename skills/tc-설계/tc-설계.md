@@ -25,7 +25,7 @@ user-invocable: false
 ## 핵심 파일 경로
 
 - MD 업로드 스크립트: `{WORK_ROOT}/scripts/util/upload_md_to_drive.js`
-- 구글 드라이브 기획서 폴더 ID: `1YxK2WVH6nr-e0_2qjDb4DSxXgAffsA2q`
+- 구글 드라이브 기획서 폴더 ID: 환경변수 `DRIVE_FOLDER_ID` (미설정 시 업로드 단계 생략 — 선택 기능)
 - MD 파일 저장 위치: `{WORK_ROOT}/`
 - **로컬 specs 저장 위치**: `{WORK_ROOT}/team/specs/[기능명]/`
 - Node.js 경로: `{NODE_PATH}`
@@ -652,7 +652,7 @@ tc-writer가 재현스탭 작성 시 참조할 품질 기준. HIGH 리스크 소
 
    > **근거 (v10 실측 2026-06-11)**: 같은 결함을 STEP 4에서 잡으면 왕복 1회당 CLI 부팅 3회 ≈ 15분. 설계 세션 안에서 잡으면 convert 26초 + 인라인 수정으로 왕복 0회. STEP 4 차단은 최후 안전망으로 유지.
 
-12. `upload_md_to_drive.js`로 드라이브 업로드
+12. `upload_md_to_drive.js`로 드라이브 업로드 — **로컬 모드**(핸드오프에 "드라이브 업로드 생략" 명시 시)는 이 단계 생략
 13. **완료 보고**
 
 ---
