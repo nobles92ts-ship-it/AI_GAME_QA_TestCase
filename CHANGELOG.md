@@ -4,6 +4,16 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v2.3.7] — 2026-07-06
+
+### Changed
+- Removed obsolete one-off feature scripts from `scripts/util/` that were never part of the pipeline (`generate_tc.js` and two feature-specific TC generators). These were leftover work artifacts — tabs are generated via `create_gsheet_tc_from_json.js` / `create_xlsx_tc_from_json.js`.
+
+### Docs
+- `SETUP.md`: added a troubleshooting entry for the optional Slack kickoff notice (it stays silent until a bot token is configured — that is expected, not a bug).
+
+---
+
 ## [v2.3.6] — 2026-07-02
 
 ### Fixed
