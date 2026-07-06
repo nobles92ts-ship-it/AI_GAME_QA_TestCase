@@ -174,3 +174,4 @@ Environment variables `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` work as an alternat
 | Placeholder `{WORK_ROOT}` still visible in an installed file | Re-run `setup.ps1` / `setup.sh` — it resolves tokens in place. |
 | `/tc-v2` not recognized in Claude Code | Confirm `commands/tc-v2.md` was copied to `$CLAUDE_HOME/commands/` (re-run setup). |
 | Confluence page can't be read | Register the Atlassian connector (Step 4), or feed the spec as a PDF/Word/Excel file instead. |
+| Slack "TC 생성 요청 접수" kickoff notice never appears | Expected until you enable it — the bot token is gitignored, so a freshly cloned repo has none. Set it up via [Optional: Slack kickoff notice](#optional-slack-kickoff-notice). When skipped, a hint is logged to `chain.log` and the pipeline continues normally. |
