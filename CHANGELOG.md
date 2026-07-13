@@ -4,6 +4,17 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v3.1.0] — 2026-07-13
+
+### Added
+- **`/tc-team` — deterministic-engine driver skill (`skills/tc-team/`).** Drives the `tc_v3/` engine end-to-end (S0–S7) as a main-session runbook: fetch → design → gate+slice → sentence fan-out → adversarial 3-lens review + coverage ledger → apply+gates → single sheet write → finalize. Ships with the workflow fan-out scripts (`tc_v3/workflows/`).
+- **Two engines now ship side by side** — `/tc-team` (3rd-gen deterministic, preview · main-session-driven) and `/tc-v2` (proven multi-agent). Both share the same setup and take the same arguments.
+
+### Changed
+- Docs (README, ARCHITECTURE, PREREQUISITES, SETUP, `setup.ps1`/`setup.sh`) reframed to present both engines by purpose rather than as one renamed command. Removed the transitional `commands/tc-team.md` — the `/tc-team` entry point is now the skill.
+
+---
+
 ## [v3.0.0] — 2026-07-13
 
 ### Added
