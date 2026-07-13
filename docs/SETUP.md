@@ -96,14 +96,15 @@ Open Claude Code in the repo. **Easiest — local Excel output, no Google needed
 /tc-로컬 <feature-name> <spec-file>
 ```
 
-…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (Steps 2 & 5 required), use the slash command or the natural-language trigger (the older `/tc-v2` / `TC 팀 v2로 진행` still work):
+…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (Steps 2 & 5 required), pick an engine — the **proven multi-agent engine** via `/tc-v2` / `TC 팀 v2로 진행`, or the **3rd-gen deterministic engine (preview)** via `/tc-team` / `tc-team으로 진행`. Both take the same arguments and share the same setup:
 
 ```
-/tc-team <google-sheets-url> <spec-source-1> [<spec-source-2> ...]
+/tc-v2   <google-sheets-url> <spec-source-1> [<spec-source-2> ...]   # proven multi-agent engine
+/tc-team <google-sheets-url> <spec-source-1> [<spec-source-2> ...]   # deterministic engine (preview)
 ```
-or simply:
+or simply (natural language — either engine):
 ```
-tc-team으로 진행
+TC 팀 v2로 진행        # or:  tc-team으로 진행
 Spreadsheet: https://docs.google.com/spreadsheets/d/<ID>/edit
 Confluence: https://your-site.atlassian.net/wiki/spaces/PROJECT/pages/111
 ```
@@ -117,7 +118,7 @@ Confluence: https://your-site.atlassian.net/wiki/spaces/PROJECT/pages/111
 | Word (`*.doc`, `*.docx`) | Claude Code reads it natively |
 | Excel (`*.xlsx`, `*.xls`) | parsed by the `xlsx` Node module |
 
-You can mix multiple types in one batch run — each feature gets its own isolated run with independent checkpoint state.
+You can mix multiple types in one batch run — each feature gets its own isolated run with independent checkpoint state. The examples below use `/tc-team`; **`/tc-v2` accepts identical arguments** (the proven multi-agent engine).
 
 ```bash
 # Confluence
@@ -172,6 +173,6 @@ Environment variables `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` work as an alternat
 | `node: command not found` | Install Node.js 20 LTS, then re-run the setup script. |
 | `client_secret.json not found` | Complete Step 2. |
 | Placeholder `{WORK_ROOT}` still visible in an installed file | Re-run `setup.ps1` / `setup.sh` — it resolves tokens in place. |
-| `/tc-team` not recognized in Claude Code | Confirm `commands/tc-team.md` was copied to `$CLAUDE_HOME/commands/` (re-run setup). |
+| `/tc-team` not recognized in Claude Code | `/tc-team` is now the `skills/tc-team/` skill (installed to `$CLAUDE_SKILLS_DIR`), not a command — re-run setup so the skill is copied. (The proven engine `/tc-v2` lives at `commands/tc-v2.md`.) |
 | Confluence page can't be read | Register the Atlassian connector (Step 4), or feed the spec as a PDF/Word/Excel file instead. |
 | Slack "TC 생성 요청 접수" kickoff notice never appears | Expected until you enable it — the bot token is gitignored, so a freshly cloned repo has none. Set it up via [Optional: Slack kickoff notice](#optional-slack-kickoff-notice). When skipped, a hint is logged to `chain.log` and the pipeline continues normally. |

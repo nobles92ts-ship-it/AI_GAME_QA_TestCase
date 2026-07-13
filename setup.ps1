@@ -144,7 +144,7 @@ Write-Host "  2. ~/.claude/.mcp.json 에 MCP 설정 추가 (.mcp.json.example �
 Write-Host "  3. npm run auth   <- Google 인증 최초 실행 (브라우저 1회 승인)"
 Write-Host ""
 Write-Host "사용법 (Claude Code에서):"
-Write-Host "  'tc-team으로 진행' (또는 /tc-team; 구명칭 TC 팀 v2로 진행 / /tc-v2 도 동일 동작)"
+Write-Host "  'tc-team으로 진행' (또는 /tc-team) = v3 결정론 엔진 (프리뷰)  ·  'TC 팀 v2로 진행' (또는 /tc-v2) = 검증된 v2 멀티에이전트 엔진"
 Write-Host "  'Spreadsheet: https://docs.google.com/spreadsheets/d/...'"
 Write-Host "  'Confluence: https://your-site.atlassian.net/wiki/...'"
 Write-Host ""

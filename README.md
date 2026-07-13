@@ -16,8 +16,8 @@
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
 
-> 🧭 **Two generations in one repo — what runs today vs. where it's going.**
-> What `install.ps1` installs — and what `/tc-team` / `/tc-로컬` run — **today** is the **proven multi-agent pipeline** (`agents/` · `skills/` · `scripts/`). The **next-generation deterministic engine** — the architecture this README leads with — lives in [`tc_v3/`](tc_v3/README.md) as a **library preview**: every stage is runnable and regression-tested, but the single-command driver that chains them end-to-end is still on the roadmap (see **Roadmap** below).
+> 🧭 **Two engines ship side by side — pick by purpose, not by "newer is better."**
+> **`/tc-v2`** (and `/tc-로컬` for local Excel) runs the **proven, battle-tested multi-agent pipeline** (`agents/` · `skills/` · `scripts/`) — the supported autonomous end-to-end path. **`/tc-team`** is the **3rd-generation deterministic engine** (tc_v3-based) — the architecture this README leads with because it is the target design — shipping as a **preview**: the main session drives its S0–S7 stages (a semi-automatic runbook, not a fully-unattended one-shot; that driver is still on the **Roadmap** below). It lives in [`tc_v3/`](tc_v3/README.md), and both engines share the same setup.
 
 ---
 
@@ -49,7 +49,7 @@ irm https://raw.githubusercontent.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/mai
 - **Coverage ledger** — every source rule ends the run as covered, justifiably excluded, or a gate FAIL — missing rules are named, not hidden in a percentage
 - **Measured** (cold-run A/B, n=1, same spec) — **2.2× faster wall-clock** (159 → 73 min), **0 invented numerics**, **100% of rules explained** by the ledger
 - **What ships today** — the proven multi-agent pipeline: 4 spec formats auto-detected (Confluence / PDF / Word / Excel), local `.xlsx` (no Google) or Google Sheets output, checkpoint resume, everything via Claude Code CLI (no external API)
-- **Install = one line, run = one command** — `install.ps1`, then `/tc-로컬` (local Excel) or `/tc-team` (Google Sheets; legacy `/tc-v2` still works)
+- **Install = one line, run = one command** — `install.ps1`, then `/tc-로컬` (local Excel) or, for Google Sheets, **two engines side by side**: `/tc-v2` (proven multi-agent) and `/tc-team` (deterministic engine preview)
 
 ---
 
@@ -121,7 +121,7 @@ All model calls go through **Claude Code CLI** — no external API keys, no SDK 
 
 ## 🚀 Quick start
 
-> **What this installs:** the proven **multi-agent pipeline** — today's end-to-end execution path. The deterministic engine ships alongside it in [`tc_v3/`](tc_v3/README.md) as a library preview (each stage individually runnable and tested; the single-command driver is on the roadmap). There is no separate install step for it — it arrives with the clone.
+> **What this installs:** both engines. **`/tc-v2`** runs the proven **multi-agent pipeline** — today's supported end-to-end execution path. **`/tc-team`** (the `skills/tc-team/` skill) drives the **deterministic engine** in [`tc_v3/`](tc_v3/README.md) as a preview — the main session runs its stages (each stage individually runnable and tested; a fully-unattended single-command driver is on the roadmap). Both arrive with the clone; there is no separate install step.
 
 Assumes [Claude Code](https://claude.ai/code) is already installed. Everything else the setup script handles.
 
@@ -151,10 +151,11 @@ Then in Claude Code — **local Excel output (no Google needed):**
 /tc-로컬 <feature-name> <spec-file>
 ```
 
-…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (one-time Google connection required):
+…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (one-time Google connection required) — pick an engine, both take the same arguments:
 
 ```
-/tc-team <google-sheets-url> <spec-source> [<spec-source-2> ...]
+/tc-v2   <google-sheets-url> <spec-source> [<spec-source-2> ...]   # proven multi-agent engine
+/tc-team <google-sheets-url> <spec-source> [<spec-source-2> ...]   # 3rd-gen deterministic engine (preview)
 ```
 
 `<spec-source>` can be any of:
@@ -230,13 +231,13 @@ AI_GAME_QA_TestCase/
 │   ├── tc-updater-v2.md           # Spec-change detection + surgical TC update
 │   └── qa-reviewer-v2.md / tc-fixer-v2.md   # legacy split R1 agents — rollback only
 │
-├── commands/
-│   ├── tc-team.md                 # /tc-team slash command (entry point)
-│   ├── tc-v2.md                   # /tc-v2 — legacy alias, same behavior
+├── commands/                      # v2 multi-agent engine + helpers (the /tc-team engine is a skill, below)
+│   ├── tc-v2.md                   # /tc-v2 — proven multi-agent engine (entry point)
 │   ├── tc-로컬.md                 # /tc-로컬 — local .xlsx output (no Google)
 │   └── tc-이미지매칭.md           # /tc-이미지매칭 — optional spec-image link matching
 │
 ├── skills/                        # Per-stage SSoT skill files
+│   ├── tc-team/                   # ★ /tc-team — 3rd-gen deterministic engine driver skill (tc_v3 entry point)
 │   ├── tc-분석/  tc-설계/  tc-생성/  tc-리뷰/  tc-수정/  tc-갱신/  tc-설계검수/  tc-대조/
 │   ├── tc-학습/  tc-모니터/       # Pattern learning + run monitoring
 │   ├── haiku/                     # Sonnet writer/fixer skill definitions (STEP 4, 5)

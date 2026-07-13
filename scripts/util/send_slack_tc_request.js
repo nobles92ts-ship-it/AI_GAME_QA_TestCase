@@ -4,8 +4,8 @@
  *
  * 사용법:
  *   # 단일 기능
- *   node send_slack_tc_request.js --feature "월드맵" --confluence "https://..." --sheet "https://docs.google.com/..."
- *   # 통합 리스트 (배치) — items.json: [{"feature":"월드맵","confluence":"https://..."}, ...]
+ *   node send_slack_tc_request.js --feature "샘플기능" --confluence "https://..." --sheet "https://docs.google.com/..."
+ *   # 통합 리스트 (배치) — items.json: [{"feature":"샘플기능","confluence":"https://..."}, ...]
  *   node send_slack_tc_request.js --items items.json --sheet "https://docs.google.com/..."
  *   # 중복 방지(재개 안전): 요청 내용 해시 마커. 같은 요청 재실행 시 스킵.
  *   node send_slack_tc_request.js --items items.json --sheet "..." --dedup-dir "{WORK_ROOT}/team/specs"

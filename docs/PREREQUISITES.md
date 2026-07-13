@@ -125,4 +125,4 @@ After setup, open Claude Code in the repo and run:
 ```
 /tc-로컬
 ```
-If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. (`/tc-team` — the Google Sheets path — should likewise be recognized.) See [SETUP.md](./SETUP.md) for the full first-run walkthrough.
+If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. Both Google Sheets engines should likewise be recognized — **`/tc-v2`** (the proven multi-agent engine, `commands/tc-v2.md`) and **`/tc-team`** (the 3rd-gen deterministic engine preview, the `skills/tc-team/` skill). They ship side by side and share the **same setup** — Node, `npm run auth`, and the google-sheets MCP. See [SETUP.md](./SETUP.md) for the full first-run walkthrough.
