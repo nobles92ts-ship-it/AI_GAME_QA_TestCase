@@ -1,4 +1,6 @@
-# TC 팀 v2 — 안정성 정책 상세 (S1~S7)
+# TC 팀 — 안정성 정책 상세 (S1~S7)
+
+> ⚠️ 이 문서의 S1~S7은 **안정성 정책 번호**다 — `tc_v3/` 엔진의 파이프라인 스테이지(S1~S6)와 무관하다. 본 문서는 **현행 멀티에이전트 파이프라인**(오늘 설치·실행되는 경로)의 내부 안정성 설계를 다룬다.
 
 > tc-팀-v2.md의 안정성 정책 상세 구현을 담는 SSoT.
 > 팀장 md에는 요약 매핑만 두고, 상세 구현/배경은 여기를 참조.
@@ -82,7 +84,7 @@ BACKUP=$(cat "$SPECS/[기능명]/backup_tab.txt" 2>/dev/null)
 ## S3. tc-fixer 행 쓰기 직후 자체 검증 (컬럼 꼬임 재발 방지)
 
 ### 배경
-2026-04-17 사고: 한 기능 TC 176~196(21개)에서 F열↔G열 뒤바뀜. 2차 리뷰까지 놓쳐 배포됨.
+2026-04-17 사고: 한 기능의 TC 176~196(21개)에서 F열↔G열 뒤바뀜. 2차 리뷰까지 놓쳐 배포됨.
 
 ### 구현
 tc-fixer-v2가 배치 쓰기 직후, 수정 행 범위를 `--range G[start]:G[end]`로 재읽기해 G열 값 검증.
@@ -263,10 +265,10 @@ Bash 툴은 포그라운드 실행. 팀장은 CLI 완료 전엔 progress.log를 
 | V-06/V-17 (그룹 분산 — fill-down 후 (B,C,D) 튜플 키) | ⚙ | validateFull / precheck EVAL-06 | STEP 4·5·6 |
 | V-10/V-16 비율 (배분표 대조 — 미달+비고無=FAIL, 미달+비고有=LLM, 초과=합법) | ⚙+🧠 | validateFull(--design) / precheck EVAL-02 | STEP 4·5 |
 | V-18 ①~④ (기본기능 B/G/I/키·인용 존재성) | ⚙ | validateFull / precheck EVAL-16 | STEP 4·5 |
-| V-19 (J 화이트리스트 — 버그ID 패턴, 리터럴 XXXX=위반) / V-20 (H/I=expectedHI) | ⚙ | validateFull / precheck EVAL-14·17 + create_gsheet 원천 생성 | STEP 4·6 |
+| V-19 (J 화이트리스트 — 버그ID 패턴(PROJ-N), 리터럴 XXXX=위반) / V-20 (H/I=expectedHI) | ⚙ | validateFull / precheck EVAL-14·17 + create_gsheet 원천 생성 | STEP 4·6 |
 | V-15/V-21 (복합문·"또는") | ⚙추출+🔁리뷰 위임 분류 | validateFull llmFlags(STEP 4=추출·보고만) → precheck 재생성 → 리뷰어 분류 | STEP 5·6 |
 | V-11 (PC-only 적정성) | 🧠 writer LLM (유일 잔존 — 리뷰 EVAL에 대응 항목 없음) | writer 자가검증 (G=PC 행만 스캔) | STEP 4 |
-| V-12·13 잔여 / V-18 ⑤ (인용 정확성) / V-23 ④ (셋업 일치) | 🔁 리뷰 위임 | precheck round1·2가 동일 룰로 재생성 → 리뷰어 판정 (**writer 직접 판정 폐지** — 보스 TC run_v4 실측 14분 순수 중복, 2026-06-12) | STEP 5·6 |
+| V-12·13 잔여 / V-18 ⑤ (인용 정확성) / V-23 ④ (셋업 일치) | 🔁 리뷰 위임 | precheck round1·2가 동일 룰로 재생성 → 리뷰어 판정 (**writer 직접 판정 폐지** — 한 보스 TC run 실측 14분 순수 중복, 2026-06-12) | STEP 5·6 |
 | EVAL-01/03/07/09판단부/10/11/12/13 (커버리지·품질·교차 판단) | 🧠 LLM-only | 리뷰어 (precheck 결과의 llm_only_evals 목록) | STEP 5·6 |
 | **직변환 골격** (B~E/G/J ↔ 설계 트리·기본기능 표 — Phase 3, fail-closed strict: 미인식 구문=blocker) | ⚙ | direct_convert.js convert (parseDesignTree/parseBasicTable — 룰 SSoT 동거) | **STEP 1·3 게이트(tc-설계.md Step 11.5) → STEP 2 C-14 → STEP 4 Step A0 (최후 안전망)** |
 | **배분표 3자 동치** (트리 leaf=행별 재합산=생성 행수, 선언 합계 검산 — F2 행별 기준) + 복합문 leaf (F4) + 태그 화이트리스트 (F5) | ⚙ | checkAllotmentStrict + parseDesignTree (차단=conversion_blocker → STEP 3 재진입) | 동일 3단 (설계 게이트 → C-14 → Step A0) |
@@ -278,6 +280,6 @@ Bash 툴은 포그라운드 실행. 팀장은 CLI 완료 전엔 progress.log를 
 - precheck rc≠0은 **비차단** — 리뷰어 LLM 전수 폴백 (tc-팀-v2.md 에러 처리표).
 - **직변환 게이트 shift-left (F4 원안, 2026-06-11 v10 실측 반영)**: 동일 convert를 ①설계자 세션 내(tc-설계.md Step 11.5, exit 0까지 인라인 수정) ②STEP 2 C-14(이중 그물) ③STEP 4 Step A0(최후 안전망) 3단으로 실행. 근거 — 결함이 STEP 4까지 내려가면 왕복 1회당 CLI 부팅 3회 ≈ 15분(v10에서 왕복 2회 = +35분), 설계 세션 내 처리 시 0왕복.
 - **F열 1차 문장화 기본기능 선반영 (L4-F8, 2026-06-12 보스 TC run 실측)**: V-18 ④⑤(GlobalDefine 키·큰따옴표 인용)를 검증 단계에만 두면 1차 문장화가 누락(기본 26행 중 24행) → Step A2 차단 → 재문장화 루프 14분. 규칙을 tc-생성.md **Step A ② 문장화 지시에 인라인** — 검증(--full)은 안전망으로 유지. ※ 룰 ID 표기: validate_tc_rows.js는 기본기능=`V-16`(EVAL-16 정렬)·비율=`V-16r`, tc-생성.md 체크리스트는 기본기능=V-18·비율=V-16 — 번호 상이는 기존 매핑(본 표 V-18 행) 참조.
-- **F열 분할 생성 (L4-F9, 2026-06-12 보스 TC run_v2 트랜스크립트 포렌식)**: STEP 4 silent exit(rc=0·stderr 0·부작용 0, 3런 중 2회) 근본 원인 확정 — tc_f_map을 단일 턴에 일괄 생성 → thinking이 출력 상한 32,000 토큰을 정확히 소진(`stop_reason: max_tokens`) → 재시도 턴도 99% thinking 소진 → CLI가 결과 없이 정상 종료. API 에러·컨텍스트 한계 아님. 처방: ①tc-생성.md Step A ② **25행 단위 part 분할 생성** ②팀장 **P1-2b 안전 재진입 분기**(4조건: step≠4·blocker 없음·snapshot 없음·시트 부작용 없음 → attempts 한도 내 재호출. blind 재호출 금지는 유지) ③pipeline_retry가 rc=0을 못 잡는 것은 설계 의도(시끄러운 실패 전용)로 확인.
-- **silent exit 두 번째 패턴 (L4-F10, 2026-06-12 보스 TC run_v3 트랜스크립트 포렌식)**: L4-F9로 max_tokens는 막았으나 **별도 패턴 확인** — tool_result 정상 수신 후 다음 어시스턴트 턴이 생성되지 않고 result 이벤트도 없이 CLI rc=0 종료 (stop_reason 정상=tool_use, 토큰 여유, stderr 0). STEP 4(part1 Write 직후)·STEP 5(서식 적용 단계) 양쪽에서 1회씩 발생 = F열 문장화/시트 쓰기 같은 다(多)턴 긴 작업 구간에서 확률적. **프롬프트로 차단 불가(인프라/-p 모드 레벨)** → 안전망이 유일한 처방: STEP 4=P1-2b 안전 재진입(4조건), STEP 5=P-step5 ⓑ 복구(라이브 무결 검증 후 서식·스냅샷·step_result 수동 보강). v3 런에서 둘 다 실전 작동해 무결 완주(115 TC). ⚠ ⓑ 복구는 라이브 시트가 ID연속·기계지표0·분포합산 일치일 때만 — 불일치 시 STEP4 스냅샷 롤백.
-- **체인 blocker 재진입 배선 결함 + 구간 재개 (L4-F11, 2026-06-12 보스 TC run_v5 실전 적발)**: run_pipeline.sh `run_step3()`가 `--prev-step 2`를 하드코딩 — review 경로(STEP 2 성공 후)만 상정. **blocker 경로(STEP 4 fail 후)에서 transition ①의 step 정체성 대조가 step=4 ≠ prev=2로 CRITICAL 정지** (blocker→STEP 3 루프의 체인 첫 실행에서 드러남). 처방: ①blocker 모드는 `--prev-step` 생략 — 직전 STEP이 fail이므로 success 복제·정체성 대조 대상이 아님 (정체성은 호출부가 step_result fail+conversion_blocker.json으로 이미 확인) ②정지 예외 후 **구간 재개 `--resume-from step3-blocker|step4|step5|step6|final`** 신설 — 시작 시퀀스(Slack 공지·designing 전환) 스킵, epoch 보존(진행시간 정직 누적), 앞 STEP 산출물은 specs 기존 파일 사용. 수동 폴백(팀장 md STEP별 블록)보다 우선. ⚠ 백그라운드 기동 시 `| tail` 파이프 금지 — exit code가 tail 것으로 바뀌어 정지를 완료로 오인 (v5 1차에서 실증).
+- **F열 분할 생성 (L4-F9, 2026-06-12 보스 TC run(v2) 트랜스크립트 포렌식)**: STEP 4 silent exit(rc=0·stderr 0·부작용 0, 3런 중 2회) 근본 원인 확정 — tc_f_map을 단일 턴에 일괄 생성 → thinking이 출력 상한 32,000 토큰을 정확히 소진(`stop_reason: max_tokens`) → 재시도 턴도 99% thinking 소진 → CLI가 결과 없이 정상 종료. API 에러·컨텍스트 한계 아님. 처방: ①tc-생성.md Step A ② **25행 단위 part 분할 생성** ②팀장 **P1-2b 안전 재진입 분기**(4조건: step≠4·blocker 없음·snapshot 없음·시트 부작용 없음 → attempts 한도 내 재호출. blind 재호출 금지는 유지) ③pipeline_retry가 rc=0을 못 잡는 것은 설계 의도(시끄러운 실패 전용)로 확인.
+- **silent exit 두 번째 패턴 (L4-F10, 2026-06-12 보스 TC run(v3) 트랜스크립트 포렌식)**: L4-F9로 max_tokens는 막았으나 **별도 패턴 확인** — tool_result 정상 수신 후 다음 어시스턴트 턴이 생성되지 않고 result 이벤트도 없이 CLI rc=0 종료 (stop_reason 정상=tool_use, 토큰 여유, stderr 0). STEP 4(part1 Write 직후)·STEP 5(서식 적용 단계) 양쪽에서 1회씩 발생 = F열 문장화/시트 쓰기 같은 다(多)턴 긴 작업 구간에서 확률적. **프롬프트로 차단 불가(인프라/-p 모드 레벨)** → 안전망이 유일한 처방: STEP 4=P1-2b 안전 재진입(4조건), STEP 5=P-step5 ⓑ 복구(라이브 무결 검증 후 서식·스냅샷·step_result 수동 보강). v3 런에서 둘 다 실전 작동해 무결 완주(115 TC). ⚠ ⓑ 복구는 라이브 시트가 ID연속·기계지표0·분포합산 일치일 때만 — 불일치 시 STEP4 스냅샷 롤백.
+- **체인 blocker 재진입 배선 결함 + 구간 재개 (L4-F11, 2026-06-12 보스 TC run(v5) 실전 적발)**: run_pipeline.sh `run_step3()`가 `--prev-step 2`를 하드코딩 — review 경로(STEP 2 성공 후)만 상정. **blocker 경로(STEP 4 fail 후)에서 transition ①의 step 정체성 대조가 step=4 ≠ prev=2로 CRITICAL 정지** (blocker→STEP 3 루프의 체인 첫 실행에서 드러남). 처방: ①blocker 모드는 `--prev-step` 생략 — 직전 STEP이 fail이므로 success 복제·정체성 대조 대상이 아님 (정체성은 호출부가 step_result fail+conversion_blocker.json으로 이미 확인) ②정지 예외 후 **구간 재개 `--resume-from step3-blocker|step4|step5|step6|final`** 신설 — 시작 시퀀스(Slack 공지·designing 전환) 스킵, epoch 보존(진행시간 정직 누적), 앞 STEP 산출물은 specs 기존 파일 사용. 수동 폴백(팀장 md STEP별 블록)보다 우선. ⚠ 백그라운드 기동 시 `| tail` 파이프 금지 — exit code가 tail 것으로 바뀌어 정지를 완료로 오인 (v5 1차에서 실증).

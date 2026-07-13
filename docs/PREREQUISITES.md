@@ -1,6 +1,6 @@
 # Prerequisites
 
-The TC Team v2 pipeline coordinates Claude Code, Node.js, and (optionally) Google APIs and Confluence. This document lists every dependency, why it's needed, and how to install it.
+The TC Team pipeline coordinates Claude Code, Node.js, and (optionally) Google APIs and Confluence. This document lists every dependency, why it's needed, and how to install it.
 
 > **Default output is a local Excel (`.xlsx`) file** via `/tc-로컬` — no Google account or OAuth setup needed. The Google section below is **only for the optional Google Sheets output path**.
 
