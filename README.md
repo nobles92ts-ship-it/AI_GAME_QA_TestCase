@@ -17,7 +17,7 @@
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
 
 > 🧭 **Two generations in one repo — what runs today vs. where it's going.**
-> What `install.ps1` installs — and what `/tc-v2` / `/tc-로컬` run — **today** is the **proven multi-agent pipeline** (`agents/` · `skills/` · `scripts/`). The **next-generation deterministic engine** — the architecture this README leads with — lives in [`tc_v3/`](tc_v3/README.md) as a **library preview**: every stage is runnable and regression-tested, but the single-command driver that chains them end-to-end is still on the roadmap (see **Roadmap** below).
+> What `install.ps1` installs — and what `/tc-team` / `/tc-로컬` run — **today** is the **proven multi-agent pipeline** (`agents/` · `skills/` · `scripts/`). The **next-generation deterministic engine** — the architecture this README leads with — lives in [`tc_v3/`](tc_v3/README.md) as a **library preview**: every stage is runnable and regression-tested, but the single-command driver that chains them end-to-end is still on the roadmap (see **Roadmap** below).
 
 ---
 
@@ -49,7 +49,7 @@ irm https://raw.githubusercontent.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/mai
 - **Coverage ledger** — every source rule ends the run as covered, justifiably excluded, or a gate FAIL — missing rules are named, not hidden in a percentage
 - **Measured** (cold-run A/B, n=1, same spec) — **2.2× faster wall-clock** (159 → 73 min), **0 invented numerics**, **100% of rules explained** by the ledger
 - **What ships today** — the proven multi-agent pipeline: 4 spec formats auto-detected (Confluence / PDF / Word / Excel), local `.xlsx` (no Google) or Google Sheets output, checkpoint resume, everything via Claude Code CLI (no external API)
-- **Install = one line, run = one command** — `install.ps1`, then `/tc-로컬` (local Excel) or `/tc-v2` (Google Sheets)
+- **Install = one line, run = one command** — `install.ps1`, then `/tc-로컬` (local Excel) or `/tc-team` (Google Sheets; legacy `/tc-v2` still works)
 
 ---
 
@@ -154,7 +154,7 @@ Then in Claude Code — **local Excel output (no Google needed):**
 …produces a local **`.xlsx`** file. Or, for **Google Sheets output** (one-time Google connection required):
 
 ```
-/tc-v2 <google-sheets-url> <spec-source> [<spec-source-2> ...]
+/tc-team <google-sheets-url> <spec-source> [<spec-source-2> ...]
 ```
 
 `<spec-source>` can be any of:
@@ -231,7 +231,8 @@ AI_GAME_QA_TestCase/
 │   └── qa-reviewer-v2.md / tc-fixer-v2.md   # legacy split R1 agents — rollback only
 │
 ├── commands/
-│   ├── tc-v2.md                   # /tc-v2 slash command (entry point)
+│   ├── tc-team.md                 # /tc-team slash command (entry point)
+│   ├── tc-v2.md                   # /tc-v2 — legacy alias, same behavior
 │   ├── tc-로컬.md                 # /tc-로컬 — local .xlsx output (no Google)
 │   └── tc-이미지매칭.md           # /tc-이미지매칭 — optional spec-image link matching
 │

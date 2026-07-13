@@ -96,14 +96,14 @@ Open Claude Code in the repo. **Easiest — local Excel output, no Google needed
 /tc-로컬 <feature-name> <spec-file>
 ```
 
-…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (Steps 2 & 5 required), use the slash command or the natural-language trigger:
+…produces a local **`.xlsx`** file. Or, for **Google Sheets output** (Steps 2 & 5 required), use the slash command or the natural-language trigger (the older `/tc-v2` / `TC 팀 v2로 진행` still work):
 
 ```
-/tc-v2 <google-sheets-url> <spec-source-1> [<spec-source-2> ...]
+/tc-team <google-sheets-url> <spec-source-1> [<spec-source-2> ...]
 ```
 or simply:
 ```
-TC 팀 v2로 진행
+tc-team으로 진행
 Spreadsheet: https://docs.google.com/spreadsheets/d/<ID>/edit
 Confluence: https://your-site.atlassian.net/wiki/spaces/PROJECT/pages/111
 ```
@@ -121,13 +121,13 @@ You can mix multiple types in one batch run — each feature gets its own isolat
 
 ```bash
 # Confluence
-/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit https://your.atlassian.net/wiki/spaces/PROJECT/pages/111
+/tc-team https://docs.google.com/spreadsheets/d/ABC.../edit https://your.atlassian.net/wiki/spaces/PROJECT/pages/111
 
 # PDF
-/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit C:/specs/my_feature.pdf
+/tc-team https://docs.google.com/spreadsheets/d/ABC.../edit C:/specs/my_feature.pdf
 
 # Mixed batch (quote paths that contain spaces)
-/tc-v2 https://docs.google.com/spreadsheets/d/ABC.../edit \
+/tc-team https://docs.google.com/spreadsheets/d/ABC.../edit \
        https://your.atlassian.net/wiki/.../pages/111 \
        C:/specs/feature2.pdf \
        "C:/my docs/feature3.docx"
@@ -172,6 +172,6 @@ Environment variables `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` work as an alternat
 | `node: command not found` | Install Node.js 20 LTS, then re-run the setup script. |
 | `client_secret.json not found` | Complete Step 2. |
 | Placeholder `{WORK_ROOT}` still visible in an installed file | Re-run `setup.ps1` / `setup.sh` — it resolves tokens in place. |
-| `/tc-v2` not recognized in Claude Code | Confirm `commands/tc-v2.md` was copied to `$CLAUDE_HOME/commands/` (re-run setup). |
+| `/tc-team` not recognized in Claude Code | Confirm `commands/tc-team.md` was copied to `$CLAUDE_HOME/commands/` (re-run setup). |
 | Confluence page can't be read | Register the Atlassian connector (Step 4), or feed the spec as a PDF/Word/Excel file instead. |
 | Slack "TC 생성 요청 접수" kickoff notice never appears | Expected until you enable it — the bot token is gitignored, so a freshly cloned repo has none. Set it up via [Optional: Slack kickoff notice](#optional-slack-kickoff-notice). When skipped, a hint is logged to `chain.log` and the pipeline continues normally. |
