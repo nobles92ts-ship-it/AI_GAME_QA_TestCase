@@ -16,6 +16,9 @@
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
 
+> 🧪 **New in v3.0.0 — [`tc_v3/`](tc_v3/README.md): a next-generation deterministic engine (preview).**
+> The LLM writes only sentences and judgment; deterministic code owns structure, gates, and a rule-coverage ledger. A cold-run A/B against the v2 pipeline measured **2.2× faster wall-clock with higher quality** under adversarial adjudication. See the [tc-v3 README](tc_v3/README.md) (Mermaid architecture) and the [architecture guide](tc_v3/docs/tc-v3-guide.html). It ships alongside the v2 pipeline below.
+
 ---
 
 ## ⚡ 딸깍 설치 (한 줄) — 당신의 Claude로, 무료로

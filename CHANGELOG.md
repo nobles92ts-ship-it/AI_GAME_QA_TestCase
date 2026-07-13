@@ -4,6 +4,27 @@ All notable changes to TC Team v2 are documented here.
 
 ---
 
+## [v3.0.0] — 2026-07-13
+
+### Added
+- **`tc_v3/` — third-generation deterministic pipeline (preview).** The LLM owns only sentences and judgment; deterministic code owns structure, gates, and a rule-coverage ledger. Ships as 12 deterministic utilities (`tc_v3/lib/`) plus a unit suite (`tc_v3/test/`, 76 GREEN with no setup; 82 total incl. fixture-gated integration smokes).
+  - **Two-lane architecture** — LLM fan-out (sentence generation, 3-lens adversarial review, judge) behind deterministic gates (echo/hash integrity, content rules, coverage ledger). The sheet is touched exactly once, after every gate passes.
+  - **Coverage ledger** (`traceability.js`) — every spec rule is covered, justifiably excluded, or fails the gate, replacing the misleading token-overlap percentage.
+  - **Content gate** (`content_gate.js`) — inherits the v2 abstract-phrasing rules and adds delegation-phrasing detection (block when unflagged / warn when flagged).
+- **Docs** — `tc_v3/README.md` (expert overview with Mermaid architecture diagrams) and `tc_v3/docs/tc-v3-guide.html` (12-section architecture guide with diagrams, gate catalog, and troubleshooting).
+
+### Measured (cold-run A/B vs the v2 pipeline, same source spec, n=1)
+| Metric | v2 | v3 |
+|--------|----|----|
+| Wall-clock | 158.8 min | **73.0 min (2.2× faster)** |
+| Invented numerics | 2 | **0** |
+| Rule ledger | 40 covered / 47 unexplained | **100% explained (covered ∪ justified-exclusion)** |
+
+### Notes
+- tc-v3 is a preview of the next-generation engine and ships alongside the v2 pipeline. The single-command driver and batch orchestration are on the roadmap.
+
+---
+
 ## [v2.3.7] — 2026-07-06
 
 ### Changed
