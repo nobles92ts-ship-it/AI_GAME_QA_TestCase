@@ -6,7 +6,7 @@ TC Team turns a game-feature spec (Confluence / PDF / Word / Excel) into a fully
 
 |  | Multi-agent pipeline | Deterministic engine (`tc_v3/`) |
 |--|----------------------|--------------------------------|
-| **Status** | **Runs today.** This is what `install.ps1` / `setup.ps1` install and what `/tc-v2` · `/tc-로컬` execute end-to-end. | **Library preview.** Every stage is runnable and regression-tested individually; the single-command driver that chains them end-to-end is on the roadmap. |
+| **Status** | **Runs today.** This is what `install.ps1` / `setup.ps1` install and what `/tc-team` · `/tc-로컬` execute end-to-end. | **Library preview.** Every stage is runnable and regression-tested individually; the single-command driver that chains them end-to-end is on the roadmap. |
 | **Design** | orchestrator + isolated LLM worker processes | two lanes — LLM owns sentences & judgment, deterministic code owns structure & facts |
 | **Where documented** | second half of this page | first half of this page · [`tc_v3/README.md`](../tc_v3/README.md) · [engine guide](../tc_v3/docs/tc-v3-guide.html) |
 

@@ -1,21 +1,19 @@
-# /tc-v2 — TC 팀 v2 파이프라인 실행
-
-> ℹ️ 정식 명칭이 `/tc-team`으로 변경되었다. 이 커맨드는 구명칭 호환용으로 유지되며 동작은 동일하다.
+# /tc-team — TC 팀 v2 파이프라인 실행
 
 `tc-팀-v2` 에이전트를 사용해 TC 전체 파이프라인을 실행한다.
 
 ## 사용법
 ```
-/tc-v2 <스프레드시트 링크> <Confluence URL 1> <Confluence URL 2> ...
+/tc-team <스프레드시트 링크> <Confluence URL 1> <Confluence URL 2> ...
 ```
 
 ## 예시
 ```
 # 단일
-/tc-v2 https://docs.google.com/spreadsheets/d/1xKq.../edit https://{CONFLUENCE_SITE}/.../pages/111
+/tc-team https://docs.google.com/spreadsheets/d/1xKq.../edit https://{CONFLUENCE_SITE}/.../pages/111
 
 # 배치 (3~4개)
-/tc-v2 https://docs.google.com/spreadsheets/d/1xKq.../edit https://{CONFLUENCE_SITE}/.../pages/111 https://{CONFLUENCE_SITE}/.../pages/222 https://{CONFLUENCE_SITE}/.../pages/333
+/tc-team https://docs.google.com/spreadsheets/d/1xKq.../edit https://{CONFLUENCE_SITE}/.../pages/111 https://{CONFLUENCE_SITE}/.../pages/222 https://{CONFLUENCE_SITE}/.../pages/333
 ```
 
 ## 동작
@@ -28,3 +26,5 @@
 - 스프레드시트 링크 + Confluence 링크 **둘 다** 필요
 - Confluence만 제공 시 에이전트가 스프레드시트 링크를 요청 후 대기
 - 배치 실행 시 앞 기능이 실패하면 해당 기능만 중단하고 다음 기능 계속 진행
+
+> 구명칭 `/tc-v2`도 동일하게 동작한다(호환 유지).

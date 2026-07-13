@@ -125,4 +125,4 @@ After setup, open Claude Code in the repo and run:
 ```
 /tc-로컬
 ```
-If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. (`/tc-v2` — the Google Sheets path — should likewise be recognized.) See [SETUP.md](./SETUP.md) for the full first-run walkthrough.
+If the slash command is recognized (and `~/.claude/agents/tc-팀-v2.md` exists), the integration is complete. (`/tc-team` — the Google Sheets path — should likewise be recognized.) See [SETUP.md](./SETUP.md) for the full first-run walkthrough.
