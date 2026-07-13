@@ -1,4 +1,4 @@
-# AI_GAME_QA_TestCase — TC Team v2
+# AI_GAME_QA_TestCase — TC Team
 
 <a href="https://claude.ai/code">
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40">
@@ -8,7 +8,7 @@
   <img src="landing-button.svg" height="60" alt="Landing page">
 </a>
 
-> **Multi-agent, multi-model game-QA test-case automation pipeline.**
+> **Game-QA test-case automation — the LLM writes only sentences and judgment; deterministic code owns structure and facts.**
 > Drop in a spec (Confluence / PDF / Word / Excel) — get back a fully reviewed **~100-TC test sheet** as a local **Excel (`.xlsx`)** file (no Google needed) — or a Google Sheet if you want one. Fully automated, zero manual click-through.
 
 [![Landing](https://img.shields.io/badge/Landing-tc--team--v2--landing.vercel.app-10B981?style=flat)](https://tc-team-v2-landing.vercel.app/)
@@ -16,8 +16,8 @@
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
 
-> 🧪 **New in v3.0.0 — [`tc_v3/`](tc_v3/README.md): a next-generation deterministic engine (preview).**
-> The LLM writes only sentences and judgment; deterministic code owns structure, gates, and a rule-coverage ledger. A cold-run A/B against the v2 pipeline measured **2.2× faster wall-clock with higher quality** under adversarial adjudication. See the [tc-v3 README](tc_v3/README.md) (Mermaid architecture) and the [architecture guide](tc_v3/docs/tc-v3-guide.html). It ships alongside the v2 pipeline below.
+> 🧭 **Two generations in one repo — what runs today vs. where it's going.**
+> What `install.ps1` installs — and what `/tc-v2` / `/tc-로컬` run — **today** is the **proven multi-agent pipeline** (`agents/` · `skills/` · `scripts/`). The **next-generation deterministic engine** — the architecture this README leads with — lives in [`tc_v3/`](tc_v3/README.md) as a **library preview**: every stage is runnable and regression-tested, but the single-command driver that chains them end-to-end is still on the roadmap (see **Roadmap** below).
 
 ---
 
@@ -38,87 +38,90 @@ irm https://raw.githubusercontent.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/mai
 
 설치 후: 터미널에서 `claude` 실행 →
 - **가장 쉬운 방법 (구글 불필요)**: `/tc-로컬 <기능명> <기획서파일>` → 테스트케이스가 **엑셀(`.xlsx`)** 파일로 자동 생성됩니다.
-- **(선택) 구글 시트**: **스프레드시트 링크 + 기획서 링크**를 함께 주면 TC 팀 v2가 시트에 생성합니다.
+- **(선택) 구글 시트**: **스프레드시트 링크 + 기획서 링크**를 함께 주면 TC 팀이 시트에 생성합니다.
 
 ---
 
 ## ⚡ TL;DR
 
-- **6-stage multi-agent pipeline** — Claude Opus for analysis/design, Sonnet for all other stages
-- **4 input formats** — Confluence URL / PDF / Word (`.doc`, `.docx`) / Excel (`.xlsx`, `.xls`), auto-detected
-- **Smart model routing** — Opus for deep reasoning (STEP 1), Sonnet for everything else — all via Claude Code CLI, no external API needed
-- **Hybrid subagent + orchestrator pattern** — orchestrator spawns each worker as an isolated `claude` CLI process
-- **Resume logic** — checkpoint-based via `state.json`; survives mid-run interruptions
-- **SSoT rule management** — one skill file per stage, every agent reloads on change
-- **Auto-completion tail** — master dashboard refresh + K/L project panel + Google Drive sync + tab color/order sort
-- **Zero human click-through time beyond the initial 2 links** (~1 min of human attention per ~100-TC run)
+- **Two-lane architecture** — the LLM writes only sentences and judgment; **deterministic code owns structure, gates, and the coverage ledger** (engine preview in [`tc_v3/`](tc_v3/README.md))
+- **6-stage engine pipeline** — S1 Design (Opus, once) → S2 Gate + Slice (deterministic) → S3 sentence fan-out (Sonnet, parallel) → S4 adversarial review, 3 lenses + judge (Sonnet) → S5 Apply + Gates (deterministic) → S6 Live write + Finalize (deterministic) — **the sheet is written exactly once**
+- **Coverage ledger** — every source rule ends the run as covered, justifiably excluded, or a gate FAIL — missing rules are named, not hidden in a percentage
+- **Measured** (cold-run A/B, n=1, same spec) — **2.2× faster wall-clock** (159 → 73 min), **0 invented numerics**, **100% of rules explained** by the ledger
+- **What ships today** — the proven multi-agent pipeline: 4 spec formats auto-detected (Confluence / PDF / Word / Excel), local `.xlsx` (no Google) or Google Sheets output, checkpoint resume, everything via Claude Code CLI (no external API)
+- **Install = one line, run = one command** — `install.ps1`, then `/tc-로컬` (local Excel) or `/tc-v2` (Google Sheets)
 
 ---
 
-## 📊 Measured metrics (~100-TC feature run)
+## 📊 Measured metrics — cold-run A/B
 
-| Metric | Manual QA | TC Team v2 | Δ |
+Same source spec (~86 KB wiki document), both pipelines run from cold, **n=1**:
+
+| Metric | Multi-agent pipeline (ships today) | Deterministic engine (`tc_v3/`) | Δ |
 |--------|:---:|:---:|:---:|
-| Hands-on engineer time | ~3 hours | ~40 min | **~80% ↓** |
-| Actual human click/type time | ~3 hours | **~1 min** | **~180× ↓** |
-| Review rounds | 1 (manual) | 2 (auto, merged R2+Fix) | 2× |
-| Dashboard / Drive sync | manual | automatic | ∞ |
-| Supported input formats | 1 | **4** | — |
-| Resume on interruption | ❌ | ✅ checkpoint-based | — |
-| External API/server required | — | **None** (Claude Code CLI only) | — |
+| Wall-clock to live tab | 158.8 min / 178 rows | 73.0 min / 184 rows | **2.2× faster** |
+| Pipeline-specific segments (excl. shared design stage) | 81.2 min | 29.1 min | **−64%** |
+| Writing stage | 55.2 min | 5.4 min | parallel fan-out + deterministic assembly |
+| Invented numeric values in final output | 2 | **0** | caught by the source-check lens |
+| Source rules explained (covered or justified exclusion) | 47 unexplained | **100% explained** | 3 real gaps found and sealed |
 
-Output quality benchmarked against a 3-year senior QA engineer: terminology consistency, verifiability, spec coverage, and the EVAL 01–19 review criteria all measured at parity or better.
+Honesty notes: n=1 on one spec — treat this as a **validated case study, not a benchmark suite**. The design stage uses the same mechanism in both, so the fair comparison is the pipeline-specific **−64%**. Quality verdicts come from an adversarial adjudication that re-checked both sides' claims against the artifact files — and it also logged defect classes in the engine's own output as an open backlog.
 
 ---
 
 ## 🏗 Architecture
 
-![TC Team v2 Pipeline](assets/pipeline-diagram.png)
+**Two lanes.** The LLM owns only sentences and judgment; deterministic code owns structure and facts. Every LLM artifact must pass a machine gate before it can affect anything downstream.
 
-**Hybrid subagent + orchestrator**. `tc-팀-v2` is called by main Claude via the Task tool — so it runs in its own context — and internally dispatches each stage to a dedicated worker agent as a **separate `claude` CLI process** spawned via Bash. Every worker gets an isolated context window; the orchestrator writes checkpoints to `state.json` before each step transition and resumes from the last successful step on restart.
+| Lane | Owns |
+|------|------|
+| **LLM lane** — creative segments only, parallel fan-out allowed | design judgment · step sentences · review findings · fix-plan verdicts · semantic rule-to-TC mapping |
+| **Deterministic lane** — code-owned, regression-tested | row skeletons · ids, formatting, grouping · patch application · gate checks · ledger math · the single sheet write |
 
-### Pipeline stages
+### Engine pipeline (S1–S6)
 
-| # | Stage | Agent | Model | Conditional | ~Time |
-|---|-------|-------|-------|-------------|:---:|
-| INIT | Workspace init + spec ingestion | orchestrator | Node.js + MCP | — | — |
-| 1 | Spec analysis & TC design | `tc-designer-v2` | Claude Opus · `effort:med` | — | ~40m |
-| 2 | Design inspection (C-01 ~ C-13) | `tc-설계검수-v2` | Claude Sonnet | — | ~10m |
-| 3 | Design fix (max 1×) | `tc-designer-v2` | Sonnet · Opus if analysis-gap | `needs_fix == true` | ~10m |
-| 4 | TC authoring → Google Sheets | `tc-writer-v2` | Claude Sonnet | — | ~3m |
-| 5 | Review R1 + Fix R1 (merged one-context pass) | `tc-리뷰1수정1-v2` | Claude Sonnet | — | ~40m |
-| 6 | Review R2 + Fix R2 (merged one-context pass) | `tc-리뷰2수정2-v2` | Claude Sonnet | — | ~10m |
-| DONE | Dashboard refresh + K·L panel + Drive sync + tab color sort | orchestrator | Node.js | — | ~2m |
+| Stage | Lane / model | What happens |
+|-------|--------------|--------------|
+| **S1 · Design** | LLM — Opus, exactly once | spec source → analysis + design docs; an identical design hash on re-run skips the stage |
+| **S2 · Gate + Slice** | deterministic | design gate (convert dry-run on an isolated copy) · slicer decomposes the source into sections + rules — the ledger anchors |
+| **S3 · Sentence fan-out** | LLM — Sonnet, parallel | code converts the design into a row skeleton; agents fill in **only the step-sentence column**, 25-row chunks in parallel; merge blocks on any echo / hash / count mismatch |
+| **S4 · Adversarial review** | LLM — Sonnet | 3 independent lenses (structure / quality / source-check) in parallel → a judge cross-examines, drops false positives, and emits fix-plan patches + the coverage ledger |
+| **S5 · Apply + Gates** | deterministic | patches applied only if the recorded before-value matches the actual cell; regroup; content gate |
+| **S6 · Live write + Finalize** | deterministic | the **single** sheet contact — idempotent write, read-back QA (what was written == what is there), then housekeeping |
 
-> The round-1 and round-2 review/fix passes were each merged into a single agent in Phase 2-B. The earlier split agents (`qa-reviewer-v2`, `tc-fixer-v2`) are kept in `agents/` for rollback but are **not** called by the active pipeline.
+**Four deterministic gate families** — **convert · merge · content · ledger** — sit between the lanes. A failed gate re-runs only the failing chunk (S3) or triggers a second fix-plan round (S4); nothing touches the live sheet until every gate passes.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full data-flow diagram, resume-logic implementation, and orchestration internals.
+**Coverage ledger.** A single coverage percentage can hide *which* rule is missing. The ledger instead requires every rule extracted from the source to end the run as **covered** (mapped to TC ids), **justifiably excluded** (four allowed reasons), or a **gate FAIL** — missing rules are called by name.
+
+Full detail with Mermaid diagrams: [`tc_v3/README.md`](tc_v3/README.md) · deep-dive guide: [`tc_v3/docs/tc-v3-guide.html`](tc_v3/docs/tc-v3-guide.html).
+
+### What installs and runs today — the multi-agent pipeline
+
+![Multi-agent pipeline](assets/pipeline-diagram.png)
+
+The execution path this repo installs is a **hybrid subagent + orchestrator** design: the orchestrator dispatches each stage to a dedicated worker agent as a **separate `claude` CLI process**, so every worker gets an isolated context window. It runs 6 stages (spec analysis & design → design inspection → conditional design fix → TC authoring → two merged review+fix passes), writes checkpoints to `state.json` before each transition, and resumes from the last successful step on restart. This is the pipeline the deterministic engine was A/B-measured against — and it remains the supported end-to-end path until the engine's single driver lands.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for both: the engine architecture in depth and the current pipeline's stage table, data flow, and resume internals.
 
 ---
 
 ## 🧠 Smart model routing — the design decision
 
-We don't throw the same model at every stage. Each model has a sweet spot:
+One deep-reasoning call, cheap parallel fan-out, and **no model at all** where code is stronger:
 
-| Model | Role | Stages |
-|-------|------|--------|
-| **Claude Opus** | Deep reasoning — spec analysis & design | STEP 1 (+ STEP 3 if an analysis gap is detected) |
-| **Claude Sonnet** | Balanced — all other stages | STEP 2–6 |
+| Route | Used for | Why |
+|-------|----------|-----|
+| **Claude Opus — exactly once** | S1 spec analysis & design | the only stage that needs deep, whole-spec reasoning |
+| **Claude Sonnet — parallel fan-out** | S3 step sentences (25-row chunks) · S4 review lenses + judge | many small, independent language tasks — parallelism beats a bigger model |
+| **No LLM — deterministic code** | skeletons, gates, ledger math, patch application, the sheet write | structure and facts are cheaper, faster, and safer as code |
 
-- **Opus handles**: spec analysis (complex judgment, `--effort medium`)
-- **Sonnet handles**: design inspection, TC authoring, review, fix-application, merged review+fix
-
-All models are called through **Claude Code CLI** (`claude --model <model> --agent <agent>`) — no external API keys, no SDK dependencies, no local model servers needed.
-
-| Stage | Before (v1 — Gemma4 local) | After (v2 — Sonnet CLI) | Improvement |
-|-------|:---:|:---:|:---:|
-| STEP 4 TC authoring | Gemma4 · ~10 min · preamble bugs | Sonnet CLI · ~3 min · clean output | 3× faster, no bugs |
-| Review + fix passes | Gemma4 · quota limits | Sonnet CLI · merged review+fix, no limits | reliable, fewer rounds |
-| Setup complexity | Ollama install + VRAM + API key | None (Claude Code built-in) | Zero setup |
+All model calls go through **Claude Code CLI** — no external API keys, no SDK dependencies, no local model servers needed. The multi-agent pipeline that ships today routes the same way at a coarser grain: Opus for the design stage, Sonnet for everything else.
 
 ---
 
 ## 🚀 Quick start
+
+> **What this installs:** the proven **multi-agent pipeline** — today's end-to-end execution path. The deterministic engine ships alongside it in [`tc_v3/`](tc_v3/README.md) as a library preview (each stage individually runnable and tested; the single-command driver is on the roadmap). There is no separate install step for it — it arrives with the clone.
 
 Assumes [Claude Code](https://claude.ai/code) is already installed. Everything else the setup script handles.
 
@@ -198,6 +201,7 @@ Two MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.mcp
 |-------|------|
 | Agent runtime | Claude Code CLI (Opus + Sonnet, selected via `--model` aliases) |
 | Orchestration | Bash + Node.js (CLI process spawning, state persistence, Bash↔MCP bridging) |
+| Deterministic engine (preview) | `tc_v3/lib/` — 12 single-file Node utilities (slicer, gates, patch applier, sheet writer…) + regression tests (`node tc_v3/test/run_all.js`) |
 | Input parsers | `xlsx` (Excel) · Claude Code native file read (PDF, Word) · MCP (Confluence) |
 | Output | Local **Excel (`.xlsx`)** via `xlsx` (default, no Google) · Google Sheets API via `googleapis` (optional) |
 | MCP integrations | `google-sheets` (third-party), `claude_ai_Atlassian` |
@@ -208,11 +212,18 @@ Two MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.mcp
 
 ```
 AI_GAME_QA_TestCase/
-├── agents/                        # Claude agent definitions
+├── tc_v3/                         # ★ Next-generation deterministic engine — library preview
+│   ├── lib/                       #   12 deterministic utilities (slicer, design/content gates,
+│   │                              #   fix-plan applier, traceability ledger, sheet writer…)
+│   ├── test/                      #   node tc_v3/test/run_all.js — green with no setup
+│   ├── docs/tc-v3-guide.html      #   full architecture guide (12 sections, diagrams, ops)
+│   └── README.md                  #   engine overview with Mermaid diagrams
+│
+├── agents/                        # Claude agent definitions (multi-agent pipeline — runs today)
 │   ├── tc-팀-v2.md                # Orchestrator — state.json + worker spawning
 │   ├── tc-designer-v2.md          # STEP 1 (Opus) + STEP 3 design fix
 │   ├── tc-설계검수-v2.md          # STEP 2 — design quality gate (C-01~C-13)
-│   ├── tc-대조-v2.md              # STEP 2 — optional DXR cross-reference (off by default)
+│   ├── tc-대조-v2.md              # STEP 2 — optional knowledge-base cross-reference (off by default)
 │   ├── tc-writer-v2.md            # STEP 4 — TC authoring (Sonnet)
 │   ├── tc-리뷰1수정1-v2.md        # STEP 5 — merged R1 review + fix
 │   ├── tc-리뷰2수정2-v2.md        # STEP 6 — merged R2 review + fix
@@ -265,26 +276,27 @@ AI_GAME_QA_TestCase/
 
 ## 🔮 Roadmap
 
-### ✅ Phase 1 — Multi-source TC automation & auto-completion (shipped)
+### ✅ Shipped — multi-agent pipeline (today's execution path)
 - Confluence / PDF / Word / Excel → local Excel (`.xlsx`) by default, or Google Sheets (optional)
-- 6-stage multi-agent pipeline (Claude Opus for STEP 1, Sonnet for STEP 2–6, via CLI)
-- Merged review + fix pass for faster quality cycles
-- Auto-completion tail: dashboard / K·L panel / Drive sync
-- Tab color/sort auto-management: M3 dashboard button trigger + daily 09:00 KST auto-sort (`tab_manager.gs` + `deploy_appscript.js`)
+- 6-stage pipeline (Opus for design, Sonnet for everything else, all via Claude Code CLI), merged review + fix passes
+- Checkpoint resume; auto-completion tail: dashboard / K·L panel / Drive sync / tab color-sort (`tab_manager.gs` + `deploy_appscript.js`)
 - `tc-updater-v2` for surgical spec-change updates (Confluence only for now)
 
-### 🔜 Phase 2 — Intelligent TC management
-- TC history version control & diff view
-- Cross-feature dependency analysis
-- Auto-classification of automatable TCs
-- Auto QA-report generation (PDF / Markdown / Confluence)
-- PDF/Word spec-change detection extension for `tc-updater-v2`
+### ✅ Shipped — deterministic engine core ([`tc_v3/`](tc_v3/README.md), library preview)
+- S1–S6 stage libraries with four deterministic gate families (convert · merge · content · ledger)
+- Adversarial review (3 lenses + judge), coverage ledger, single-contact idempotent sheet writer with read-back QA
+- Regression tests green with no setup; cold-run A/B validated on a real spec (n=1)
 
-### 🌟 Phase 3 — Physical test execution
-- Generate automation scripts from TCs
-- Auto-run against game builds
-- Auto-reflect execution results back to the TC sheet
-- Regression test automation loop
+### 🔜 Next — single engine driver
+- One command for the whole engine chain (design → live write → finalize) with kickoff, state ledger, and per-stage timing built in — making the engine the execution path behind the existing entry points
+- Align the review lenses with the existing 20-rule review checklist; inject learned patterns into prompts
+- Fix the remaining known defects from the A/B backlog; speed up the final labeling step
+
+### 🌟 Later — intelligent TC management & physical execution
+- TC history version control & diff view; cross-feature dependency analysis
+- Auto-classification of automatable TCs; auto QA-report generation (PDF / Markdown / Confluence)
+- PDF/Word spec-change detection extension for `tc-updater-v2`
+- Generate automation scripts from TCs, auto-run against game builds, and reflect results back to the sheet
 
 ---
 
