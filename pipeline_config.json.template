@@ -1,0 +1,45 @@
+{
+    "version": "2.0",
+    "_comment": "개인 설정은 pipeline_config.json에 저장. 이 파일을 복사해서 사용.",
+    "paths": {
+        "nodejs": "C:/YOUR_PATH/node.exe",
+        "projectRoot": "C:/YOUR_PATH/AI_AntiGravity",
+        "scriptsUtil": "C:/YOUR_PATH/AI_AntiGravity/scripts/util",
+        "scriptsV2": "C:/YOUR_PATH/AI_AntiGravity/scripts/util/v2",
+        "teamDir": "C:/YOUR_PATH/AI_AntiGravity/team",
+        "specsDir": "C:/YOUR_PATH/AI_AntiGravity/team/specs",
+        "statusDir": "C:/YOUR_PATH/AI_AntiGravity/team/status",
+        "lessonsDir": "C:/YOUR_PATH/AI_AntiGravity/team/lessons",
+        "stateFile": "C:/YOUR_PATH/AI_AntiGravity/team/state.json",
+        "timingFile": "C:/YOUR_PATH/AI_AntiGravity/team/timing.csv",
+        "learnedPatterns": "C:/YOUR_PATH/AI_AntiGravity/team/learned_patterns.json",
+        "oauthModule": "C:/YOUR_PATH/AI_AntiGravity/scripts/util/google_auth.js"
+    },
+    "drive": {
+        "specsFolderId": "YOUR_SPECS_FOLDER_ID",
+        "tcFolderId": "YOUR_TC_FOLDER_ID"
+    },
+    "confluence": {
+        "site": "YOUR_SITE.atlassian.net"
+    },
+    "dashboards": {
+        "YOUR_SHEET_ID_1": "update_dashboard.js",
+        "YOUR_SHEET_ID_2": "update_dashboard_alpha.js",
+        "YOUR_SHEET_ID_3": "update_dashboard_gameqa.js"
+    },
+    "model": "sonnet",
+    "costPerStage": {
+        "설계": 0.030,
+        "작성": 0.050,
+        "리뷰": 0.020,
+        "수정": 0.030
+    },
+    "budgetWarningThreshold": 2.00,
+    "coverageGapThresholds": {
+        "warningPercent": 10,
+        "failPercent": 20
+    },
+    "regressionThresholds": {
+        "maxAllowedPercent": 5
+    }
+}

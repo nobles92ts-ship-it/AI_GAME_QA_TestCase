@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tc-team 설계, 아주 쉽게</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #ffffff; --ink: #1a2233; --sub: #5b6575;
+    --line: #e3e7ee; --ai: #8b5cf6; --ai-bg: #f3eeff; --code: #2563eb; --code-bg: #e9f0fe;
+    --warn: #b45309; --warn-bg: #fef3e2; --ok: #15803d; --ok-bg: #e7f6ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --card: #1a1f2a; --ink: #e8ecf3; --sub: #9aa5b5;
+      --line: #2a3242; --ai: #a78bfa; --ai-bg: #2a2440; --code: #60a5fa; --code-bg: #1b2a45;
+      --warn: #f0a24a; --warn-bg: #3a2c17; --ok: #4ade80; --ok-bg: #16301f;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: 'Segoe UI', 'Malgun Gothic', Pretendard, sans-serif;
+    line-height: 1.7; padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 30px; letter-spacing: -0.5px; }
+  .tagline { font-size: 17px; color: var(--sub); margin: 10px 0 6px; }
+  .tagline b { color: var(--ink); }
+  h2 { font-size: 21px; margin: 56px 0 6px; padding-top: 24px; border-top: 1px solid var(--line); letter-spacing: -0.3px; }
+  h2 .no { color: var(--code); margin-right: 8px; }
+  .lead { color: var(--sub); margin-bottom: 18px; font-size: 14.5px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+
+  /* 배지 */
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; vertical-align: 2px; }
+  .b-ai   { background: var(--ai-bg);   color: var(--ai); }
+  .b-code { background: var(--code-bg); color: var(--code); }
+  .b-warn { background: var(--warn-bg); color: var(--warn); }
+  .b-ok   { background: var(--ok-bg);   color: var(--ok); }
+
+  /* 2레인 */
+  .lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 640px) { .lanes { grid-template-columns: 1fr; } }
+  .lane { border-radius: 14px; padding: 20px 22px; border: 1.5px solid; }
+  .lane.ai   { border-color: var(--ai);   background: var(--ai-bg); }
+  .lane.code { border-color: var(--code); background: var(--code-bg); }
+  .lane h3 { font-size: 17px; margin-bottom: 8px; }
+  .lane.ai h3 { color: var(--ai); } .lane.code h3 { color: var(--code); }
+  .lane ul { list-style: none; font-size: 14px; }
+  .lane li { padding: 3px 0 3px 22px; position: relative; }
+  .lane li.do::before  { content: "✓"; position: absolute; left: 2px; font-weight: 800; color: var(--ok); }
+  .lane li.not::before { content: "✕"; position: absolute; left: 2px; font-weight: 800; color: var(--warn); }
+  .lane .rule { margin-top: 10px; font-size: 13px; color: var(--sub); border-top: 1px dashed var(--line); padding-top: 8px; }
+
+  .why { margin-top: 14px; background: var(--warn-bg); border-left: 4px solid var(--warn); border-radius: 0 12px 12px 0; padding: 14px 18px; font-size: 14.5px; }
+
+  /* 비교표 */
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; font-size: 14px; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; color: var(--sub); background: var(--bg); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.key { font-weight: 700; white-space: nowrap; }
+  .v2col { color: var(--sub); }
+
+  /* 파이프라인 */
+  .act { margin: 30px 0 12px; font-size: 14px; font-weight: 800; color: var(--sub); letter-spacing: 1px; }
+  .act span { color: var(--ink); font-size: 16px; margin-left: 6px; letter-spacing: 0; }
+  .step { background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--code); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+  .step.ai { border-left-color: var(--ai); }
+  .step.mix { border-left: 5px solid; border-image: linear-gradient(var(--code), var(--ai)) 1; }
+  .step h3 { font-size: 16.5px; margin-bottom: 6px; }
+  .step h3 .sid { color: var(--sub); font-size: 13px; font-weight: 700; margin-right: 8px; }
+  .step p { font-size: 14.5px; margin-bottom: 6px; }
+  .step .ana { font-size: 13.5px; color: var(--sub); background: var(--bg); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+  .step .ana::before { content: "📖 비유 — "; font-weight: 700; }
+  .step .fail { font-size: 13px; color: var(--warn); margin-top: 8px; }
+  .step .fail::before { content: "⛔ 걸리면 — "; font-weight: 700; }
+
+  /* 원장 */
+  .ledger3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
+  @media (max-width: 640px) { .ledger3 { grid-template-columns: 1fr; } }
+  .lg { border-radius: 12px; padding: 16px; font-size: 13.5px; border: 1.5px solid var(--line); background: var(--card); }
+  .lg b { display: block; margin-bottom: 6px; font-size: 14.5px; }
+  .lg.ok   { border-color: var(--ok);   } .lg.ok b   { color: var(--ok); }
+  .lg.mid  { border-color: var(--code); } .lg.mid b  { color: var(--code); }
+  .lg.bad  { border-color: var(--warn); background: var(--warn-bg); } .lg.bad b { color: var(--warn); }
+
+  /* FAQ */
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+  summary { cursor: pointer; padding: 14px 18px; font-weight: 700; font-size: 15px; list-style: none; }
+  summary::before { content: "Q. "; color: var(--code); }
+  details[open] summary { border-bottom: 1px solid var(--line); }
+  details .a { padding: 14px 18px; font-size: 14.5px; }
+  details .a p + p { margin-top: 8px; }
+
+  code { background: var(--code-bg); color: var(--code); padding: 1px 7px; border-radius: 6px; font-size: 0.88em; font-family: Consolas, monospace; }
+  .foot { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--sub); }
+  .kicker { font-size: 12.5px; font-weight: 800; letter-spacing: 2px; color: var(--code); margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">TC PIPELINE · 3세대 엔진</div>
+  <h1>tc-team 설계, 아주 쉽게</h1>
+  <p class="tagline">딱 한 줄만 기억하면 됩니다 — <b>"글은 AI가 쓰고, 틀과 검사는 기계가 한다."</b></p>
+  <p class="lead">나머지 전부는 이 한 줄을 지키기 위한 장치입니다.</p>
+
+  <!-- ============ 1. 2레인 ============ -->
+  <h2><span class="no">1</span>핵심 원칙 — 2레인 (일을 두 종류로 쪼갠다)</h2>
+  <p class="lead">tc-team의 모든 단계는 아래 둘 중 하나입니다. 헷갈리면 "이건 문장 쓰는 일인가, 장부 다루는 일인가?"만 물어보면 됩니다.</p>
+
+  <div class="lanes">
+    <div class="lane ai">
+      <h3>🤖 AI 레인 — 문장과 판단</h3>
+      <ul>
+        <li class="do">기획서를 읽고 TC를 설계한다</li>
+        <li class="do">재현스탭 <b>문장</b>을 쓴다 (F열)</li>
+        <li class="do">리뷰하고 "여기 고쳐라" 의견을 낸다</li>
+        <li class="do">기획서 규칙 ↔ TC를 의미로 짝짓는다</li>
+        <li class="not">행 번호 매기기 · 개수 세기 · 서식</li>
+        <li class="not">시트에 직접 쓰기</li>
+      </ul>
+      <div class="rule">AI는 <b>숫자·구조를 만들 권한이 없습니다.</b> 골격이 준 빈칸만 채웁니다.</div>
+    </div>
+    <div class="lane code">
+      <h3>⚙️ 기계 레인 — 틀과 사실</h3>
+      <ul>
+        <li class="do">TC 표의 골격(행·번호·구조) 생성</li>
+        <li class="do">검문소(게이트) 검사 전부</li>
+        <li class="do">커버리지 장부(원장) 대조</li>
+        <li class="do">시트 기록 — <b>전 과정에서 딱 1번</b></li>
+        <li class="not">문장 창작</li>
+      </ul>
+      <div class="rule">"결정론" = 같은 입력이면 <b>언제나 같은 결과.</b> 기분 따라 달라지는 게 없는 스크립트.</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>왜 이렇게 쪼갰나?</b> AI는 훌륭한 작가지만 덜렁대는 사무원입니다. v2에서는 AI가 표를 옮겨 적다 <b>있지도 않은 숫자를 지어내는 사고(발명수치)</b>가 났습니다. 그래서 v3는 AI 손에서 장부를 뺏고 펜만 쥐여줬습니다. 결과: 발명수치 0건, 속도 2.2배.
+  </div>
+
+  <!-- ============ 2. v2 비교 ============ -->
+  <h2><span class="no">2</span>내가 아는 v2와 뭐가 다른가</h2>
+  <p class="lead">구조를 직접 잡으신 v2를 기준으로 보면 차이는 딱 세 가지입니다.</p>
+  <div class="tablewrap"><table>
+    <tr><th></th><th>tc-v2 (내가 만든 구조)</th><th>tc-team (v3)</th></tr>
+    <tr><td class="key">일하는 방식</td><td class="v2col">팀장 AI가 팀원 AI를 릴레이로 호출</td><td>메인 세션이 <b>기계 부품과 AI를 순서대로 돌리는 공정 관리자</b></td></tr>
+    <tr><td class="key">시트 접촉</td><td class="v2col">먼저 쓰고 → 리뷰하며 시트를 계속 수정</td><td>로컬 파일에서 전부 완성 → 검사 통과 → <b>딱 1번 기록</b></td></tr>
+    <tr><td class="key">리뷰 방식</td><td class="v2col">리뷰어가 시트를 직접 고침</td><td>리뷰는 <b>수정 목록(fix_plan)만 작성</b>, 반영은 기계가</td></tr>
+    <tr><td class="key">숫자·구조</td><td class="v2col">AI가 직접 다룸 → 가끔 사고</td><td>기계 소유 → 발명수치 0</td></tr>
+    <tr><td class="key">추적</td><td class="v2col">리뷰 보고서로 사후 확인</td><td>기획서 규칙마다 "어느 TC가 됐나" <b>장부(원장)</b>가 남음</td></tr>
+  </table></div>
+
+  <!-- ============ 3. 파이프라인 ============ -->
+  <h2><span class="no">3</span>전체 그림 — 4막 8단계 (출판사 비유)</h2>
+  <p class="lead">기획서 = 저자의 원고, 시트 = 인쇄된 책이라고 생각하면 전 과정이 출판사입니다.<br>
+  기억법: <b>받고 → 짜고 → 채우고 → 다듬고 → 찍고 → 진열</b></p>
+
+  <div class="act">1막 <span>재료 준비</span></div>
+
+  <div class="step">
+    <h3><span class="sid">S0</span>원고 접수 <span class="badge b-code">⚙️ 메인</span></h3>
+    <p>Confluence 기획서를 <b>원문 그대로</b> 복사해 보관하고, 제대로 다 받았는지 3가지 자가검사(크기·이미지 개수·잘림 흔적)를 합니다. 동시 실행 방지 잠금도 여기서.</p>
+    <div class="ana">인쇄소가 원고를 받자마자 페이지 수부터 센다. 원고가 덜 왔으면 작업 시작 자체를 안 한다.</div>
+  </div>
+
+  <div class="step ai">
+    <h3><span class="sid">S1</span>편집 구성안 <span class="badge b-ai">🤖 AI</span></h3>
+    <p>기획서를 읽고 분석서(<code>analysis.md</code>)와 TC 설계도(<code>tc_design.md</code>)를 만듭니다. v2에서 다듬은 설계 노하우를 그대로 승계한 단계입니다.</p>
+    <div class="ana">편집자가 원고를 읽고 목차와 챕터 구성을 짠다.</div>
+  </div>
+
+  <div class="act">2막 <span>조립</span></div>
+
+  <div class="step">
+    <h3><span class="sid">S2</span>구성안 검사 + 원고 자르기 <span class="badge b-code">⚙️ 기계</span></h3>
+    <p>설계도가 기계가 전개할 수 있는 형식인지 검사하고(불합격이면 S1로 반려), 기획서 원문을 <b>문단 단위로 잘라 번호</b>를 붙입니다. 이 번호가 나중에 "이 규칙이 어느 TC가 됐나" 추적하는 기준점이 됩니다.</p>
+    <div class="ana">원고에 형광펜으로 문단 번호를 매겨둔다 — 나중에 대조하려고.</div>
+    <div class="fail">설계 결함이면 S1로 돌려보내 다시 설계.</div>
+  </div>
+
+  <div class="step mix">
+    <h3><span class="sid">S3</span>골격 + 문장 채우기 <span class="badge b-code">⚙️ 골격·합치기</span> <span class="badge b-ai">🤖 문장만</span></h3>
+    <p>기계가 TC 표의 <b>골격(행·번호·구조)을 먼저</b> 만들고, AI 여러 명이 <b>25행씩 나눠</b> 빈칸(재현스탭 문장)만 동시에 채웁니다. 기계가 다시 합치면서 "자기 행에 제대로 채웠나"를 검사합니다.</p>
+    <div class="ana">조판 틀은 기계가 짜고, 작가들은 정해진 빈칸에 글만 써넣는다. 남의 칸을 건드리면 그 조각만 다시 쓰게 한다.</div>
+    <div class="fail">어긋난 25행 조각만 재실행 — 나머지는 그대로 살린다.</div>
+  </div>
+
+  <div class="act">3막 <span>검사</span></div>
+
+  <div class="step ai">
+    <h3><span class="sid">S4</span>빨간펜 3인 + 심판 <span class="badge b-ai">🤖 AI</span></h3>
+    <p>교정자 3명이 서로 다른 눈(<b>구조 / 품질 / 원문대조</b>)으로 병렬 검토하고, 심판이 서로 반박시켜 살아남은 지적만 <b>수정 목록(fix_plan)</b>으로 만듭니다. <b>직접 고치지 않는 게 핵심.</b> 동시에 원장도 작성: 기획서 규칙 하나하나가 어느 TC에 반영됐는지 짝짓고, 뺀 것은 사유를 남깁니다.</p>
+    <div class="ana">교정지에는 빨간펜만. 원고에 손대는 건 다음 단계의 조판공이다.</div>
+  </div>
+
+  <div class="step">
+    <h3><span class="sid">S5</span>수정 반영 + 최종 검문 <span class="badge b-code">⚙️ 기계</span></h3>
+    <p>수정 목록을 기계가 반영합니다. 단, <b>고치려는 원문이 지금도 그대로일 때만</b>(다르면 거부 — 거부가 정상 동작입니다). 이후 3중 검문: 금지표현 0건, 그룹 연속성, 그리고 <b>원장 대조</b> — 기획서 규칙 중 TC 없는 게 있으면 자동으로 행을 추가해 봉합합니다.</p>
+    <div class="ana">최종 교정쇄에 승인 도장. 도장 없으면 인쇄기는 안 돈다.</div>
+    <div class="fail">반영 거부 = fix_plan을 다시 만들면 됨. 시트는 아직 깨끗하니 부담 없음.</div>
+  </div>
+
+  <div class="act">4막 <span>출고</span></div>
+
+  <div class="step">
+    <h3><span class="sid">S6</span>인쇄 — 시트 기록 <span class="badge b-code">⚙️ 기계</span> <span class="badge b-ok">시트 접촉 1회</span></h3>
+    <p>전 검문 통과 후 시트에 <b>딱 1번</b> 기록합니다. 소유마커로 내 탭만 건드리고, 남의 탭이면 <code>_v2</code> 접미사로 새로 만듭니다. 기록 직후 시트를 다시 읽어 원본 파일과 <b>한 글자도 다르지 않은지(0-diff)</b> 확인합니다.</p>
+    <div class="ana">인쇄 후 첫 권을 뽑아 원고와 나란히 놓고 대조한다.</div>
+  </div>
+
+  <div class="step">
+    <h3><span class="sid">S7</span>서점 진열 — 완료처리 <span class="badge b-code">⚙️ 기계</span></h3>
+    <p>대시보드 갱신 → K~O 정보 패널 → <b>기획확인 라벨</b> → 드라이브 백업 → 잠금 해제 → 단계별 시간 포함 완료 보고. 테스트 데이터 라벨링과 이미지 매칭은 <b>필요할 때만 수동</b>(안내 1줄만, 07-27 변경).</p>
+    <div class="ana">서점 진열대에 올리고, 창고 정리하고, 문 닫고 퇴근.</div>
+  </div>
+
+  <!-- ============ 4. 원장 ============ -->
+  <h2><span class="no">4</span>원장(커버리지 장부) — "빠뜨림"을 구조적으로 없애는 장치</h2>
+  <p class="lead">기획서의 모든 규칙은 반드시 아래 셋 중 하나여야 합니다. 세 번째가 존재하면 파이프라인이 멈춥니다.</p>
+  <div class="ledger3">
+    <div class="lg ok"><b>✓ TC가 됐다</b>어느 TC 번호로 반영됐는지 장부에 기록됨</div>
+    <div class="lg mid"><b>✓ 사유와 함께 제외됐다</b>허용 사유 3종만: 타기획서 내용 / TC로 만들 수 없는 서술 / 중복 규칙</div>
+    <div class="lg bad"><b>✕ 그냥 사라졌다</b>허용 안 됨 → FAIL → 자동으로 TC 행 추가해 봉합</div>
+  </div>
+  <div class="why" style="margin-top:14px;"><b>"추후구현"은 제외 사유가 될 수 없습니다.</b> 반드시 TC로 만들고 J열에 '추후 구현'만 표시합니다. 기능이 나중에 들어와도 TC는 이미 자리를 지키고 있게.</div>
+
+  <!-- ============ 5. FAQ ============ -->
+  <h2><span class="no">5</span>자주 헷갈리는 것 (오늘 대화 포함)</h2>
+
+  <details>
+    <summary>완료처리 문서가 왜 두 벌이야? 뭘 고쳐야 tc-team이 바뀌어?</summary>
+    <div class="a">
+      <p><b>(07-27 이사 후) 이제 답이 단순해졌습니다.</b></p>
+      <p>① tc-team의 모든 규칙 md는 <code>~\.claude\skills\tc-team\rules\</code> 서랍이 정본입니다. <b>완료처리를 바꾸려면 rules\완료처리.md 하나만</b> 고치면 즉시 반영됩니다 (SKILL.md S7은 이 문서를 읽어 실행하라는 참조 한 줄만 남음).<br>
+      ② 실행 스크립트(<code>update_dashboard.js</code> 등 공용 설비)는 계속 <code>scripts\util</code> 공유 — 복사 금지.<br>
+      ③ v2 폴더의 문서들은 <b>동결 원본(박제)</b>입니다 — 고쳐도 tc-team에 반영되지 않고, rules와 내용이 달라지는 것이 정상입니다(동기화 금지).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>중간에 실패하면 처음부터 다시 해야 해?</summary>
+    <div class="a"><p>아니요. 단계마다 산출물이 <b>파일로 남기</b> 때문에 실패 지점부터 이어달립니다. S3는 25행 조각 단위라 어긋난 조각만 다시 하고, S5 반영 거부는 fix_plan만 다시 만들면 됩니다. <b>시트는 S6 전까지 무접촉</b>이라 몇 번을 실패해도 시트는 항상 깨끗합니다.</p></div>
+  </details>
+
+  <details>
+    <summary>AI가 또 숫자를 지어내면 어떡해?</summary>
+    <div class="a"><p>지어낼 <b>자리 자체가 없습니다.</b> 행 번호·개수·구조는 기계가 만든 골격에 이미 있고 AI는 문장 빈칸만 받습니다. 그래도 문장 안에 이상한 표현이 섞이면 S5의 <code>content_gate</code>(금지표현 검사)가 기록 전에 차단합니다.</p></div>
+  </details>
+
+  <details>
+    <summary>기존 v2로 만든 탭이 망가질 위험은?</summary>
+    <div class="a"><p>없습니다. tc-team은 자기가 만든 탭에만 <b>소유마커</b>를 남기고, 마커 없는 탭(= v2 탭 포함 남의 탭)은 절대 삭제·덮어쓰기하지 않습니다. 이름이 겹치면 <code>_v2, _v3…</code> 접미사로 새 탭을 만듭니다.</p></div>
+  </details>
+
+  <details>
+    <summary>이거 완전 자동이야?</summary>
+    <div class="a"><p>정직하게 말하면 <b>반자동 런북</b>입니다. 버튼 하나로 끝까지 도는 게 아니라, 메인 세션(Claude)이 공정 관리자로서 S0→S7을 순서대로 실행하고 각 검문소 결과를 보며 진행합니다. 완전 무인화는 로드맵입니다.</p></div>
+  </details>
+
+  <details>
+    <summary>검증은 얼마나 됐어?</summary>
+    <div class="a"><p>자동사냥 · 주변감지 · 월드맵 3개 기능을 라이브 시트까지 완주했습니다. v2 대비 벽시계 2.2배 단축, 발명수치 0건, 원장 100% 설명(콜드런 A/B 비교, 표본 1회). 기계 부품 12종은 유닛 테스트 GREEN 상태입니다.</p></div>
+  </details>
+
+  <!-- ============ 6. 파일 지도 ============ -->
+  <h2><span class="no">6</span>파일 지도 — 어디를 보면/고치면 되나</h2>
+  <div class="tablewrap"><table>
+    <tr><th>역할</th><th>위치</th><th>비유</th></tr>
+    <tr><td class="key">실행 절차서</td><td><code>~/.claude/skills/tc-team/SKILL.md</code></td><td>공장장 매뉴얼 — 단계 순서·게이트를 바꾸려면 여기</td></tr>
+    <tr><td class="key">규칙 서랍 (정본)</td><td><code>~/.claude/skills/tc-team/rules/</code></td><td><b>모든 md 규칙은 여기만 고치면 됨</b> — 분석·설계·검수·학습·라벨링·완료처리 9종</td></tr>
+    <tr><td class="key">기계 부품</td><td><code>tc-team/lib/</code> + <code>scripts/util/</code></td><td>조판기·검사기·인쇄기</td></tr>
+    <tr><td class="key">작업장 = 산출물 보관소</td><td><code>team/specs/&lt;기능명&gt;/</code></td><td>작업 테이블과 보관 서랍이 한 곳 — 원고·구성안·라벨 + 중간 산출물(재현·감사 가능). <b>07-29 통합</b>: 구 <code>tc-team/runs/</code> 폐지</td></tr>
+    <tr><td class="key">v2 폴더</td><td><code>~/.claude/tc-team-v2/skills/…</code></td><td>동결 원본(박제) — 고쳐도 tc-team에 반영 안 됨</td></tr>
+    <tr><td class="key">정비 매뉴얼</td><td><code>tc-team/docs/tc-team-driver.md</code></td><td>고장 났을 때 보는 상세 문서</td></tr>
+  </table></div>
+
+  <div class="foot">
+    작성 2026-07-27 · tc-team SKILL.md 현행 기준 (테스트 데이터 라벨링 추후 셋팅 변경 반영) · 상세 아키텍처: <code>tc-team-guide.html</code>
+  </div>
+
+</div>
+</body>
+</html>
