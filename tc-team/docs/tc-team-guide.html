@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tc-v3 아키텍처 가이드 — LLM은 문장만, 구조는 코드가</title>
+<style>
+  :root{
+    --bg:#f7f8fa;--card:#fff;--ink:#1a1f2b;--sub:#5b6472;--line:#e3e7ee;
+    --accent:#2563eb;--accent-soft:#eff4ff;--ok:#0e9f6e;--ok-soft:#e7f6ef;
+    --warn:#d97706;--warn-soft:#fdf3e3;--bad:#dc2626;--bad-soft:#fdecec;
+    --th:#f0f3f8;--code:#f1f3f7;--purple:#7c3aed;--purple-soft:#f3efff;
+    --llm:#7c3aed;--det:#0e9f6e;--gate:#d97706;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0f1117;--card:#171a23;--ink:#e6e9f0;--sub:#9aa3b2;--line:#2a2f3c;
+    --accent:#6ea3ff;--accent-soft:#1a2540;--ok:#34d399;--ok-soft:#122a20;
+    --warn:#fbbf24;--warn-soft:#2a2210;--bad:#f87171;--bad-soft:#2a1515;
+    --th:#1c2130;--code:#1e2230;--purple:#a78bfa;--purple-soft:#221a38;
+    --llm:#a78bfa;--det:#34d399;--gate:#fbbf24;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 16px;background:var(--bg);color:var(--ink);font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif;font-size:15px;line-height:1.75}
+  .wrap{max-width:1060px;margin:0 auto}
+  h1{font-size:27px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:20px;margin:44px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+  h3{font-size:16px;margin:24px 0 8px;color:var(--accent)}
+  .sub{color:var(--sub)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 24px;margin:14px 0}
+  .hero{background:linear-gradient(135deg,var(--accent-soft),var(--card));border:1px solid var(--line);border-radius:16px;padding:26px 28px;margin:18px 0}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--th);font-weight:600;white-space:nowrap}
+  .tscroll{overflow-x:auto}
+  code{font-family:'Cascadia Code',Consolas,monospace;font-size:12.5px;background:var(--code);padding:1px 6px;border-radius:4px}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.6}
+  pre code{background:none;padding:0}
+  .pill{display:inline-block;padding:2px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+  .p-llm{background:var(--purple-soft);color:var(--llm)}
+  .p-det{background:var(--ok-soft);color:var(--det)}
+  .p-gate{background:var(--warn-soft);color:var(--gate)}
+  .p-info{background:var(--accent-soft);color:var(--accent)}
+  ul{margin:8px 0;padding-left:22px}li{margin:4px 0}
+  .good{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}.mid{color:var(--warn);font-weight:600}
+  .kv{display:grid;grid-template-columns:170px 1fr;gap:6px 16px;font-size:14px}.kv b{color:var(--sub);font-weight:600}
+  .svgbox{width:100%;overflow-x:auto;margin:12px 0}
+  .svgbox svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  svg text{font-family:'Segoe UI','Malgun Gothic',sans-serif}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:8px 0;justify-content:center}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{display:inline-block;width:14px;height:14px;border-radius:4px}
+  .toc{columns:2;column-gap:30px;font-size:14px}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc li{break-inside:avoid}
+  .note{border-left:4px solid var(--warn);background:var(--warn-soft);padding:11px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+  .win{border-left:4px solid var(--ok);background:var(--ok-soft);padding:11px 16px;border-radius:0 10px 10px 0;margin:14px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>tc-v3 아키텍처 가이드</h1>
+<p class="sub">게임 QA 테스트케이스(TC) 자동 생성 파이프라인 3세대 — <b>"LLM은 문장만 쓰고, 구조는 코드가 소유한다"</b></p>
+
+<div class="hero">
+<div class="kv">
+<b>시스템</b><span>tc-v3 — 기획서(위키 문서) → 구글시트/로컬 TC 세트 자동 생성 파이프라인</span>
+<b>설계 스펙</b><span><code>tc-v3-redesign-plan.html</code> v1.3 (본 가이드의 상위 문서) · 운영 정본 <code>tc-team/docs/tc-team-driver.md</code></span>
+<b>코드</b><span><code>tc-team/lib/</code> 결정론 유틸 13종 + <code>tc-team/test/</code> 82 테스트 GREEN</span>
+<b>검증 상태</b><span>3개 기능 라이브 완주 · 콜드런 A/B 실측: <b>시간 2.2배 단축 + 품질 우위</b>(적대 판정)</span>
+<b>문서 버전</b><span>v1.0 (2026-07-13) · 대상 독자: v3를 이해·운영·기여하려는 사람</span>
+</div>
+</div>
+
+<div class="card">
+<b>목차</b>
+<ol class="toc">
+<li><a href="#philosophy">설계 철학 — 왜 v3인가</a></li>
+<li><a href="#compare">v2 vs v3 아키텍처 한눈 비교</a></li>
+<li><a href="#pipeline">파이프라인 전체 흐름 (S1~S6+FINAL)</a></li>
+<li><a href="#s3">확대경① S3 — 병렬 문장화와 에코 게이트</a></li>
+<li><a href="#s4">확대경② S4 — 적대 3렌즈 리뷰와 판정자</a></li>
+<li><a href="#gates">게이트 카탈로그 — 5계층 방어</a></li>
+<li><a href="#ledger">커버리지 원장 — "몇 %"가 아니라 "어느 규칙"</a></li>
+<li><a href="#files">데이터 흐름과 파일 맵</a></li>
+<li><a href="#utils">결정론 유틸 13종 레퍼런스</a></li>
+<li><a href="#results">실측 결과 — 콜드런 A/B</a></li>
+<li><a href="#ops">운영 가이드 (실행·기획확인 루프·트러블슈팅)</a></li>
+<li><a href="#qa">테스트 포인트 & 로드맵 & 변경 이력</a></li>
+</ol>
+</div>
+
+<h2 id="philosophy">1. 설계 철학 — 왜 v3인가</h2>
+<div class="card">
+<p>v2까지의 TC 파이프라인은 <b>LLM 에이전트가 모든 것을</b> 했다: 설계도 쓰고, 행도 만들고, 서식도 넣고, 시트에도 직접 썼다. 잘 되지만 두 가지 비용이 있었다 — ① LLM이 구조(행 순서·서식·번호)를 다루다 생기는 사고 ② 전 구간 순차 LLM 호출로 인한 시간.</p>
+<p>v3의 답은 역할 분리다:</p>
+<div class="svgbox">
+<svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sub)"/></marker>
+  </defs>
+  <!-- LLM lane -->
+  <rect x="20" y="20" width="860" height="90" rx="12" fill="var(--purple-soft)" stroke="var(--llm)" stroke-width="1.5"/>
+  <text x="40" y="48" font-size="15" font-weight="700" fill="var(--llm)">LLM 차선 — 판단과 문장 (창의 구간만)</text>
+  <text x="40" y="76" font-size="13" fill="var(--ink)">설계 판단 · F열 문장화 · 리뷰 findings · 판정(fix_plan) · 의미 매핑(원장)</text>
+  <text x="40" y="98" font-size="12" fill="var(--sub)">→ 병렬 팬아웃 가능, 대신 출력은 전부 아래 차선의 게이트를 통과해야 함</text>
+  <!-- DET lane -->
+  <rect x="20" y="130" width="860" height="90" rx="12" fill="var(--ok-soft)" stroke="var(--det)" stroke-width="1.5"/>
+  <text x="40" y="158" font-size="15" font-weight="700" fill="var(--det)">결정론 차선 — 구조와 사실 (코드가 소유)</text>
+  <text x="40" y="186" font-size="13" fill="var(--ink)">골격 변환 · 행 번호/서식/그룹핑 · 패치 적용 · 게이트 검증 · 시트 기록 · 원장 게이트</text>
+  <text x="40" y="208" font-size="12" fill="var(--sub)">→ 같은 입력이면 언제나 같은 출력, 테스트 82건으로 회귀 보증</text>
+  <!-- arrows between lanes -->
+  <line x1="450" y1="110" x2="450" y2="130" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="460" y="126" font-size="11" fill="var(--sub)">모든 LLM 산출은 기계 게이트 통과</text>
+</svg>
+</div>
+<p><b>3원칙</b>:</p>
+<ul>
+<li><b>구조는 코드가 소유한다</b> — LLM은 행을 만들지 않는다. 행 골격은 설계 문서에서 결정론 변환(<code>convert</code>)으로 나오고, LLM은 그 행의 문장(F열)만 채운다.</li>
+<li><b>신뢰하되 검증하지 않는다 — 그냥 검증한다</b> — LLM 출력은 echo(자기 위치 복창)·해시·전제조건 대조로 기계가 재확인한다. 판정자의 수정 지시(fix_plan)조차 "수정 전 값"이 실제 셀과 일치해야 적용된다.</li>
+<li><b>리뷰는 적대적으로</b> — 서로 다른 관점의 렌즈가 병렬로 흠을 찾고, 판정자가 상호반박시켜 실제 수정만 남긴다. 자기 출력에 자기가 관대해지는 단일 에이전트 리뷰의 함정을 구조로 막는다.</li>
+</ul>
+</div>
+
+<h2 id="compare">2. v2 vs v3 아키텍처 한눈 비교</h2>
+<div class="card">
+<div class="svgbox">
+<svg viewBox="0 0 960 420" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sub)"/></marker></defs>
+  <!-- v2 -->
+  <text x="20" y="30" font-size="16" font-weight="700" fill="var(--ink)">v2 — 순차 LLM 체인 (에이전트가 시트를 직접 씀)</text>
+  <g font-size="12">
+    <rect x="20"  y="45" width="118" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="79"  y="65" text-anchor="middle" fill="var(--ink)">STEP1 설계</text><text x="79" y="82" text-anchor="middle" fill="var(--sub)">LLM</text>
+    <rect x="158" y="45" width="118" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="217" y="65" text-anchor="middle" fill="var(--ink)">STEP2 검수</text><text x="217" y="82" text-anchor="middle" fill="var(--sub)">LLM</text>
+    <rect x="296" y="45" width="118" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="355" y="65" text-anchor="middle" fill="var(--ink)">STEP3 수정</text><text x="355" y="82" text-anchor="middle" fill="var(--sub)">LLM</text>
+    <rect x="434" y="45" width="130" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--llm)" stroke-width="2.5"/><text x="499" y="65" text-anchor="middle" font-weight="700" fill="var(--ink)">STEP4 작성</text><text x="499" y="82" text-anchor="middle" fill="var(--sub)">LLM이 행+서식+시트</text>
+    <rect x="584" y="45" width="118" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="643" y="65" text-anchor="middle" fill="var(--ink)">STEP5 리뷰1</text><text x="643" y="82" text-anchor="middle" fill="var(--sub)">LLM</text>
+    <rect x="722" y="45" width="118" height="46" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="781" y="65" text-anchor="middle" fill="var(--ink)">STEP6 리뷰2</text><text x="781" y="82" text-anchor="middle" fill="var(--sub)">LLM</text>
+    <line x1="138" y1="68" x2="158" y2="68" stroke="var(--sub)" marker-end="url(#ar2)"/>
+    <line x1="276" y1="68" x2="296" y2="68" stroke="var(--sub)" marker-end="url(#ar2)"/>
+    <line x1="414" y1="68" x2="434" y2="68" stroke="var(--sub)" marker-end="url(#ar2)"/>
+    <line x1="564" y1="68" x2="584" y2="68" stroke="var(--sub)" marker-end="url(#ar2)"/>
+    <line x1="702" y1="68" x2="722" y2="68" stroke="var(--sub)" marker-end="url(#ar2)"/>
+  </g>
+  <text x="20" y="122" font-size="12" fill="var(--sub)">특징: 전 구간 직렬 · 리뷰가 라이브 시트를 사후 수정 · 구조 사고를 사후 정규식 게이트(FINAL-4)로 방어 — 실측 158.8분/178행</text>
+
+  <!-- divider -->
+  <line x1="20" y1="145" x2="940" y2="145" stroke="var(--line)" stroke-dasharray="4 4"/>
+
+  <!-- v3 -->
+  <text x="20" y="175" font-size="16" font-weight="700" fill="var(--ink)">v3 — 결정론 백본 + LLM 팬아웃 (시트는 마지막에 한 번)</text>
+  <!-- backbone -->
+  <rect x="20" y="195" width="920" height="54" rx="10" fill="var(--ok-soft)" stroke="var(--det)" stroke-width="1.5"/>
+  <text x="30" y="217" font-size="12.5" font-weight="700" fill="var(--det)">결정론 백본</text>
+  <g font-size="11.5" fill="var(--ink)">
+    <text x="30"  y="238">슬라이스</text>
+    <text x="110" y="238">골격 변환</text>
+    <text x="205" y="238">merge+에코게이트</text>
+    <text x="345" y="238">패치 적용(전제조건)</text>
+    <text x="500" y="238">regroup</text>
+    <text x="575" y="238">콘텐츠 게이트</text>
+    <text x="685" y="238">원장 게이트</text>
+    <text x="790" y="238">시트 기록(1회)</text>
+  </g>
+  <!-- llm fanouts -->
+  <g font-size="12">
+    <rect x="80"  y="280" width="180" height="66" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="170" y="302" text-anchor="middle" font-weight="700" fill="var(--ink)">S3 문장화 팬아웃</text>
+    <text x="170" y="320" text-anchor="middle" fill="var(--sub)">25행 청크 × N 병렬</text>
+    <text x="170" y="337" text-anchor="middle" fill="var(--sub)">idx·d 복창 필수</text>
+    <rect x="330" y="280" width="200" height="66" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="430" y="302" text-anchor="middle" font-weight="700" fill="var(--ink)">S4 적대 리뷰 팬아웃</text>
+    <text x="430" y="320" text-anchor="middle" fill="var(--sub)">3렌즈 병렬 → 판정자</text>
+    <text x="430" y="337" text-anchor="middle" fill="var(--sub)">fix_plan + 의미 원장</text>
+    <rect x="600" y="280" width="170" height="66" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="685" y="302" text-anchor="middle" font-weight="700" fill="var(--ink)">S1 설계 (승계)</text>
+    <text x="685" y="320" text-anchor="middle" fill="var(--sub)">v2 설계기 재사용</text>
+    <text x="685" y="337" text-anchor="middle" fill="var(--sub)">해시 게이트로 캐싱</text>
+  </g>
+  <line x1="170" y1="280" x2="200" y2="249" stroke="var(--llm)" stroke-width="1.5" marker-end="url(#ar2)"/>
+  <line x1="430" y1="280" x2="430" y2="249" stroke="var(--llm)" stroke-width="1.5" marker-end="url(#ar2)"/>
+  <line x1="685" y1="280" x2="660" y2="249" stroke="var(--llm)" stroke-width="1.5" marker-end="url(#ar2)"/>
+  <text x="20" y="380" font-size="12" fill="var(--sub)">특징: 구조는 백본이 소유 · LLM은 병렬 · 시트 접촉은 검증 끝난 뒤 단 1회(clear-and-rewrite 멱등) — 실측 73.0분/184행</text>
+  <text x="20" y="402" font-size="12" fill="var(--sub)">같은 리뷰 깊이 기준 비용이 아니라, v3가 리뷰를 더 깊게(3렌즈 적대) 하면서도 더 빠름</text>
+</svg>
+</div>
+<div class="legend">
+<span><span class="sw" style="background:var(--purple-soft);border:1.5px solid var(--llm)"></span> LLM 단계</span>
+<span><span class="sw" style="background:var(--ok-soft);border:1.5px solid var(--det)"></span> 결정론 단계</span>
+<span><span class="sw" style="background:var(--warn-soft);border:1.5px solid var(--gate)"></span> 게이트(차단)</span>
+</div>
+</div>
+
+<h2 id="pipeline">3. 파이프라인 전체 흐름 (S1~S6 + FINAL)</h2>
+<div class="card">
+<div class="svgbox">
+<svg viewBox="0 0 980 560" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sub)"/></marker></defs>
+  <g font-size="12.5">
+    <!-- S1 -->
+    <rect x="20" y="20" width="290" height="72" rx="10" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="34" y="43" font-weight="700" fill="var(--ink)">S1 설계 <tspan fill="var(--llm)" font-size="11">LLM (v2 설계기 승계)</tspan></text>
+    <text x="34" y="62" fill="var(--sub)">기획서 원문 → analysis.md + tc_design.md</text>
+    <text x="34" y="80" fill="var(--sub)">재실행 시 design_hash 일치 → 통째 스킵(재사용)</text>
+    <!-- S2 -->
+    <rect x="20" y="112" width="290" height="72" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="34" y="135" font-weight="700" fill="var(--ink)">S2 격리 게이트 + 슬라이스 <tspan fill="var(--det)" font-size="11">결정론</tspan></text>
+    <text x="34" y="154" fill="var(--sub)">design_gate: 사본 격리 convert로 전개 가능성 판정</text>
+    <text x="34" y="172" fill="var(--sub)">slicer: 원문 → sections[] + rules[] (원장 앵커)</text>
+    <!-- S3 -->
+    <rect x="20" y="204" width="290" height="88" rx="10" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="34" y="227" font-weight="700" fill="var(--ink)">S3 문장화 <tspan fill="var(--llm)" font-size="11">LLM 팬아웃</tspan> + <tspan fill="var(--det)" font-size="11">merge</tspan></text>
+    <text x="34" y="246" fill="var(--sub)">convert: 설계 → tc_skeleton(행 골격, 코드 산출)</text>
+    <text x="34" y="264" fill="var(--sub)">청크 병렬 문장화 → tc_f_map(F열만)</text>
+    <text x="34" y="282" fill="var(--sub)">merge: 에코·해시·개수 게이트 → tc_data → 스냅샷</text>
+    <!-- S4 -->
+    <rect x="20" y="312" width="290" height="88" rx="10" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="34" y="335" font-weight="700" fill="var(--ink)">S4 적대 리뷰 <tspan fill="var(--llm)" font-size="11">3렌즈 병렬 + 판정자</tspan></text>
+    <text x="34" y="354" fill="var(--sub)">구조 / 품질 / 원문대조(slices 원문만 근거)</text>
+    <text x="34" y="372" fill="var(--sub)">판정자: 상호반박 → fix_plan(patches) 확정</text>
+    <text x="34" y="390" fill="var(--sub)">+ 의미 매핑 → 커버리지 원장(coverage/exclusions)</text>
+    <!-- S5 -->
+    <rect x="20" y="420" width="290" height="72" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="34" y="443" font-weight="700" fill="var(--ink)">S5 적용 + 게이트 <tspan fill="var(--det)" font-size="11">결정론</tspan></text>
+    <text x="34" y="462" fill="var(--sub)">apply_fix_plan(전제조건 대조) → regroup(V-17 봉합)</text>
+    <text x="34" y="480" fill="var(--sub)">content_gate(차단) 통과 시에만 tc_final.ok 발급</text>
+    <!-- gate diamond -->
+    <g transform="translate(430,180)">
+      <polygon points="70,0 140,52 70,104 0,52" fill="var(--warn-soft)" stroke="var(--gate)" stroke-width="2"/>
+      <text x="70" y="45" text-anchor="middle" font-weight="700" fill="var(--ink)" font-size="13">게이트</text>
+      <text x="70" y="64" text-anchor="middle" fill="var(--sub)" font-size="11">전부 PASS?</text>
+    </g>
+    <line x1="310" y1="456" x2="430" y2="456" stroke="var(--sub)" stroke-width="1.5"/>
+    <line x1="430" y1="456" x2="500" y2="284" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar3)" opacity="0"/>
+    <path d="M 430 456 L 500 456 L 500 290" stroke="var(--sub)" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+    <text x="512" y="320" fill="var(--bad)" font-size="12">FAIL → 해당 단계로 루프백</text>
+    <text x="512" y="338" fill="var(--sub)" font-size="11">(미커버 → fix_plan 라운드2 add)</text>
+    <!-- S6 -->
+    <rect x="650" y="150" width="310" height="100" rx="10" fill="var(--ok-soft)" stroke="var(--det)" stroke-width="2"/>
+    <text x="664" y="174" font-weight="700" fill="var(--ink)">S6 라이브 기록 <tspan fill="var(--det)" font-size="11">결정론 · 시트 접촉 1회</tspan></text>
+    <text x="664" y="193" fill="var(--sub)">소유 마커 → 신규 생성 or clear-and-rewrite(멱등)</text>
+    <text x="664" y="211" fill="var(--sub)">타 탭 불가침 · 실패 시 접미사 폴백</text>
+    <text x="664" y="229" fill="var(--sub)">read-back QA: 재덤프 대조로 "쓴 것 = 있는 것" 증명</text>
+    <path d="M 570 232 L 650 200" stroke="var(--sub)" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+    <text x="560" y="215" fill="var(--ok)" font-size="12" text-anchor="end">PASS</text>
+    <!-- FINAL -->
+    <rect x="650" y="280" width="310" height="118" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="664" y="304" font-weight="700" fill="var(--ink)">FINAL 완료처리 (v2 승계 확정분)</text>
+    <text x="664" y="323" fill="var(--sub)">1 대시보드 · 2 프로젝트 패널 · 3 드라이브 sync</text>
+    <text x="664" y="341" fill="var(--sub)">4 재덤프 검증(=read-back QA로 대체) · 5 기획확인 라벨</text>
+    <text x="664" y="359" fill="var(--sub)">+ 상태 원장(state) 기록 · 착수/완료 공지</text>
+    <text x="664" y="384" fill="var(--warn)" font-size="11.5">⚠ 승계 감사로 확정: S6 정의 = 기록 + FINAL-1·2·3·5 필수</text>
+    <line x1="805" y1="250" x2="805" y2="280" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar3)"/>
+    <!-- flow arrows left column -->
+    <line x1="165" y1="92"  x2="165" y2="112" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar3)"/>
+    <line x1="165" y1="184" x2="165" y2="204" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar3)"/>
+    <line x1="165" y1="292" x2="165" y2="312" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar3)"/>
+    <line x1="165" y1="400" x2="165" y2="420" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar3)"/>
+    <!-- 실패 루프 화살표: 게이트 → S3/S4 -->
+    <path d="M 470 232 C 380 250 340 260 312 260" stroke="var(--bad)" stroke-width="1.2" fill="none" stroke-dasharray="5 4" marker-end="url(#ar3)"/>
+  </g>
+</svg>
+</div>
+<p class="sub">읽는 법: 왼쪽 세로줄이 본선(S1→S5), 게이트 다이아몬드에서 전부 PASS일 때만 시트에 닿는다. 시트가 오염될 수 있는 시점은 구조적으로 S6 단 한 곳.</p>
+</div>
+
+<h2 id="s3">4. 확대경① S3 — 병렬 문장화와 에코 게이트</h2>
+<div class="card">
+<div class="svgbox">
+<svg viewBox="0 0 940 300" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sub)"/></marker></defs>
+  <g font-size="12">
+    <rect x="20" y="110" width="170" height="80" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="105" y="140" text-anchor="middle" font-weight="700" fill="var(--ink)">tc_skeleton.json</text>
+    <text x="105" y="160" text-anchor="middle" fill="var(--sub)">행 골격 (idx·분류·leaf·유형)</text>
+    <text x="105" y="178" text-anchor="middle" fill="var(--sub)">← 설계에서 코드가 변환</text>
+    <!-- chunks -->
+    <g>
+      <rect x="280" y="20"  width="150" height="50" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="355" y="42" text-anchor="middle" fill="var(--ink)">청크 [0,25)</text><text x="355" y="60" text-anchor="middle" font-size="10.5" fill="var(--sub)">sonnet · 문장만</text>
+      <rect x="280" y="86"  width="150" height="50" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="355" y="108" text-anchor="middle" fill="var(--ink)">청크 [25,50)</text><text x="355" y="126" text-anchor="middle" font-size="10.5" fill="var(--sub)">병렬</text>
+      <rect x="280" y="152" width="150" height="50" rx="9" fill="var(--purple-soft)" stroke="var(--llm)"/><text x="355" y="174" text-anchor="middle" fill="var(--ink)">청크 [50,75)</text><text x="355" y="192" text-anchor="middle" font-size="10.5" fill="var(--sub)">병렬</text>
+      <rect x="280" y="218" width="150" height="50" rx="9" fill="var(--purple-soft)" stroke="var(--llm)" stroke-dasharray="4 3"/><text x="355" y="240" text-anchor="middle" fill="var(--ink)">… × ⌈N/25⌉</text><text x="355" y="258" text-anchor="middle" font-size="10.5" fill="var(--sub)">180행이면 8청크</text>
+    </g>
+    <line x1="190" y1="150" x2="280" y2="45"  stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <line x1="190" y1="150" x2="280" y2="111" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <line x1="190" y1="150" x2="280" y2="177" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <line x1="190" y1="150" x2="280" y2="243" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <!-- merge gate -->
+    <g transform="translate(520,95)">
+      <polygon points="80,0 160,55 80,110 0,55" fill="var(--warn-soft)" stroke="var(--gate)" stroke-width="2"/>
+      <text x="80" y="42" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">merge 게이트</text>
+      <text x="80" y="61" text-anchor="middle" font-size="10.5" fill="var(--sub)">idx·d 복창 일치?</text>
+      <text x="80" y="78" text-anchor="middle" font-size="10.5" fill="var(--sub)">개수·design_hash?</text>
+    </g>
+    <line x1="430" y1="45"  x2="520" y2="140" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <line x1="430" y1="111" x2="520" y2="147" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <line x1="430" y1="177" x2="520" y2="155" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <line x1="430" y1="243" x2="520" y2="162" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar4)"/>
+    <rect x="740" y="115" width="180" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="830" y="143" text-anchor="middle" font-weight="700" fill="var(--ink)">10열 스냅샷</text>
+    <text x="830" y="163" text-anchor="middle" fill="var(--sub)">A·H·I 결정론 파생</text>
+    <text x="830" y="179" text-anchor="middle" font-size="10.5" fill="var(--sub)">시트 업로드 없이 조립</text>
+    <line x1="680" y1="150" x2="740" y2="150" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar4)"/>
+  </g>
+</svg>
+</div>
+<p><b>왜 청크 병렬이 안전한가</b> — 각 에이전트는 자기 담당 행의 <code>idx</code>와 <code>d</code>(소분류)를 <b>그대로 복창</b>해야 한다. 한 행이라도 밀리거나(시프트) 남의 행을 건드리면 merge가 기계적으로 차단한다. 실측: 3개 기능 합계 400+행 문장화에서 시프트 0건.</p>
+<div class="win"><b>자기교정 실사례</b> — 콜드런에서 문장화 에이전트가 원문에 없는 "500ms"를 임의로 넣었다. S4 원문대조 렌즈가 slices 원문 grep으로 적발("원문 전체에 500 계열 수치 없음"), 판정자가 제거 확정, 최종본 0건. <b>같은 실수를 v2는 최종본에 2건 통과시켰다</b> — 차이는 모델이 아니라 구조다.</div>
+</div>
+
+<h2 id="s4">5. 확대경② S4 — 적대 3렌즈 리뷰와 판정자</h2>
+<div class="card">
+<div class="svgbox">
+<svg viewBox="0 0 940 330" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar5" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sub)"/></marker></defs>
+  <g font-size="12">
+    <rect x="20" y="20" width="250" height="66" rx="10" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="145" y="45" text-anchor="middle" font-weight="700" fill="var(--ink)">구조 렌즈</text>
+    <text x="145" y="65" text-anchor="middle" fill="var(--sub)">분류 계층 · J 화이트리스트 · 중복</text>
+    <rect x="20" y="106" width="250" height="66" rx="10" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="145" y="131" text-anchor="middle" font-weight="700" fill="var(--ink)">품질 렌즈</text>
+    <text x="145" y="151" text-anchor="middle" fill="var(--sub)">사람언어 · 1TC=1포인트 · 재현가능성</text>
+    <rect x="20" y="192" width="250" height="66" rx="10" fill="var(--purple-soft)" stroke="var(--llm)"/>
+    <text x="145" y="217" text-anchor="middle" font-weight="700" fill="var(--ink)">원문대조 렌즈</text>
+    <text x="145" y="237" text-anchor="middle" fill="var(--sub)">slices 원문만 근거 · 발명수치 · 커버 누락</text>
+    <!-- judge -->
+    <rect x="380" y="96" width="250" height="96" rx="10" fill="var(--purple-soft)" stroke="var(--llm)" stroke-width="2.5"/>
+    <text x="505" y="122" text-anchor="middle" font-weight="700" fill="var(--ink)">판정자 (상호반박)</text>
+    <text x="505" y="142" text-anchor="middle" fill="var(--sub)">오탐 드롭 · 중복 병합 · 저가치 컷</text>
+    <text x="505" y="160" text-anchor="middle" fill="var(--sub)">실제 셀값 확인 후 patch 작성</text>
+    <text x="505" y="178" text-anchor="middle" fill="var(--sub)">미확정 스펙은 확정 금지→플래그</text>
+    <line x1="270" y1="53"  x2="380" y2="120" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar5)"/>
+    <line x1="270" y1="139" x2="380" y2="144" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar5)"/>
+    <line x1="270" y1="225" x2="380" y2="168" stroke="var(--sub)" stroke-width="1.2" marker-end="url(#ar5)"/>
+    <!-- outputs -->
+    <rect x="720" y="40" width="200" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="820" y="65" text-anchor="middle" font-weight="700" fill="var(--ink)">fix_plan.json</text>
+    <text x="820" y="85" text-anchor="middle" fill="var(--sub)">edit_cell(before 필수)</text>
+    <text x="820" y="101" text-anchor="middle" fill="var(--sub)">add_row(앵커 필수)</text>
+    <rect x="720" y="150" width="200" height="70" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="820" y="175" text-anchor="middle" font-weight="700" fill="var(--ink)">커버리지 원장</text>
+    <text x="820" y="195" text-anchor="middle" fill="var(--sub)">rule_id → tc_ids 의미 매핑</text>
+    <text x="820" y="211" text-anchor="middle" fill="var(--sub)">+ 제외 사유(화이트리스트 4종)</text>
+    <line x1="630" y1="120" x2="720" y2="80"  stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar5)"/>
+    <line x1="630" y1="168" x2="720" y2="185" stroke="var(--sub)" stroke-width="1.5" marker-end="url(#ar5)"/>
+    <text x="30" y="300" fill="var(--sub)" font-size="12.5">왜 3렌즈인가: 관점이 다르면 잡는 결함이 다르다 — 실측(기능 C): 구조 1 · 품질 31 · 원문대조 5 = 37 findings → 판정자가 27 patches로 압축(오탐 10 드롭).</text>
+    <text x="30" y="320" fill="var(--sub)" font-size="12.5">판정자의 지시조차 신뢰하지 않는다: edit는 before가 실제 셀과 다르면 자동 거부(0충돌 실측), add는 앵커 행이 실존해야 한다.</text>
+  </g>
+</svg>
+</div>
+</div>
+
+<h2 id="gates">6. 게이트 카탈로그 — 5계층 방어</h2>
+<div class="card">
+<div class="svgbox">
+<svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg">
+  <g font-size="12.5">
+    <rect x="60"  y="20"  width="780" height="38" rx="8" fill="var(--warn-soft)" stroke="var(--gate)"/><text x="80" y="44" font-weight="700" fill="var(--ink)">L1 입력</text><text x="240" y="44" fill="var(--sub)">원문 크기(500B)·설계 해시 — 상한 게이트, 썩은 입력 조기 차단</text>
+    <rect x="60"  y="64"  width="780" height="38" rx="8" fill="var(--warn-soft)" stroke="var(--gate)"/><text x="80" y="88" font-weight="700" fill="var(--ink)">L2 무결성</text><text x="240" y="88" fill="var(--sub)">idx·d 에코, 개수 일치, design_hash 재대조, patch before-일치, 앵커 실존</text>
+    <rect x="60"  y="108" width="780" height="38" rx="8" fill="var(--warn-soft)" stroke="var(--gate)"/><text x="80" y="132" font-weight="700" fill="var(--ink)">L3 구조</text><text x="240" y="132" fill="var(--sub)">분류 그룹 연속성(V-17)·플랫폼 enum·비고 화이트리스트·번호 연속</text>
+    <rect x="60"  y="152" width="780" height="38" rx="8" fill="var(--warn-soft)" stroke="var(--gate)"/><text x="80" y="176" font-weight="700" fill="var(--ink)">L4 내용</text><text x="240" y="176" fill="var(--sub)">추상표현 차단 + 위임표현(무플래그=차단/플래그=경고) + '정확히+동사'(경고)</text>
+    <rect x="60"  y="196" width="780" height="38" rx="8" fill="var(--warn-soft)" stroke="var(--gate)" stroke-width="2"/><text x="80" y="220" font-weight="700" fill="var(--ink)">L5 커버리지</text><text x="240" y="220" fill="var(--sub)">원장 게이트: 모든 규칙 = 커버 ∪ 정당 제외 ∪ (미커버=FAIL→봉합 루프)</text>
+  </g>
+</svg>
+</div>
+<div class="tscroll"><table>
+<tr><th>계층</th><th>구현</th><th>차단/경고</th><th>실측 성과</th></tr>
+<tr><td>L1 입력</td><td>드라이버 + <code>design_gate.js</code>(격리 convert)</td><td>차단</td><td>썩은 fetch·설계 결함 조기 정지</td></tr>
+<tr><td>L2 무결성</td><td><code>merge</code> · <code>apply_fix_plan.js</code></td><td>차단</td><td>문장화 400+행 시프트 0 · 패치 47건 충돌 0</td></tr>
+<tr><td>L3 구조</td><td><code>validatePreWrite</code> · <code>regroup.js</code></td><td>차단</td><td>그룹 분산 자동 봉합 — 단, <b>재배치 후 id 산술 추정 금지</b>(§11 트러블슈팅)</td></tr>
+<tr><td>L4 내용</td><td><code>content_gate.js</code></td><td>차단+경고 2등급</td><td>신규 위임표현 규칙이 첫 가동에서 구세대 산출물의 결함 1건 적발</td></tr>
+<tr><td>L5 커버리지</td><td><code>traceability.js</code> + 의미 매핑</td><td>차단</td><td>두 기능에서 기존 파이프라인도 놓친 실질 갭 3건 검출·봉합</td></tr>
+</table></div>
+<p class="sub">등급 철학: 새 규칙은 <b>경고로 태어나서</b> 실측 후 차단으로 승격한다. 오탐으로 파이프라인을 세우는 것도 비용이기 때문.</p>
+</div>
+
+<h2 id="ledger">7. 커버리지 원장 — "몇 %"가 아니라 "어느 규칙"</h2>
+<div class="card">
+<p>커버리지를 숫자 하나(%)로 말하면 두 가지 거짓말이 생긴다: 리워딩을 손실로 오판(토큰 겹침 지표의 실측 오탐)하고, 빠진 규칙이 <i>어느 것인지</i> 아무도 모른다. v3는 <b>원장(ledger)</b>으로 관리한다:</p>
+<div class="svgbox">
+<svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar7" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sub)"/></marker></defs>
+  <g font-size="12.5">
+    <rect x="20" y="60" width="180" height="80" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="110" y="90" text-anchor="middle" font-weight="700" fill="var(--ink)">rules[] 87건</text>
+    <text x="110" y="110" text-anchor="middle" fill="var(--sub)">slicer가 원문에서</text>
+    <text x="110" y="126" text-anchor="middle" fill="var(--sub)">규칙문 앵커 추출</text>
+    <rect x="280" y="20" width="200" height="52" rx="10" fill="var(--ok-soft)" stroke="var(--det)"/>
+    <text x="380" y="42" text-anchor="middle" font-weight="700" fill="var(--ink)">커버 (rule→tc_ids)</text>
+    <text x="380" y="60" text-anchor="middle" fill="var(--sub)">의미 기준 매핑(LLM)+판정 검증</text>
+    <rect x="280" y="88" width="200" height="52" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="380" y="110" text-anchor="middle" font-weight="700" fill="var(--ink)">정당 제외 (사유 필수)</text>
+    <text x="380" y="128" text-anchor="middle" fill="var(--sub)">추후구현·타문서·비TC성·중복 4종만</text>
+    <rect x="280" y="156" width="200" height="40" rx="10" fill="var(--bad-soft)" stroke="var(--bad)"/>
+    <text x="380" y="181" text-anchor="middle" font-weight="700" fill="var(--ink)">미커버 = 게이트 FAIL</text>
+    <line x1="200" y1="90"  x2="280" y2="50"  stroke="var(--sub)" stroke-width="1.3" marker-end="url(#ar7)"/>
+    <line x1="200" y1="100" x2="280" y2="112" stroke="var(--sub)" stroke-width="1.3" marker-end="url(#ar7)"/>
+    <line x1="200" y1="115" x2="280" y2="172" stroke="var(--sub)" stroke-width="1.3" marker-end="url(#ar7)"/>
+    <rect x="580" y="70" width="300" height="70" rx="10" fill="var(--warn-soft)" stroke="var(--gate)" stroke-width="2"/>
+    <text x="730" y="97" text-anchor="middle" font-weight="700" fill="var(--ink)">traceability.js 게이트</text>
+    <text x="730" y="117" text-anchor="middle" fill="var(--sub)">커버+제외 = 전체 ∧ 미커버 0 ∧ 유령 tc_id 0</text>
+    <line x1="480" y1="46"  x2="580" y2="95"  stroke="var(--sub)" stroke-width="1.3" marker-end="url(#ar7)"/>
+    <line x1="480" y1="114" x2="580" y2="105" stroke="var(--sub)" stroke-width="1.3" marker-end="url(#ar7)"/>
+    <line x1="480" y1="176" x2="580" y2="120" stroke="var(--bad)" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#ar7)"/>
+    <text x="497" y="160" fill="var(--bad)" font-size="11">봉합 루프(add_row)</text>
+  </g>
+</svg>
+</div>
+<div class="win"><b>첫 가동 성과</b> — 원장 게이트가 <b>기존 파이프라인(v2)도 똑같이 놓친</b> 실질 커버리지 갭을 찾아냈다: UI 레이아웃 검증 TC 부재(기능 B), 채팅 진입 기능 무제한·거점 유일성(기능 C). 전부 TC 추가로 봉합 후 게이트 PASS. 미커버를 %에 숨기지 않고 <b>이름으로 불러내는 것</b>이 원장의 존재 이유다.</div>
+<p class="sub">주의: 원장 매핑도 LLM 산출이다 — 그래서 A/B 판정 시 적대 판정자가 원장 주장 자체를 파일 대조로 재검증한다(실측에서 매퍼 오판 2건 교정됨).</p>
+</div>
+
+<h2 id="files">8. 데이터 흐름과 파일 맵</h2>
+<div class="card">
+<pre><code>specs/&lt;기능명&gt;/                ← 설계 자산 (S1, v2와 공유)
+├─ confluence_raw.md           원문 스냅샷 (입력 게이트 대상)
+├─ analysis.md · tc_design.md  분석·설계 (LLM, design_hash 캐싱 키)
+└─ _labels.json                기획확인/테스트데이터 라벨 (FINAL-5)
+
+&lt;workdir&gt;/                     ← v3 실행 작업장 (기능당 1개, 재현 가능)
+├─ slices.json                 원문 조각: sections[] + rules[]   [S2]
+├─ tc_skeleton.json            행 골격 (idx·분류·leaf)           [S3 convert]
+├─ tc_f_map.json               F열 문장 [{idx,d,f}]              [S3 팬아웃]
+├─ tc_data.json → tcteam_snapshot.json   7열 merge → 10열 스냅샷     [S3 merge]
+├─ fix_plan.json (+r2…)        판정자 패치 (before/앵커 필수)    [S4]
+├─ coverage.json · exclusions.json · traceability.json  원장    [S4/L5]
+├─ tcteam_tc_final.json + tc_final.ok    게이트 통과 최종본          [S5]
+├─ owner_marker.json           탭 소유 증명 (재기록 안전장치)     [S6]
+└─ applied_patches.json        적용 이력 원장 (감사 추적)</code></pre>
+<p class="sub">원칙: 모든 중간 산출물이 파일로 남아 <b>어느 단계든 재현·감사 가능</b>. 시트에는 최종본만 닿는다.</p>
+</div>
+
+<h2 id="utils">9. 결정론 유틸 13종 레퍼런스 (<code>tc-team/lib/</code>)</h2>
+<div class="card">
+<div class="tscroll"><table>
+<tr><th>파일</th><th>단계</th><th>역할</th><th>핵심 게이트</th></tr>
+<tr><td><code>slicer.js</code></td><td>S2</td><td>원문 → sections/rules 결정론 분해</td><td>헤딩 파스 폴백</td></tr>
+<tr><td><code>design_gate.js</code></td><td>S2</td><td>격리 사본에서 convert 시험 — 설계 전개 가능성 판정</td><td>exit 0/4 (본 specs 무변형)</td></tr>
+<tr><td><code>apply_fix_plan.js</code></td><td>S5</td><td>패치 적용기 — edit_cell/add_row/delete</td><td>before-일치 · 앵커 실존 · 충돌=거부</td></tr>
+<tr><td><code>regroup.js</code></td><td>S5</td><td>분류 그룹 연속성 복원 + 재번호</td><td>V-17 봉합</td></tr>
+<tr><td><code>content_gate.js</code></td><td>S5</td><td>내용 규칙 검사 (v2 FINAL-4 정확 승계 + 확장)</td><td>추상표현=차단 · 위임/정확히=2등급</td></tr>
+<tr><td><code>traceability.js</code></td><td>S4/L5</td><td>커버리지 원장 게이트</td><td>미커버·부정제외·유령id=FAIL</td></tr>
+<tr><td><code>snapshot_local.js</code></td><td>S3</td><td>7열→10열 스냅샷 (시트 없이 A·H·I 파생)</td><td>파생식=시트 기록기와 동일 함수</td></tr>
+<tr><td><code>sheet_write.js</code></td><td>S6</td><td>소유 마커 기반 생성/clear-and-rewrite</td><td>타 탭 불가침 · 멱등 재기록</td></tr>
+<tr><td><code>golden_diff.js</code></td><td>QA</td><td>골든 스냅샷 회귀 비교</td><td>구조 지표 diff</td></tr>
+<tr><td><code>ab_compare.js</code></td><td>QA</td><td>A/B 결정론 지표 (규모·분포·위반)</td><td>토큰 커버리지는 근사 라벨 — 원장이 정본</td></tr>
+<tr><td><code>state_projection.js</code></td><td>S7</td><td>파이프라인 상태 원장 투영</td><td>—</td></tr>
+<tr><td><code>force_clean.js</code></td><td>운영</td><td>실패 잔재 정리</td><td>소유 마커 확인 후에만</td></tr>
+<tr><td><code>batch utils</code></td><td>공통</td><td>재시도·인증 래퍼</td><td>—</td></tr>
+</table></div>
+<p class="sub">전부 Node 단일 파일·의존성 최소·CLI 실행 가능. 테스트: <code>node tc-team/test/run_all.js</code> — 82케이스 GREEN이 머지 조건.</p>
+</div>
+
+<h2 id="results">10. 실측 결과 — 콜드런 A/B (동일 원문, 순차 실행, n=1)</h2>
+<div class="card">
+<div class="svgbox">
+<svg viewBox="0 0 900 190" xmlns="http://www.w3.org/2000/svg">
+  <g font-size="12.5">
+    <text x="20" y="30" font-weight="700" fill="var(--ink)" font-size="14">총 시간 (같은 기획서 86KB → 라이브 탭까지)</text>
+    <!-- v2 bar: 158.8 = 720px scale: x4.53 -->
+    <text x="20" y="66" fill="var(--sub)">v2</text>
+    <rect x="60" y="48" width="352" height="28" fill="var(--llm)" opacity="0.85" rx="4"/>
+    <rect x="412" y="48" width="250" height="28" fill="var(--llm)" opacity="0.55" rx="4"/>
+    <rect x="662" y="48" width="103" height="28" fill="var(--llm)" opacity="0.35" rx="4"/>
+    <rect x="765" y="48" width="15"  height="28" fill="var(--llm)" opacity="0.2" rx="4"/>
+    <text x="790" y="67" font-weight="700" fill="var(--ink)">158.8분</text>
+    <text x="236" y="67" text-anchor="middle" fill="#fff">설계 77.5</text>
+    <text x="537" y="67" text-anchor="middle" fill="#fff">작성 55.2</text>
+    <text x="713" y="67" text-anchor="middle" fill="var(--ink)" font-size="11">리뷰 22.8</text>
+    <!-- v3 bar: 73.0 -->
+    <text x="20" y="116" fill="var(--sub)">v3</text>
+    <rect x="60" y="98" width="199" height="28" fill="var(--det)" opacity="0.9" rx="4"/>
+    <rect x="259" y="98" width="25"  height="28" fill="var(--det)" opacity="0.65" rx="4"/>
+    <rect x="284" y="98" width="66"  height="28" fill="var(--det)" opacity="0.5" rx="4"/>
+    <rect x="350" y="98" width="41"  height="28" fill="var(--det)" opacity="0.35" rx="4"/>
+    <text x="400" y="117" font-weight="700" fill="var(--ok)">73.0분 (2.2배)</text>
+    <text x="159" y="117" text-anchor="middle" fill="#fff">설계 43.9</text>
+    <text x="271" y="117" text-anchor="middle" fill="#fff" font-size="10">5.4</text>
+    <text x="317" y="117" text-anchor="middle" fill="#fff" font-size="11">리뷰 14.5</text>
+    <text x="370" y="117" text-anchor="middle" fill="var(--ink)" font-size="10">9.2</text>
+    <text x="20" y="160" fill="var(--sub)">설계 구간은 같은 메커니즘(시행 편차) — 파이프라인 고유 구간만 비교하면 <tspan font-weight="700" fill="var(--ink)">81.2분 → 29.1분 (64% 단축)</tspan>. 최대 기여: 작성 55.2→5.4분(병렬 문장화+결정론 조립).</text>
+    <text x="20" y="180" fill="var(--sub)">품질(적대 판정): 발명 수치 v3 0 vs v2 2 · 원장 100% 설명 vs 미설명 47 · 실질 규칙 커버 우세 — 단 v3도 결함 3종 보유(정직 백로그).</text>
+  </g>
+</svg>
+</div>
+</div>
+
+<h2 id="ops">11. 운영 가이드</h2>
+<div class="card">
+<h3>실행 시퀀스 (콜드런)</h3>
+<pre><code># S1 설계 (v2 설계기 승계 — 재실행 시 해시 일치하면 스킵)
+#   산출: specs/&lt;기능&gt;/analysis.md + tc_design.md
+
+# S2 게이트 + 슬라이스
+node tc-team/lib/design_gate.js  specs/&lt;기능&gt;/tc_design.md          # exit 0 필수
+node tc-team/lib/slicer.js       specs/&lt;기능&gt;/confluence_raw.md  WORK/slices.json
+
+# S3 골격 → 문장화(팬아웃) → merge → 스냅샷
+node scripts/util/direct_convert.js convert specs/&lt;기능&gt;/tc_design.md WORK
+#   (문장화 팬아웃: WORK/tc_skeleton.json → 25행 청크 → WORK/tc_f_map.json)
+node scripts/util/direct_convert.js merge   WORK                    # 에코·해시 게이트
+node tc-team/lib/snapshot_local.js WORK/tc_data.json WORK/tcteam_snapshot.json &lt;탭명&gt;
+
+# S4 적대 리뷰(3렌즈+판정자) → fix_plan + 원장(coverage/exclusions)
+
+# S5 적용 + 게이트
+node tc-team/lib/apply_fix_plan.js WORK/tcteam_snapshot.json WORK/fix_plan.json WORK/tcteam_tc_final.json --ledger WORK/applied_patches.json
+node tc-team/lib/regroup.js        WORK/tcteam_tc_final.json WORK/tcteam_tc_final.json
+node tc-team/lib/content_gate.js   WORK/tcteam_tc_final.json              # 차단 게이트
+node tc-team/lib/traceability.js   WORK/slices.json WORK/coverage.json WORK/exclusions.json WORK/traceability.json
+
+# S6 라이브 + 완료처리 (FINAL-1·2·3·5 + 상태 원장 + read-back QA)
+node tc-team/lib/sheet_write.js    WORK/tcteam_tc_final.json &lt;시트ID&gt; &lt;탭명&gt; WORK</code></pre>
+<h3>기획 확인 루프 (미확정 스펙 처리)</h3>
+<ul>
+<li>작성 중 미확정 발견 → 비고에 <b>「기획 확인 필요」 플래그</b> (임의 확정 금지 — 위임표현은 게이트가 감시)</li>
+<li>플래그 행 + 원문 조각 자동 조인 → <b>기획 확인 요청서</b>(질문·후보답변·blocking 표시) 생성 → 기획팀 전달</li>
+<li>답변 회수 → <b>fix_plan 1패스</b>로 해당 셀만 확정 문장 교체 + 플래그 해제 (전체 재생성 불필요)</li>
+</ul>
+<h3>트러블슈팅 (실전 적발 사례)</h3>
+<div class="tscroll"><table>
+<tr><th>증상</th><th>원인</th><th>처방</th></tr>
+<tr><td>merge FAIL: 에코 불일치</td><td>문장화 에이전트가 행 시프트/타 행 수정</td><td>해당 청크만 재실행 — 다른 청크 결과는 유효</td></tr>
+<tr><td>apply 충돌(before 불일치)</td><td>판정자가 스냅샷 아닌 기억으로 patch 작성</td><td>거부가 정상 동작. fix_plan 재생성</td></tr>
+<tr><td><b>add_row 후 원장 id 어긋남</b></td><td>인서트가 그룹을 쪼개면 regroup이 행 재배치 → <b>산술(+N) 리맵은 오답</b></td><td>pre 스냅샷 결정론 재구성 → <b>내용(E+F) 조인</b>으로 old→new 매핑 → 신규 행은 F prefix 실측 확인 (게이트는 id 실존만 봐서 오염 못 잡음)</td></tr>
+<tr><td>탭 재기록 후 패널/라벨 소실</td><td>clear-and-rewrite는 탭 삭제·재생성</td><td>재기록 후 FINAL-2(패널)·FINAL-5(라벨) 재실행 — 체크리스트化</td></tr>
+<tr><td>드라이브 중복 사본 폭증</td><td>sync는 덮어쓰기 없이 타임스탬프 사본 생성</td><td>이미 동기화된 폴더 통재sync 금지 — 신규 파일만 업로드</td></tr>
+</table></div>
+</div>
+
+<h2 id="qa">12. 테스트 포인트 · 로드맵 · 변경 이력</h2>
+<div class="card">
+<h3>테스트 포인트 (QA 확인 항목)</h3>
+<ul>
+<li><b>정상</b>: 콜드런 전 구간 완주 → 탭 행수 = 최종 스냅샷 행수(read-back 0-diff) · 원장 게이트 PASS</li>
+<li><b>경계</b>: 행수가 25의 배수±1일 때 청크 경계 누락 없음 · 마지막 청크 크기 1</li>
+<li><b>동시성/멱등</b>: 같은 탭 재기록 반복 → clear-and-rewrite 멱등 · 소유 마커 없는 탭은 절대 불가침</li>
+<li><b>실패 주입</b>: fix_plan before 불일치 → 거부 · 앵커 유령 id → 거부 · design 변경 후 merge → 해시 FAIL</li>
+<li><b>권한/안전</b>: 시트 접촉이 S6 외부에서 발생하지 않는지(감사 로그) · 격리 convert가 본 specs를 안 건드리는지</li>
+</ul>
+<h3>로드맵</h3>
+<ul>
+<li><b>드라이버 단일 실행체</b> — S1~S7 원커맨드 + 착수공지·상태원장·단계별 시간 보고 내장 + 락/정지코드/재개 승계 <span class="pill p-info">전환 전 필수</span></li>
+<li>리뷰 렌즈 ↔ 기존 리뷰 규칙(EVAL 20종) 정렬 · 학습 패턴(tc-학습) 프롬프트 주입</li>
+<li>FINAL-5 도출 속도 개선(현 7.1분) · 잔여 결함 fix 라운드(placeholder 갭·비확정 2·미러 중복 정책)</li>
+</ul>
+<h3>변경 이력</h3>
+<div class="tscroll"><table>
+<tr><th>날짜</th><th>버전</th><th>내용</th></tr>
+<tr><td>2026-07-12</td><td>—</td><td>코어 13유틸+82테스트 · 2기능 라이브 파일럿 · A/B 품질 우위 판정 · 게이트 v2 규칙(위임표현) · 원장 라이브 가동 · 기획확인요청서 신설</td></tr>
+<tr><td>2026-07-13</td><td>v1.0</td><td>기능 C 콜드런 시간 A/B(2.2배) · 원장 봉합 루프 실증 · id 리맵 규칙 확립 · 본 가이드 작성</td></tr>
+</table></div>
+</div>
+
+<p class="sub" style="margin-top:30px">tc-v3 guide v1.0 · 이 문서는 공개 배포용으로 내부 식별자(시트·URL·프로젝트명)를 포함하지 않는다 · 스펙 정본: <code>tc-v3-redesign-plan.html</code> · 운영 정본: <code>tc-team/docs/tc-team-driver.md</code></p>
+
+</div>
+</body>
+</html>
