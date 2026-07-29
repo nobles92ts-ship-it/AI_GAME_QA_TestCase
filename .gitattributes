@@ -1,0 +1,20 @@
+# 셸 스크립트는 항상 LF — CRLF 로 체크아웃되면 macOS/Linux 에서
+# "bad interpreter: /bin/bash^M" 로 즉사한다. 플랫폼 무관 고정.
+*.sh text eol=lf
+
+# Google Apps Script · Node · 설정 파일도 LF 로 통일
+*.js  text eol=lf
+*.mjs text eol=lf
+*.gs  text eol=lf
+*.py  text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
+
+# PowerShell 은 Windows 전용이므로 CRLF
+*.ps1 text eol=crlf
+
+# 바이너리
+*.png binary
+*.jpg binary
+*.gif binary
+*.db  binary
