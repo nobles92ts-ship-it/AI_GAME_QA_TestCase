@@ -9,6 +9,7 @@
 
 > **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
 
+[![Landing — Interactive overview](https://img.shields.io/badge/Landing-Interactive%20overview-10B981?style=flat)](https://tc-team-v2-landing.vercel.app/docs.html#agents)
 [![Docs — Architecture](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue?style=flat)](docs/ARCHITECTURE.md)
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
@@ -82,7 +83,7 @@ The 7 fabrications are the important number. In the prior run the same failure m
 | **S6** | Live write | code | **One** sheet touch, then read-back 0-diff verification |
 | **S7** | Completion | code | Confidence scoring, labelling, dashboard, Drive sync |
 
-Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · visual walkthrough: [landing page](https://tc-team-v2-landing.vercel.app/docs.html#agents)
 
 ### The gates
 
