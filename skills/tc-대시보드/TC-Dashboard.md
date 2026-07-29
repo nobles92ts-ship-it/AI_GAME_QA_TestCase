@@ -20,7 +20,6 @@ allowed-tools: Read, Bash, Edit, Write
 | 이름 | 스프레드시트 | 스크립트 | 세부 문서 |
 |------|------------|---------|---------|
 | 마스터 (DX 전체) | `{MASTER_SPREADSHEET_ID}` | `update_dashboard.js` | [master.md](./master.md) |
-| 통합 TC (구형) | `{ALPHA_SPREADSHEET_ID}` | `update_dashboard_alpha.js` | [alpha.md](./alpha.md) |
 | Game QA TC | `{GAMEQA_SPREADSHEET_ID}` | `update_dashboard_gameqa.js` | — |
 
 스크립트 위치: `{PROJECT_ROOT}/scripts/util/`
@@ -76,7 +75,6 @@ SUMPRODUCT(COUNTIF(시트!열:열, {"PASS","FAIL","BLOCK","미진행"}))
 ```bash
 cd {PROJECT_ROOT}/scripts/util
 node update_dashboard.js        # 마스터
-node update_dashboard_alpha.js  # 통합 TC (구형)
 ```
 
 ### 2. 수식 변경 요청 시
@@ -85,7 +83,6 @@ node update_dashboard_alpha.js  # 통합 TC (구형)
 3. 스크립트 재실행으로 반영
 
 ### 3. 새 대시보드 추가 시
-- `update_dashboard_alpha.js`를 복사해 `SPREADSHEET_ID`와 `DASHBOARD_TITLE` 변경
 - 이 SKILL.md의 대시보드 목록에 추가
 - 세부 문서 (.md) 신규 작성
 
