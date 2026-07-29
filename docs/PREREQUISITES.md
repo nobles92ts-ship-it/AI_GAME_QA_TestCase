@@ -1,8 +1,8 @@
 # Prerequisites
 
-The TC Team v2 pipeline coordinates multiple tools. This document lists every dependency, why it is needed, and how to install it.
+The tc-team pipeline coordinates multiple tools. This document lists every dependency, why it is needed, and how to install it.
 
-Assume the target machine has **only Claude Code** installed. The preflight script (`scripts/preflight/preflight.ps1` or `.sh`) will automate most of the checks below.
+Assume the target machine has **only Claude Code** installed. The setup script (`setup.sh` / `setup.ps1`) automates most of the checks below.
 
 ---
 
@@ -53,7 +53,7 @@ On first pipeline run, a browser window will open for you to authorize the app. 
 
 ### 4. Claude Code CLI
 
-**Why**: The `tc-팀-v2` agent orchestrates sub-agents by spawning `claude` CLI processes in separate child shells. This keeps each sub-agent's context isolated.
+**Why**: The S1 design chain spawns the `tc-team-*` agents as separate `claude` CLI processes, so each gets an isolated context window.
 
 **Install**: Follow the [Claude Code installation guide](https://claude.com/claude-code).
 
@@ -81,7 +81,7 @@ C:/Users/YourName/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli
 
 ## MCP Servers
 
-The pipeline uses these MCP servers inside Claude Code. After running preflight, register them manually:
+The pipeline uses these MCP servers inside Claude Code. After running setup, register them manually:
 
 | MCP Server | Purpose | How to register |
 |------------|---------|-----------------|
@@ -106,15 +106,17 @@ After installing everything, create `.env` from `.env.example` and fill in:
 | `MASTER_DASHBOARD_ID` | yes | Google Sheets ID |
 | `CONFLUENCE_SITE` | yes | `https://yourcompany.atlassian.net` |
 
-Run `preflight.ps1` / `preflight.sh` again after editing `.env` — it will substitute placeholders in the `.claude/` files and copy them to your `CLAUDE_HOME`.
+Run `setup.sh` / `setup.ps1` again after editing `.env` — it re-copies the agents and skills into your `CLAUDE_HOME` and re-substitutes every placeholder.
 
 ---
 
 ## Verification
 
-After preflight, run:
+After setup, verify the deterministic core:
 ```bash
-claude /tc-v2 --help
+node tc-team/test/run_all.js
 ```
-If the slash command is recognized, the integration is complete.
+All 13 suites must report GREEN. If they do, the engine is installed correctly.
+
+Then confirm the skill is registered — `/tc-team` should be offered in Claude Code. If it is not, check that `skills/tc-team/` was copied into `$CLAUDE_HOME/skills/`.
 

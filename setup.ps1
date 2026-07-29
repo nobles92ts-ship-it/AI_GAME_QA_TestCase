@@ -57,6 +57,27 @@ Get-ChildItem "$RepoDir\agents\*.md" | ForEach-Object {
 }
 Write-Host "[OK] 에이전트 설치 완료"
 
+# 4-1. 슬래시 커맨드 설치 (구버전은 이 단계가 없어 /tc-이미지매칭 이 설치되지 않았다 — 2026-07-29 추가)
+$CommandsDir = "$ClaudeDir\commands"
+if (Test-Path "$RepoDir\commands") {
+    Write-Host ""
+    Write-Host "[STEP 1-1] 슬래시 커맨드 설치..."
+    New-Item -ItemType Directory -Force -Path $CommandsDir | Out-Null
+    Get-ChildItem "$RepoDir\commands\*.md" -ErrorAction SilentlyContinue | ForEach-Object {
+        $content = Get-Content $_.FullName -Raw -Encoding UTF8
+        $content = $content `
+            -replace '\{NODE_PATH\}',          ($NodePath -replace '\\', '/') `
+            -replace '\{PROJECT_ROOT\}',       ($RepoDir -replace '\\', '/') `
+            -replace '\{WORK_ROOT\}',          ($RepoDir -replace '\\', '/') `
+            -replace '\{CLI_JS\}',             ($CliPath -replace '\\', '/') `
+            -replace '\{CLAUDE_HOME\}',        ($ClaudeDir -replace '\\', '/') `
+            -replace '\{CLAUDE_SKILLS_DIR\}',  ($SkillsDir -replace '\\', '/')
+        [System.IO.File]::WriteAllText("$CommandsDir\$($_.Name)", $content, [System.Text.Encoding]::UTF8)
+        Write-Host "  -> $($_.Name)"
+    }
+    Write-Host "[OK] 커맨드 설치 완료"
+}
+
 # 5. 스킬 파일 복사 + 플레이스홀더 치환
 #    구버전은 복사만 해서 skills/ 안의 {PROJECT_ROOT} 등이 리터럴로 남았다 (2026-07-29 수정).
 Write-Host ""
@@ -71,7 +92,7 @@ $nodeFwd = $NodePath -replace '\\', '/'
 
 $targets = @()
 $targets += Get-ChildItem -Path $SkillsDir -Recurse -File -Include *.md, *.json -ErrorAction SilentlyContinue
-foreach ($sub in @('tc-team', 'scripts')) {
+foreach ($sub in @('tc-team', 'scripts', 'docs')) {
     $p = Join-Path $RepoDir $sub
     if (Test-Path $p) {
         $targets += Get-ChildItem -Path $p -Recurse -File -Include *.md, *.sh, *.js -ErrorAction SilentlyContinue
@@ -140,7 +161,7 @@ Write-Host "  4. npm run auth  <- Google 인증 최초 실행"
 Write-Host ""
 Write-Host "사용법:"
 Write-Host "  Claude Code에서:"
-Write-Host "  'TC 팀 v2로 진행'"
+Write-Host "  '/tc-team <스프레드시트 링크> <기획서 링크>'"
 Write-Host "  'Spreadsheet: https://docs.google.com/spreadsheets/d/...'"
 Write-Host "  'Confluence: https://your-site.atlassian.net/wiki/...'"
 Write-Host ""

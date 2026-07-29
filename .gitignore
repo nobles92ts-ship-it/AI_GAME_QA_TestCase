@@ -41,3 +41,4 @@ node-v20*/
 # OS
 .DS_Store
 Thumbs.db
+.code-review-graph/

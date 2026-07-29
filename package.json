@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "description": "AI-powered Game QA Test Case automation pipeline using Claude Code + Google Sheets + Confluence",
   "scripts": {
-    "auth": "node scripts/google_auth.js",
-    "monitor": "node scripts/pipeline_monitor.js",
-    "monitor:watch": "node scripts/pipeline_monitor.js --watch",
-    "dashboard": "node scripts/update_dashboard.js"
+    "auth": "node scripts/util/google_auth.js",
+    "test": "node tc-team/test/run_all.js",
+    "monitor": "node scripts/util/pipeline_monitor.js",
+    "monitor:watch": "node scripts/util/pipeline_monitor.js --watch",
+    "dashboard": "node scripts/util/update_dashboard.js",
+    "lint:docs": "node scripts/util/doc_reality_lint.js",
+    "lint:ssot": "node scripts/util/ssot_drift_check.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

@@ -1,109 +1,147 @@
 # Architecture
 
-TC Team v2 is a multi-agent pipeline that turns a Confluence spec page into a fully-reviewed Google Sheets test-case tab, automatically.
+tc-team turns a spec (Confluence page, PDF, Word, or Excel) into a reviewed Google Sheets test-case tab. Unlike a conventional agent pipeline, **the model is not in charge of correctness** — deterministic code owns every structural decision and every gate.
 
 ---
 
-## Roles
+## The two lanes
 
-### The orchestrator
+The central constraint of this design:
 
-`tc-팀-v2` is a hybrid subagent + orchestrator. It is:
-- **A subagent**: invoked by main Claude via the Task tool (`agents/tc-팀-v2.md`)
-- **An orchestrator**: internally spawns other agents as independent `claude` CLI processes via Bash, so each team member gets its own context window
+| Lane | Owns | Implemented in |
+|------|------|----------------|
+| **LLM** | Reading the spec, designing coverage, writing each test-case sentence, adversarial review judgments | Claude Code CLI agents |
+| **Deterministic code** | Spec slicing, row structure, IDs, column contracts, all gate pass/fail decisions, coverage ledger, duplicate detection, origin verification, sheet write and read-back | `tc-team/lib/`, `tc-team/scripts/` |
 
-### The team members (workers)
+No gate consults a model. A run is reproducible in every respect that matters for correctness; only the prose varies.
 
-| Agent | Role |
-|-------|------|
-| `tc-designer-v2` | Analyzes the spec page, produces an analysis MD + a design MD |
-| `tc-설계검수-v2` | Reviews the design MD for completeness and structural issues |
-| `tc-writer-v2` | Writes the actual test cases into a new Google Sheets tab |
-| `qa-reviewer-v2` | Reviews the generated TCs in three rounds (structure, quality, final) |
-| `tc-fixer-v2` | Applies fixes based on reviewer reports |
-| `tc-리뷰2수정2-v2` | Combined 2nd review + fix in a single context |
-| `tc-updater-v2` | Handles spec changes by diffing old vs new and updating affected TCs |
+The practical consequence: a failing gate is a fact, not an opinion. It cannot be argued away by a more confident review pass.
 
 ---
 
-## Pipeline flow
+## Stage flow (S0 → S7)
+
+Each stage advances **only** on gate pass.
 
 ```
-Input: spreadsheet URL + Confluence URL(s)
-  |
-  v
-+-------------------------------+
-| Initialize / Resume           |  parse URLs, create specs/, load state.json
-+-------------------------------+
-  |
-  v
-+===== Main pipeline (STEP 1-7) =====+
-| STEP 1: Design           (designer)  |
-| STEP 2: Design review    (설계검수)  |
-| STEP 3: Design fix       (conditional, max 1x)
-| STEP 4: TC writing       (writer)    |  -> new Google Sheets tab
-| STEP 5: Review round 1   (structure) |
-| STEP 6: Fix round 1      (conditional)
-| STEP 7: Review2+Fix2 merged          |
-+=======================================+
-  |
-  v
-+-------------------------------+
-| Completion skill              |  SSoT: .claude/skills/완료처리/완료처리.md
-|   STEP 1: Dashboard update    |  -> delegates rules to .claude/skills/tc-대시보드/
-|   STEP 2: K/L project info    |  add_project_info.js
-|   STEP 3: Drive sync          |  upload_md_to_drive.js
-+-------------------------------+
-  |
-  v
-Final user report
+Input: spreadsheet URL + spec source
+  │
+  ▼
+┌─ S0  Preparation ─────────────────────────────── main ──┐
+│  execution lock · spec fetch (verbatim)                 │
+│  self-check: ≥1KB · image count match · no truncation   │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S1  Design ─────────────────────────────── LLM (Opus) ─┐
+│  designer → design inspection → fix → cross-reference   │
+│  → analysis.md + tc_design.md                           │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S2  Isolation gate + slicing ───────────── code ───────┐
+│  design_gate  → is the design convertible at all?       │
+│  slicer       → spec becomes sections[] + rules[]       │
+│                 (rules[] is the coverage ledger anchor) │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S3  Sentence fan-out ────────── code + LLM + code ─────┐
+│  ① deterministic skeleton (N rows)                      │
+│  ② LLM writes sentences, 25 rows per chunk, parallel    │
+│  ③ deterministic merge — index · echo · hash · count    │
+│  content_gate (advisory pass)                           │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S4  Adversarial review + ledger ── LLM judge, code ────┐
+│  dup_gate    → exact + similar duplicate candidates     │
+│  origin_gate → rows with no anchor in the source spec   │
+│  3 lenses (structure · quality · source) in parallel    │
+│  → mutual rebuttal → fix_plan                           │
+│  coverage ledger: rules → tc_ids, plus exclusions       │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S5  Apply + gates ──────────────────────── code ───────┐
+│  apply_fix_plan  → before-match, anchor exists, no      │
+│                    conflict; otherwise rejected         │
+│  regroup · content_gate · dup_gate · traceability       │
+│  uncovered rule → add_row sealing loop → re-apply       │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S6  Live write ─────────── code, ONE sheet touch ──────┐
+│  owner-marker based: create / idempotent rewrite /      │
+│  _vN suffix if the tab belongs to someone else          │
+│  read-back: A–G + J must diff to 0                      │
+└─────────────────────────────────────────────────────────┘
+  │
+  ▼
+┌─ S7  Completion ─────────────────────────── code ───────┐
+│  confidence scoring · labelling · dashboard · Drive     │
+└─────────────────────────────────────────────────────────┘
 ```
 
-Steps 3 and 6 are conditional — they only run if the preceding review flagged issues.
+---
 
-**STEP numbering caveat**: the pipeline uses STEP 1-7 for the main flow, and the completion skill uses its own STEP 1-3 internally. They do not share a namespace. Pipeline STEP 1 (design) is unrelated to completion STEP 1 (dashboard).
+## Gates
+
+| Gate | Stage | Fails when | On failure |
+|------|:---:|---|---|
+| Input self-check | S0 | Spec < 1KB, image count mismatch, truncation | One re-fetch, then refuse to start |
+| `design_gate` | S2 | Design cannot be expanded into rows | Return to S1 fix loop |
+| merge echo / hash / count | S3 | A chunk shifted or edited rows it did not own | Re-run only that chunk |
+| `content_gate` | S3, S5 | Abstract unverifiable phrasing; column whitelist violation | Blocking at S5 — fix and re-run |
+| `dup_gate` | S4, S5 | Identical rows survive to the final set | Blocking at S5 — merge or differentiate |
+| `origin_gate` | S4 | A row asserts a requirement absent from the spec | Advisory — feeds the review lenses |
+| apply before-match | S5 | The target text changed since the plan was made | Rejection is correct — regenerate the plan |
+| `traceability` | S5 | A sliced rule has no covering row | `add_row` sealing loop, then re-verify |
+| read-back diff | S6 | Written sheet differs from the local final set | Investigate before reporting success |
+
+`origin_gate` is advisory by design: whether an unanchored row is a fabrication or a legitimate inference is a judgment call, so the gate surfaces candidates and the review lenses decide. Blocking there would reject valid rows.
 
 ---
 
-## Model routing
+## The coverage ledger
 
-All LLM calls go through the Claude Code CLI. The orchestrator selects the model per task:
+`slicer.js` turns the spec into `rules[]`. Every rule must end up either **covered** by at least one row, or **explicitly excluded** with a reason.
 
-| Task type | Model | CLI flag |
-|-----------|-------|----------|
-| Design, review, complex reasoning | Sonnet (default) | `--model sonnet` |
-| TC writing, mechanical fixes, bulk analysis | Haiku | `--model haiku` |
-| Architectural decisions | Opus | `--model opus` |
+Exclusion reasons are a closed set of three exact values — *different spec*, *non-test-case prose*, *duplicate rule*. Free-text reasons fail the gate; evidence prose belongs in a separate `note` field. This exists because a free-text reason field degrades into "seemed fine" and the ledger stops meaning anything.
 
-Every worker agent is invoked as:
-```bash
-claude --model <model> --agent <agent-path> -p "<prompt>"
-```
+**"Not yet implemented" is not a valid exclusion.** Such rules must still be expanded into rows, flagged in the status column, with expected/actual marked N/A. Excluding them would hide scope from the QA engineer reading the sheet.
 
-No local LLM, Ollama, or MCP proxy is required — all inference is handled by the Anthropic API through Claude Code.
+### One trap worth knowing
+
+After the sealing loop inserts rows, the ID column is renumbered — so ledger `tc_ids` go stale. **Do not remap arithmetically.** Join on the full tuple (major category + minor category + verification stage + the full step column). Minor category plus steps alone is not unique: the basic-function section restates sentences from the QA section, and a partial-match search on step text will match the wrong row. When in doubt, regenerate the ledger against the final set.
 
 ---
 
-## Completion skill and dashboard SSoT
+## Confidence scoring — deterministic
 
-The completion step runs after the main pipeline succeeds. It is its own skill (`.claude/skills/완료처리/완료처리.md`) with three internal steps:
+`tc-team/scripts/confidence/` scores each row with rules R1–R7 (spec-confirmation flag, image-only reference, unresolved cross-reference, weak anchor, coverage gap, design-technique bonus), reading `tc_design.md`, `dxr_crossref.json`, and `coverage_gaps.json`.
 
-| Internal step | Command | SSoT for rules |
-|---------------|---------|----------------|
-| 1. Dashboard | `update_dashboard.js $SHEET_ID` | delegates to `.claude/skills/tc-대시보드/TC-Dashboard.md` |
-| 2. K/L panel | `add_project_info.js $SHEET_ID $TAB $URL` | self |
-| 3. Drive sync | `upload_md_to_drive.js --sync $FEATURE` | self |
-
-The 완료처리 skill handles execution; `tc-대시보드` skill owns the dashboard formula/formatting rules. This split exists so ad-hoc "update the dashboard" requests (handled by `tc-대시보드` as a user-invokable skill) and automatic pipeline completion (handled by 완료처리) share the same rules without duplication.
+**Zero LLM calls.** Identical input always yields an identical score, so the number is a stable signal about where a reviewer should look — not a second opinion from a model.
 
 ---
 
-## State and resume
+## State, locking, and resume
 
-The orchestrator writes a checkpoint file (`state.json` in `WORK_ROOT/team/`) before each step. If the pipeline is interrupted, it checks file existence under `specs/<feature>/` in a defined order to determine which step to resume from. This allows killing and restarting without losing work.
+- `team/.pipeline.lock` holds the run epoch. A user-triggered run always reclaims the lock; a fresh lock (< 180 min) only produces a warning, since an async trigger path may legitimately overlap. Released on completion **and** on every abort path.
+- `state.json` is projected by `state_projection.js` for monitoring and notification consumers.
+- S1 skips when `design_hash` matches. Missing `tc_final.ok` is the signal to re-run S5.
 
 ---
 
-## Batch mode
+## Where the rules live
 
-When the user passes multiple Confluence URLs, the orchestrator iterates sequentially: initialize -> pipeline -> completion -> next URL. A batch summary is printed at the end. Failed features do not block successful ones — each URL is independent.
+| Path | Contains |
+|------|----------|
+| `skills/tc-team/SKILL.md` | Stage contracts S0–S7, gate table, invariants |
+| `skills/tc-team/rules/` | 9 rule files — analysis, design, inspection, cross-reference, authoring, review, learning, labelling, completion |
+| `tc-team/lib/` | 14 deterministic modules |
+| `tc-team/workflows/` | S3 fan-out and S4 review workflow scripts |
+| `tc-team/docs/` | Driver reference, EVAL digest, guides |
+| `scripts/util/` | Shared utilities — deliberately *not* copied into `tc-team/`, to prevent a code fork |
+
+Rule files are read at runtime. Editing one changes the next run; there is no build step and no second copy to keep in sync. The two linters in `scripts/util/` exist to catch the case where a rule edit desynchronises from the code that enforces it — see the README.

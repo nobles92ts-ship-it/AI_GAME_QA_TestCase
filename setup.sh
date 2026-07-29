@@ -57,6 +57,28 @@ for file in "$REPO_DIR/agents/"*.md; do
 done
 echo "[OK] 에이전트 설치 완료"
 
+# 4-1. 슬래시 커맨드 설치 (구버전은 이 단계가 없어 /tc-이미지매칭 이 설치되지 않았다 — 2026-07-29 추가)
+COMMANDS_DIR="$CLAUDE_DIR/commands"
+if [ -d "$REPO_DIR/commands" ]; then
+  echo ""
+  echo "[STEP 1-1] 슬래시 커맨드 설치..."
+  mkdir -p "$COMMANDS_DIR"
+  for file in "$REPO_DIR/commands/"*.md; do
+    [ -e "$file" ] || continue
+    filename=$(basename "$file")
+    sed \
+      -e "s|{NODE_PATH}|$NODE_PATH|g" \
+      -e "s|{PROJECT_ROOT}|$REPO_DIR|g" \
+      -e "s|{WORK_ROOT}|$REPO_DIR|g" \
+      -e "s|{CLI_JS}|$CLI_JS|g" \
+      -e "s|{CLAUDE_HOME}|$CLAUDE_DIR|g" \
+      -e "s|{CLAUDE_SKILLS_DIR}|$SKILLS_DIR|g" \
+      "$file" > "$COMMANDS_DIR/$filename"
+    echo "  -> $filename"
+  done
+  echo "[OK] 커맨드 설치 완료"
+fi
+
 # 5. 스킬 파일 복사 + 플레이스홀더 치환
 #    ⚠ 구버전은 cp -r 만 해서 skills/ 안의 {PROJECT_ROOT} 등이 리터럴로 남았다(2026-07-29 수정).
 #      규칙 md 는 파이프라인이 런타임에 읽으므로 치환 없이는 경로 참조가 전부 깨진다.
@@ -81,7 +103,7 @@ echo "[OK] 스킬 설치 완료 (플레이스홀더 치환 포함)"
 #      문서(docs/*.md)의 경로 안내가 리터럴로 남으면 사용자가 따라할 수 없다.
 echo ""
 echo "[STEP 2-1] 레포 내 플레이스홀더 치환..."
-find "$REPO_DIR/tc-team" "$REPO_DIR/scripts" -type f \( -name '*.md' -o -name '*.sh' -o -name '*.js' \) -print0 2>/dev/null | while IFS= read -r -d '' f; do
+find "$REPO_DIR/tc-team" "$REPO_DIR/scripts" "$REPO_DIR/docs" -type f \( -name '*.md' -o -name '*.sh' -o -name '*.js' \) -print0 2>/dev/null | while IFS= read -r -d '' f; do
   grep -q '{PROJECT_ROOT}\|{WORK_ROOT}\|{NODE_PATH}\|{CLAUDE_HOME}\|{CLAUDE_SKILLS_DIR}' "$f" || continue
   sed -i \
     -e "s|{NODE_PATH}|$NODE_PATH|g" \
@@ -137,7 +159,7 @@ echo "  4. npm run auth  ← Google 인증 최초 실행"
 echo ""
 echo "사용법:"
 echo "  Claude Code에서:"
-echo "  'TC 팀 v2로 진행'"
+echo "  '/tc-team <스프레드시트 링크> <기획서 링크>'"
 echo "  'Spreadsheet: https://docs.google.com/spreadsheets/d/...'"
 echo "  'Confluence: https://your-site.atlassian.net/wiki/...'"
 echo ""

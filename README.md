@@ -1,173 +1,186 @@
-# AI_GAME_QA_TestCase — TC Team v2
+# AI_GAME_QA_TestCase — tc-team
 
 <a href="https://claude.ai/code">
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40">
 </a>
-&nbsp;
-<a href="https://tc-team-v2-landing.vercel.app/">
-  <img src="landing-button.svg" height="60" alt="Landing page">
-</a>
 
-> **Multi-agent, multi-model game-QA test-case automation pipeline.**
-> Drop in a spec (Confluence / PDF / Word / Excel) — get back a fully reviewed **300-TC Google Sheet** — fully automated, zero manual click-through.
+> **Deterministic game-QA test-case pipeline.**
+> Hand it a spec and a sheet — get back a reviewed test-case tab whose structure, gates, and coverage ledger are owned by code, not by a model.
 
-[![Landing](https://img.shields.io/badge/Landing-tc--team--v2--landing.vercel.app-10B981?style=flat)](https://tc-team-v2-landing.vercel.app/)
+> **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
+
 [![Docs — Architecture](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue?style=flat)](docs/ARCHITECTURE.md)
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
 
 ---
 
+## ⚠️ v4.0.0 — the v2 engine has been retired
+
+This release replaces the `tc-팀-v2` multi-agent orchestrator with **tc-team**, a two-lane pipeline.
+**If you are running v2, read [Migrating from v2](#-migrating-from-v2) before you pull.**
+
+---
+
 ## ⚡ TL;DR
 
-- **7-stage multi-agent pipeline** — Claude Opus for analysis/design, Sonnet for all other stages
-- **4 input formats** — Confluence URL / PDF / Word (`.doc`, `.docx`) / Excel (`.xlsx`, `.xls`), auto-detected
-- **Smart model routing** — Opus for deep reasoning (STEP 1), Sonnet for everything else — all via Claude Code CLI, no external API needed
-- **Hybrid subagent + orchestrator pattern** — orchestrator spawns each worker as an isolated `claude` CLI process
-- **Resume logic** — checkpoint-based via `state.json`; survives mid-run interruptions
-- **SSoT rule management** — one skill file per stage, every agent reloads on change
-- **Auto-completion tail** — master dashboard refresh + K/L project panel + Google Drive sync + tab color/order sort
-- **Zero human click-through time beyond the initial 2 links** (~1 min of human attention per 300-TC run)
+- **Two lanes, strictly separated** — the LLM writes sentences and makes judgment calls; **deterministic code owns structure, gates, and the coverage ledger**. No model ever decides whether a gate passes.
+- **8 stages (S0–S7)** — each with a machine-checkable exit condition
+- **7 deterministic gates** — design, content, duplicate, origin, coverage seal, golden diff, traceability ledger
+- **Confidence scoring with zero LLM calls** — a rule-based score (R1–R7) tells you which rows deserve human attention
+- **One sheet touch** — everything is assembled and verified locally, then written once and read back for a 0-diff check
+- **4 input formats** — Confluence URL / PDF / Word / Excel, auto-detected
+- **No external API** — all model calls go through the Claude Code CLI
 
 ---
 
-## 📊 Measured metrics (300-TC feature run)
+## 🎯 The design decision — why determinism
 
-| Metric | Manual QA | TC Team v2 | Δ |
-|--------|:---:|:---:|:---:|
-| Hands-on engineer time | ~3 hours | ~40 min | **~80% ↓** |
-| Actual human click/type time | ~3 hours | **~1 min** | **~180× ↓** |
-| Review rounds | 1 (manual) | 2 (auto, merged R2+Fix) | 2× |
-| Dashboard / Drive sync | manual | automatic | ∞ |
-| Supported input formats | 1 | **4** | — |
-| Resume on interruption | ❌ | ✅ checkpoint-based | — |
-| External API/server required | — | **None** (Claude Code CLI only) | — |
+v2 asked a model to author test cases *and* judge its own output. That works until it doesn't: duplicate rows reach the sheet, fabricated requirements pass review, and coverage is whatever the model says it is. None of it is reproducible.
 
-Output quality benchmarked against a 3-year senior QA engineer: terminology consistency, verifiability, spec coverage, and EVAL 01~11 criteria all measured at parity or better.
+tc-team draws a hard line:
 
----
+| Owned by the **LLM** | Owned by **deterministic code** |
+|---|---|
+| Reading the spec, designing coverage | Slicing the spec into rules |
+| Writing each test-case sentence | Row structure, IDs, column contracts |
+| Adversarial review judgments | Every gate pass/fail decision |
+| — | Coverage ledger, exclusions, traceability |
+| — | Duplicate detection, origin verification |
+| — | Sheet write + read-back diff |
 
-## 🏗 Architecture
-
-![TC Team v2 Pipeline](assets/pipeline-diagram.png)
-
-**Hybrid subagent + orchestrator**. `tc-팀-v2` is called by main Claude via the Task tool — so it runs in its own context — and internally dispatches each stage to a dedicated worker agent as a **separate `claude` CLI process** spawned via Bash. Every worker gets an isolated context window; the orchestrator writes checkpoints to `state.json` before each step transition and resumes from the last successful step on restart.
-
-### Pipeline stages
-
-| # | Stage | Agent | Model | Conditional | ~Time |
-|---|-------|-------|-------|-------------|:---:|
-| INIT | Workspace init + spec ingestion | orchestrator | Node.js + MCP | — | — |
-| 1 | Spec analysis & TC design | `tc-designer-v2` | Claude Opus · `effort:med` | — | ~40m |
-| 2 | Design inspection (C-01 ~ C-10) | `tc-설계검수-v2` | Claude Sonnet | — | ~10m |
-| 3 | Design fix (max 1×) | `tc-designer-v2` | Claude Sonnet | `needs_fix == true` | ~10m |
-| 4 | TC authoring → Google Sheets | `tc-writer-v2` | Claude Sonnet | — | ~3m |
-| 5 | Review R1 (structure) | `qa-reviewer-v2` | Claude Sonnet | — | ~10m |
-| 6 | Fix R1 | `tc-fixer-v2` | Claude Sonnet | `issues > 0` | ~2m |
-| 7 | Review R2 + Fix R2 (merged one-context pass) | `tc-리뷰2수정2-v2` | Claude Sonnet | — | ~10m |
-| DONE | Dashboard refresh + K·L panel + Drive sync + tab color sort | orchestrator | Node.js | — | ~2m |
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full data-flow diagram, resume-logic implementation, and orchestration internals.
+**This is a tradeoff, stated plainly:** tc-team takes roughly **2.2× the wall-clock time** of the v2 engine. What you get back is reproducibility, an auditable coverage ledger, and gates that catch a class of defect v2 shipped silently.
 
 ---
 
-## 🧠 Smart model routing — the design decision
+## 📊 Measured — production run, 2026-07-29
 
-We don't throw the same model at every stage. Each model has a sweet spot:
+A 277-row feature run, all figures measured rather than asserted:
 
-| Model | Role | Stages |
-|-------|------|--------|
-| **Claude Opus** | Deep reasoning — spec analysis & design | STEP 1 |
-| **Claude Sonnet** | Balanced — all other stages | STEP 2, 3, 4, 5, 6, 7 |
+| Check | Result |
+|---|---|
+| Rows written live | 277 |
+| Sheet read-back diff | **0** |
+| Exact duplicate rows reaching the sheet | **0** (the previous v2-era run shipped 3 duplicate pairs) |
+| Fabricated requirements caught **before** review | **7** — 5 confirmed by the cross-reference lens and promoted to "spec confirmation needed" |
+| Deterministic core test suite | **13 suites, ALL GREEN** |
 
-- **Opus handles**: spec analysis (complex judgment, `--effort medium`)
-- **Sonnet handles**: design inspection, TC authoring, review, fix-application, merged review+fix
+The 7 fabrications are the important number. In the prior run the same failure mode was only found *after* the sheet was delivered, by hand.
 
-All models are called through **Claude Code CLI** (`claude --model <model> --agent <agent>`) — no external API keys, no SDK dependencies, no local model servers needed.
+---
 
-| Stage | Before (v1 — Gemma4 local) | After (v2 — Sonnet CLI) | Improvement |
-|-------|:---:|:---:|:---:|
-| STEP 4 TC authoring | Gemma4 · ~10 min · preamble bugs | Sonnet CLI · ~3 min · clean output | 3× faster, no bugs |
-| STEP 6 Fix R1 | Gemma4 · ~10 min · quota limits | Sonnet CLI · ~2 min · no limits | 5× faster, reliable |
-| Setup complexity | Ollama install + VRAM + API key | None (Claude Code built-in) | Zero setup |
+## 🏗 Pipeline — S0 to S7
+
+| # | Stage | Lane | What it produces |
+|---|-------|------|------------------|
+| **S0** | Preparation | main | Workspace, spec ingestion, run config |
+| **S1** | Design | **LLM** (Opus) | Spec analysis → coverage design → cross-reference → design inspection |
+| **S2** | Isolation gate + slicing | code | Spec sliced into addressable rules |
+| **S3** | Sentence fan-out | code + LLM + code | Deterministic skeleton → LLM writes sentences → deterministic merge |
+| **S4** | Adversarial review + coverage ledger | **LLM** judgment, code ledger | Findings, verdicts, coverage/exclusions ledger |
+| **S5** | Apply + gates | code | Fix plan applied, every gate evaluated |
+| **S6** | Live write | code | **One** sheet touch, then read-back 0-diff verification |
+| **S7** | Completion | code | Confidence scoring, labelling, dashboard, Drive sync |
+
+Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+### The gates
+
+| Gate | Catches |
+|------|---------|
+| `design_gate` | Design that can't be converted into rows |
+| `content_gate` | Abstract, unverifiable phrasing; column whitelist violations |
+| `dup_gate` | Duplicate and logically-negated-duplicate rows |
+| `origin_gate` | Requirements with no anchor in the source spec (fabrication) |
+| coverage seal | Rules with no covering row, and unjustified exclusions |
+| `golden_diff` | Any unintended drift against the approved snapshot |
+| `traceability` | Rule ↔ row ledger integrity |
+
+A gate failure stops the run. No gate consults a model.
+
+### Confidence scoring — no LLM calls
+
+`tc-team/scripts/confidence/` scores each row deterministically (rules R1–R7: spec-confirmation needed, image-only reference, unresolved cross-reference, weak anchor, coverage gap, design-technique bonus). The output tells a reviewer where to spend attention. Because it is pure code, the same input always yields the same score.
 
 ---
 
 ## 🚀 Quick start
 
-Assumes [Claude Code](https://claude.ai/code) is already installed. Everything else the setup script handles.
+Assumes [Claude Code](https://claude.ai/code) is installed.
 
 ```bash
 git clone https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase.git
 cd AI_GAME_QA_TestCase
+```
 
-# Windows
-.\setup.ps1
-
-# macOS / Linux
+```bash
 bash ./setup.sh
 ```
 
-The setup script:
-- Auto-detects Node.js and Claude Code CLI paths
-- Installs agents/skills/commands into `~/.claude/`
-- Replaces `{NODE_PATH}` / `{CLI_JS}` / `{WORK_ROOT}` / `{CLAUDE_HOME}` / `{CONFLUENCE_SITE}` / `{MASTER_DASHBOARD_ID}` placeholders
-- Creates `.env` and `pipeline_config.json` from templates
-- Runs `npm install`
+On Windows use `.\setup.ps1` instead.
 
-Then in Claude Code:
+The setup script auto-detects Node.js and the Claude Code CLI, installs agents and skills into `~/.claude/`, substitutes every `{PROJECT_ROOT}` / `{NODE_PATH}` / `{CLAUDE_HOME}` / `{CONFLUENCE_SITE}` placeholder, creates `.env` and `pipeline_config.json` from templates, and runs `npm install`.
+
+Then, in Claude Code, hand it a sheet link and a spec link **together**:
 
 ```
-/tc-v2 <google-sheets-url> <spec-source> [<spec-source-2> ...]
+/tc-team <google-sheets-url> <spec-source>
 ```
 
-`<spec-source>` can be any of:
+`<spec-source>` can be a Confluence URL, or a path to a `.pdf`, `.docx`, or `.xlsx` file.
 
-```
-Confluence URL         https://yoursite.atlassian.net/wiki/spaces/.../pages/111
-PDF file               C:/specs/feature.pdf
-Word doc               /home/you/specs/feature.docx
-Excel spreadsheet      "C:/my specs/matrix.xlsx"
-```
+Your session then drives S0–S7, reporting at each stage and halting on any gate failure. A spec link **without** a sheet link is rejected rather than guessed at. One feature per run — there is no batch mode.
 
-Multiple sources can be mixed in a single batch run — the orchestrator iterates sequentially and each feature gets its own isolated run with independent state.
-
-Full walkthrough: [docs/SETUP.md](docs/SETUP.md) · Dependency details: [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
-
-### MCP servers
-
-Two MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.mcp.json.example`](.mcp.json.example)):
-
-```json
-{
-  "mcpServers": {
-    "google-sheets": {
-      "command": "node",
-      "args": ["<NPM_GLOBAL>/mcp-google-sheets/dist/index.js"],
-      "env": {
-        "GOOGLE_SHEETS_CLIENT_ID": "...",
-        "GOOGLE_SHEETS_CLIENT_SECRET": "...",
-        "TOKEN_PATH": "<HOME>/.mcp-google-sheets-token.json"
-      }
-    },
-    "claude_ai_Atlassian": { "...": "..." }
-  }
-}
-```
-
-`google-sheets` and `Atlassian` are third-party or Claude Code built-in. No local model server (Ollama) is required — all model calls go through Claude Code CLI.
+Full walkthrough: [docs/SETUP.md](docs/SETUP.md) · Dependencies: [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
 
 ---
 
-## 🛠 Tech stack
+## 🔧 Customising the rules — and the two linters
 
-| Layer | Tech |
-|-------|------|
-| Agent runtime | Claude Code CLI (Opus 4.6 · Sonnet 4.6) |
-| Orchestration | Bash + Node.js (CLI process spawning, state persistence, Bash↔MCP bridging) |
-| Input parsers | `xlsx` (Excel) · `pdf-parse` / `pdfjs-dist` (PDF) · `mammoth` (Word) · MCP (Confluence ADF) |
-| Output | Google Sheets API via `googleapis` |
-| MCP integrations | `google-sheets` (third-party), `claude_ai_Atlassian` |
+Every pipeline rule lives in `skills/tc-team/rules/` as a Markdown file. Edit those and the pipeline picks the change up on the next run; there is no build step and no copy to keep in sync.
+
+But editing a rule can silently desynchronise it from the machinery that enforces it. Two linters exist for exactly that moment:
+
+| Linter | Question it answers |
+|--------|--------------------|
+| `scripts/util/doc_reality_lint.js` | Does every path, script, and agent named in the docs actually exist? |
+| `scripts/util/ssot_drift_check.js` | Has a rule document drifted from the deterministic code that implements it? |
+
+```bash
+node scripts/util/doc_reality_lint.js
+node scripts/util/ssot_drift_check.js
+```
+
+**These are not part of the pipeline and do not run automatically.** They are maintenance tools: run them after you edit rules, not on every TC run. If you only *use* the pipeline as shipped, you will never need them.
+
+---
+
+## 🔁 Migrating from v2
+
+**v2 is not deleted — it is pinned.** Everything from the v2 era remains permanently available at the [`v3.1.0`](https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/releases/tag/v3.1.0) tag.
+
+**To stay on v2**, pin that tag and stop pulling `main`:
+
+```bash
+git checkout v3.1.0
+```
+
+**To move to tc-team**, note that v4.0.0 has an unrelated commit history, so `git pull` will fail with *"refusing to merge unrelated histories"*. Re-clone:
+
+```bash
+git clone https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase.git
+```
+
+What changed for you:
+
+| v2 | v4 (tc-team) |
+|---|---|
+| `/tc-v2 <sheet> <spec>` | `/tc-team <sheet> <spec>` |
+| 10 `*-v2` agents | 3 `tc-team-*` agents |
+| One skill directory per stage | `skills/tc-team/rules/` — 9 rule files |
+| Review verdicts decide correctness | Deterministic gates decide; LLM only judges |
+
+`tc-대시보드`, `tc-이미지매칭`, and `haiku` are unchanged and still ship.
 
 ---
 
@@ -175,84 +188,63 @@ Two MCP servers need to be registered in `~/.claude/.mcp.json` (template: [`.mcp
 
 ```
 AI_GAME_QA_TestCase/
-├── agents/                        # Claude agent definitions
-│   ├── tc-팀-v2.md                # Orchestrator — state.json + worker spawning
-│   ├── tc-designer-v2.md          # STEP 1 / STEP 3
-│   ├── tc-설계검수-v2.md          # STEP 2 — design quality gate (C-01~C-10)
-│   ├── tc-writer-v2.md            # STEP 4 — TC authoring (Sonnet)
-│   ├── qa-reviewer-v2.md          # STEP 5 — structural review
-│   ├── tc-fixer-v2.md             # STEP 6 — fix application (Sonnet)
-│   ├── tc-리뷰2수정2-v2.md        # STEP 7 — merged R2 + fix pass
-│   └── tc-updater-v2.md           # Spec-change detection + surgical TC update
+├── agents/                       # 3 tc-team agent definitions
+│   ├── tc-team-designer.md       # S1 — spec analysis & coverage design
+│   ├── tc-team-대조.md            # S1 — cross-reference against the knowledge index
+│   └── tc-team-설계검수.md        # S1 — design inspection gate
 │
-├── commands/
-│   └── tc-v2.md                   # /tc-v2 slash command (entry point)
+├── skills/
+│   ├── tc-team/
+│   │   ├── SKILL.md              # S0–S7 stage contracts (entry point)
+│   │   └── rules/                # 9 rule files — the SSoT you customise
+│   ├── tc-대시보드/               # Dashboard refresh
+│   ├── tc-이미지매칭/             # Confluence image → sheet column matching
+│   └── haiku/
 │
-├── skills/                        # Per-stage SSoT skill files
-│   ├── tc-설계/  tc-생성/  tc-리뷰/  tc-수정/  tc-갱신/  tc-설계검수/
-│   ├── haiku/                     # Sonnet writer/fixer skill definitions (STEP 4, 6)
-│   └── 완료처리/  tc-대시보드/    # Pipeline-tail skills
+├── tc-team/                      # The deterministic engine
+│   ├── lib/                      # 14 modules — gates, slicer, ledger, sheet I/O
+│   ├── scripts/                  # Chain drivers + confidence scoring
+│   ├── test/                     # 13 suites
+│   └── docs/                     # Driver reference, EVAL digest, guides
 │
-├── appscript/
-│   └── tab_manager.gs             # Tab color/sort Apps Script (M3 button + daily 09:00 KST auto-run)
+├── scripts/util/                 # Shared Node utilities + the 2 linters
+│   └── expander/                 # Design expansion & schema validation
 │
-├── scripts/
-│   └── util/                      # Node utilities
-│       ├── google_auth.js         # Google OAuth (client_secret + token flow)
-│       ├── update_dashboard.js    # Master dashboard refresh
-│       ├── add_project_info.js    # K/L project-info panel
-│       ├── upload_md_to_drive.js  # Specs → Drive sync
-│       ├── deploy_appscript.js    # One-shot deployer — pushes tab_manager.gs to Sheets-bound project
-│       ├── create_gsheet_tc_from_json.js
-│       ├── apply_fixes.js
-│       ├── read_gsheet_data.js
-│       └── v2/                    # Pipeline state / gate / timing infrastructure
-│
-├── docs/
-│   ├── PREREQUISITES.md           # Full dependency install guide
-│   ├── SETUP.md                   # Step-by-step walkthrough
-│   └── ARCHITECTURE.md            # Pipeline internals + data flow
-│
-├── credentials/                   # OAuth files (gitignored, .gitkeep only)
-├── assets/                        # Pipeline diagram
-├── .env.example
-├── .mcp.json.example
-├── pipeline_config.json.template
-├── package.json                   # npm deps: googleapis, xlsx, pdf-parse, pdfjs-dist, mammoth, ...
-├── requirements.txt               # Python deps (optional — for local analysis utilities)
-├── setup.ps1 / setup.sh           # Platform-specific installers
-└── landing-button.svg             # Landing page link badge
+├── appscript/                    # Google Apps Script (tab colour/sort, Slack)
+├── docs/                         # Setup, prerequisites, architecture
+├── commands/                     # Slash commands
+└── credentials/                  # OAuth files (gitignored, .gitkeep only)
 ```
+
+---
+
+## 🛠 Tech stack
+
+| Layer | Tech |
+|-------|------|
+| Agent runtime | Claude Code CLI |
+| Orchestration | Bash + Node.js |
+| Input parsers | `xlsx` · `pdf-parse` / `pdfjs-dist` · `mammoth` · MCP (Confluence ADF) |
+| Output | Google Sheets API via `googleapis` |
+| MCP integrations | `google-sheets`, Atlassian |
 
 ---
 
 ## 🔮 Roadmap
 
-### ✅ Phase 1 — Multi-source TC automation & auto-completion (shipped)
-- Confluence / PDF / Word / Excel → Google Sheets generation
-- 7-stage multi-agent pipeline (Claude Opus for STEP 1, Sonnet for STEP 2–7, via CLI)
-- Merged review + fix pass for faster quality cycles
-- Auto-completion tail: dashboard / K·L panel / Drive sync
-- Tab color/sort auto-management: M3 dashboard button trigger + daily 09:00 KST auto-sort (`tab_manager.gs` + `deploy_appscript.js`)
-- `tc-updater-v2` for surgical spec-change updates (Confluence only for now)
+### ✅ Shipped
+- Two-lane pipeline with 7 deterministic gates
+- Coverage ledger with explicit, reason-coded exclusions
+- LLM-free confidence scoring
+- Single-touch sheet write with read-back verification
 
-### 🔜 Phase 2 — Intelligent TC management
-- TC history version control & diff view
-- Cross-feature dependency analysis
-- Auto-classification of automatable TCs
-- Auto QA-report generation (PDF / Markdown / Confluence)
-- PDF/Word spec-change detection extension for `tc-updater-v2`
-
-### 🌟 Phase 3 — Physical test execution
-- Generate automation scripts from TCs
-- Auto-run against game builds
-- Auto-reflect execution results back to the TC sheet
-- Regression test automation loop
+### 🔜 Next
+- Duplicate-gate threshold tuning against a larger corpus
+- Coverage-denominator handling for superseded spec sections
+- Spec-change detection and surgical TC update on the tc-team engine
 
 ---
 
 ## 🤖 Built with Claude Code
 
-This entire project — every agent definition, every orchestration Bash block, every skill rule, all documentation — was designed, built, and iterated end-to-end using [Claude Code](https://claude.ai/code).
-
-For non-developers or a higher-level overview of what this system does, see the **[landing page](https://tc-team-v2-landing.vercel.app/)**.
+Every agent definition, orchestration script, rule file, and page of documentation in this project was designed and built using [Claude Code](https://claude.ai/code).
