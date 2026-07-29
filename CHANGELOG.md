@@ -1,6 +1,63 @@
 # Changelog
 
-All notable changes to TC Team v2 are documented here.
+All notable changes to this project are documented here.
+
+---
+
+## [v4.0.0] — 2026-07-29
+
+**Breaking — the `tc-팀-v2` engine has been retired and removed.**
+v2 remains permanently available at the `v3.1.0` tag. See *Migrating from v2* in the README.
+
+### Added
+
+#### tc-team — deterministic two-lane pipeline
+- `tc-team/lib/` — 14 modules. The LLM writes sentences and makes judgment calls; **deterministic code owns structure, gates, and the coverage ledger.**
+- **7 gates**, none of which consult a model: `design_gate`, `content_gate`, `dup_gate`, `origin_gate`, coverage seal, `golden_diff`, `traceability`
+- `tc-team/scripts/confidence/` — rule-based (R1–R7) row confidence scoring with **zero LLM calls**; identical input always yields an identical score
+- Single sheet touch: assemble and verify locally, write once, read back and diff
+- `skills/tc-team/rules/` — 9 rule files as the customisation SSoT; no build step, no synchronised copy
+- `agents/tc-team-designer`, `tc-team-대조`, `tc-team-설계검수`
+- 13 deterministic test suites
+
+#### Table-cell rule extraction (`tc-team/lib/slicer.js`)
+- Rules are now extracted from Markdown **table cells**, not only from bullet and numbered lists. Specs written entirely as tables previously produced rows with no anchor.
+- Excludes header rows, separator rows, repeated header rows, change-history rows, image-only cells, and non-prose cells
+- Handles Confluence→Markdown conversion flattening nested bullets onto one line
+- `--table-min-chars` (default 12) bounds the rule count so the coverage-sealing loop cannot be flooded
+
+#### Ledger format contract (`tc-team/lib/traceability.js`)
+- `coverage.json` and `exclusions.json` are plain arrays; wrapped objects are tolerated on read
+- Exclusion `reason` is one of three exact values, with prose evidence moved to a `note` field
+
+#### Path portability
+- The engine, chain scripts, and both linters now derive their roots from `TCTEAM_PROJECT_ROOT` / `CLAUDE_CONFIG_DIR` or from the script's own location — no absolute paths
+- `setup.sh` / `setup.ps1` now substitute placeholders inside `skills/`, `tc-team/`, and `scripts/` as well as `agents/`. Previously rule files kept their placeholders verbatim and every path reference in them was broken after install.
+
+### Removed
+- `tc-팀-v2` and the other 9 `*-v2` agents; the per-stage v2 skill directories; `commands/tc-v2.md`; `tc_v3/`
+- v2-era pipeline diagram, landing badge, and `docs/tc_pipeline_v2.html`
+
+### Unchanged
+- `tc-대시보드`, `tc-이미지매칭`, `haiku` skills and their supporting scripts
+
+### Measured — 277-row production run, 2026-07-29
+| Check | Result |
+|---|---|
+| Sheet read-back diff | 0 |
+| Exact duplicate rows reaching the sheet | 0 (prior v2-era run: 3 pairs) |
+| Fabricated requirements caught before review | 7 — 5 confirmed and promoted to "spec confirmation needed" |
+| Deterministic test suites | 13 ALL GREEN |
+
+---
+
+## [v3.1.0] — 2026-07-13
+
+- `/tc-team` deterministic engine shipped alongside v2 (both engines present)
+
+## [v3.0.0] — 2026-07-13
+
+- tc-v3 deterministic pipeline (preview)
 
 ---
 
