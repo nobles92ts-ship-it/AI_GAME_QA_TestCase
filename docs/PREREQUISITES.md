@@ -64,6 +64,14 @@ On first pipeline run, a browser window will open for you to authorize the app. 
 C:/Users/YourName/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js
 ```
 
+### 5. Workflow tool (multi-agent orchestration) — required for S3·S4
+
+**Why**: Stages S3 (sentence fan-out) and S4 (adversarial review) are executed as `Workflow({scriptPath: "tc-team/workflows/..."})` calls from the driving Claude Code session. Without the Workflow tool, the pipeline runs cleanly through S0–S2 and then **stops at S3** — this is the single most common "why did it halt" for new installs.
+
+**Verify**: In your Claude Code session, confirm the `Workflow` tool is available (multi-agent orchestration enabled). If your environment gates it behind an opt-in, enable it before the first run.
+
+**If unavailable**: there is no shipped fallback — S3/S4 fan-out is Workflow-only in this release. The deterministic stages (S0, S2, S5–S7) and the S1 design chain still work, but you will not get a finished sheet.
+
 ---
 
 ## Optional
@@ -87,8 +95,16 @@ The pipeline uses these MCP servers inside Claude Code. After running setup, reg
 |------------|---------|-----------------|
 | `google-sheets` | Sheets API wrapper | Install a Google Sheets MCP server of your choice and register with `claude mcp add` |
 | `claude_ai_Atlassian` | Confluence page fetch | Usually configured globally in Claude Code settings |
+| `context-mode` (optional) | Knowledge-index lookup (`ctx_search`) for the cross-reference step | Only needed if you set `crossref_brain: "on"` in `team/tc_config.json` — see below |
 
 See the Claude Code docs for `claude mcp add` syntax.
+
+### Cross-reference ("brain") — optional, off by default
+
+The S1 chain can cross-check ambiguous spec items against a **knowledge index of your own design docs** (we call it the "brain"). This is controlled by `team/tc_config.json` (copy from [`team/tc_config.json.example`](../team/tc_config.json.example)):
+
+- `crossref_brain: "off"` (default) — the step is skipped entirely; pipeline behavior is 100% identical. **Safe for every environment.**
+- `crossref_brain: "on"` — requires the `context-mode` MCP server plus an index of your project's design wiki, with its name in `crossref_source`. The index itself is yours to build — nothing project-specific ships in this repo.
 
 ---
 

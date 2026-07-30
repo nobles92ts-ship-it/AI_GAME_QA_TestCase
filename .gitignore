@@ -1,5 +1,7 @@
 # 인증 정보 (절대 올리지 않음)
 .env
+.env.local
+.env.*.local
 credentials/client_secret.json
 jira_config.json
 slack_config.json
@@ -15,6 +17,7 @@ client_secret_*.json
 oauth_token.json
 
 # 런타임 산출물
+team/tc_config.json
 team/specs/
 team/state.json
 team/status/

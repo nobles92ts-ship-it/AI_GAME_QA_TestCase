@@ -7,7 +7,7 @@
 > **Deterministic game-QA test-case pipeline.**
 > Hand it a spec and a sheet — get back a reviewed test-case tab whose structure, gates, and coverage ledger are owned by code, not by a model.
 
-> **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
+> **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. Stages S3·S4 require the **Workflow (multi-agent orchestration) tool** in that session — without it the pipeline halts at S3 ([PREREQUISITES §5](docs/PREREQUISITES.md)). A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
 
 [![Landing — Interactive overview](https://img.shields.io/badge/Landing-Interactive%20overview-10B981?style=flat)](https://tc-team-v2-landing.vercel.app/docs.html#agents)
 [![Docs — Architecture](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue?style=flat)](docs/ARCHITECTURE.md)

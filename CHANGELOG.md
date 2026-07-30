@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.0.1] — 2026-07-30
+
+**Setup-completeness patch — closes the gaps between "all files present" and "someone else can actually run it".**
+
+### Fixed
+- **Workflow tool requirement was undocumented.** S3 (sentence fan-out) and S4 (adversarial review) run as `Workflow({...})` calls; a fresh install would sail through S0–S2 and halt at S3 with no explanation. Now stated in README scope, PREREQUISITES §5 (with verify step), and the skill itself now stops with an explicit message instead of proceeding blind.
+- **`team/tc_config.json.example` restored** (dropped in the v4.0.0 tree cut). It is the only documented way to enable the optional cross-reference step; updated to include `crossref_source` (your own index name — nothing project-specific ships here). Default remains `off`, which skips the step with 100% identical behavior.
+- **`context-mode` MCP documented** as the optional dependency behind `crossref_brain: "on"` (PREREQUISITES MCP table + explanation).
+- `.gitignore`: added `team/tc_config.json` (machine-local, as its own example file promises) and `.env.local` / `.env.*.local`.
+- `package.json` version now tracks releases (was stuck at 1.0.0).
+- `scripts/util/dep_check.py` refreshed: path-reference check now covers `.sh` / `.ps1` / `.mjs` (the gap that let a nonexistent `preflight.ps1` instruction survive six weeks) and `tc-team/` relative paths.
+
+---
+
 ## [v4.0.0] — 2026-07-29
 
 **Breaking — the `tc-팀-v2` engine has been retired and removed.**
