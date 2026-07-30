@@ -171,6 +171,10 @@ do_transition design_reviewing 0 1
 # off/파일없음/뇌 미탑재 = 스킵(현행 동작 100% 동일). on = 전용 tc-team-대조 에이전트 무조건 호출 + fail-safe(비차단).
 CROSSREF=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_brain==='on'?'on':'off')}catch(e){process.stdout.write('off')}" 2>/dev/null)
 [[ -z "$CROSSREF" ]] && CROSSREF=off
+# 색인 이름도 config 에서 읽는다 — tc-대조.md §도구 "하드코딩 금지"의 이행 (2026-07-30 드리프트 수정:
+# 규칙은 config 를 읽으라고 했는데 아래 핸드오프가 "brain-corpus" 를 리터럴로 박아 config 가 무력했다).
+XSRC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_source||'brain-corpus')}catch(e){process.stdout.write('brain-corpus')}" 2>/dev/null)
+[[ -z "$XSRC" ]] && XSRC=brain-corpus
 "$NODE" -e "require('fs').rmSync('$SPEC/dxr_crossref.json',{force:true})" 2>/dev/null || true
 if [[ "$CROSSREF" == "on" ]]; then
   log "[STEP 2-대조] DXR 뇌 대조 시작 (crossref_brain=on)"
@@ -181,7 +185,7 @@ if [[ "$CROSSREF" == "on" ]]; then
 - 산출: $SPEC/dxr_crossref.json (tc-대조.md §2.1 스키마)
 
 ## 작업 지시
-tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2의 뇌(DXR 위키 색인, ctx_search source=\"brain-corpus\")에 대조 → dxr_crossref.json 생성.
+tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC\")에 대조 → dxr_crossref.json 생성.
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep) + 스코프경계(로컬 데이터테이블 실제값은 가져오지 말고 locate=위치만).
 §1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."
   RUNAGENT_DEBUG_FILE="$SPEC/crossref_debug.log" bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-team-대조 "$XHANDOFF" >>"$CHAIN_LOG" 2>&1 \

@@ -1,0 +1,9 @@
+{
+  "_comment": "확신도 픽스처. keep=미해소(R3), locate=위치만(R4), 마지막은 어느 리프에도 안 걸리는 오탐 방지 케이스. keep 2건은 건수 스케일링을 태우기 위한 것.",
+  "items": [
+    { "term": "우편함 등급표", "branch": "keep" },
+    { "term": "보상 수량 상한 규칙", "branch": "keep" },
+    { "term": "환전 수수료 테이블", "branch": "locate" },
+    { "term": "길드 창고 정원", "branch": "keep" }
+  ]
+}

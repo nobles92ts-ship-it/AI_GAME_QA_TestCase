@@ -1,0 +1,12 @@
+{
+  "_comment": "확신도 픽스처. floor_by_subcat 의 키 순서 = 분류 그룹핑 트리의 리프 순서(위치 조인).",
+  "floor_by_subcat": {
+    "banner_spec": 2,
+    "coupon_input": 3,
+    "mail_reward": 3,
+    "exchange_rate": 1
+  },
+  "gaps": [
+    { "subcat": "mail_reward", "gen": "G2", "stage": "부정" }
+  ]
+}

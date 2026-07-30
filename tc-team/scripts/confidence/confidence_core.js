@@ -17,15 +17,47 @@
 const fs = require('fs');
 const path = require('path');
 
+// ── 점수 모델 (튜닝 노브) ───────────────────────────────────────────────
+// penalty = 감점(음수는 보너스) / per = 2건째부터 건당 추가 감점 / cap = 스케일링 상한.
+//   실효 감점 = per 없으면 penalty 고정, 있으면 min(penalty + per × (건수-1), cap).
+// 값을 바꾸면 test/confidence.test.js 의 기대표가 깨진다 — 그게 이 표의 안전장치다.
 const RULES = [
   { id: 'R1', label: '기획 확인 필요 (미결 질의)', penalty: 45 },
   { id: 'R2', label: '이미지 참조 필요 (텍스트 근거 부재)', penalty: 20 },
-  { id: 'R3', label: '외부 의존 미해소 (crossref keep)', penalty: 25 },
-  { id: 'R4', label: '외부 의존 위치만 확인 (crossref locate)', penalty: 12 },
-  { id: 'R5', label: '커버리지 floor 미달 (gap)', penalty: 15, cap: 30 },
+  { id: 'R3', label: '외부 의존 미해소 (crossref keep)', penalty: 25, per: 8, cap: 45 },
+  { id: 'R4', label: '외부 의존 위치만 확인 (crossref locate)', penalty: 12, per: 5, cap: 25 },
+  { id: 'R5', label: '커버리지 floor 미달 (gap)', penalty: 15, per: 15, cap: 30 },
   { id: 'R6', label: '기획서 앵커 얕음 (1단계 섹션)', penalty: 18 },
-  { id: 'R7', label: '설계기법 대응 (ST/DT/BVA)', penalty: -8 },
+  { id: 'R7', label: '설계기법 대응 (ST/DT/BVA) — 표시 전용', penalty: 0 },
 ];
+
+// 감점 이외의 판정 기준.
+const TUNING = {
+  bands: { A: 85, B: 70, C: 50 },      // 등급 하한 (미만은 D)
+  itemXrefHaystack: 'text',            // 항목 R3/R4 매칭 말뭉치. 'text+leaf'=소분류명까지 포함(누출)
+  itemXrefMinTokens: 1,                // 항목 매칭 최소 비식별자 토큰 수.
+                                       //   소분류는 2 고정 — 말뭉치가 화면 전체라 넓어 오탐이 쉽다.
+                                       //   항목은 문장 하나뿐이라 1 로 둔다(2로 올리면 실측 529건이 일괄 승격).
+};
+
+/** 규칙 n건의 실효 감점(양수). 보너스·비스케일 규칙은 건수와 무관. */
+function penaltyOf(rules, id, n = 1) {
+  const r = rules.find((x) => x.id === id);
+  if (!r) return 0;
+  if (r.penalty < 0 || !r.per) return r.penalty;
+  return Math.min(r.penalty + r.per * (Math.max(1, n) - 1), r.cap != null ? r.cap : Infinity);
+}
+
+/** 호출자 오버라이드를 기본 모델 위에 얕게 병합 (원본 상수는 불변). */
+function resolve(override) {
+  const o = override || {};
+  return {
+    rules: RULES.map((r) => ({ ...r, ...((o.rules || {})[r.id] || {}) })),
+    tuning: { ...TUNING, ...o, bands: { ...TUNING.bands, ...(o.bands || {}) } },
+  };
+}
+
+const gradeOf = (score, bands) => (score >= bands.A ? 'A' : score >= bands.B ? 'B' : score >= bands.C ? 'C' : 'D');
 
 // 범용 조사·서술 명사 — 기능 무관 공통 스톱워드 (도메인 단어는 넣지 않는다)
 const STOP_BASE = new Set(['화면', '정보', '출력', '확인', '상태', '대상', '참조',
@@ -33,7 +65,15 @@ const STOP_BASE = new Set(['화면', '정보', '출력', '확인', '상태', '�
   '입력', '가능', '노출', '보기', '적용', '기능', '항목', '사용', '표시', '시스템']);
 
 const isIdent = (w) => /[A-Za-z]/.test(w);
+// 언더스코어 처리 (2026-07-30): 대조 에이전트가 용어를 `전투_처치_판정_시스템` 처럼 쓰는 런이 있다.
+// `_` 를 구분자에 안 넣으면 토큰 1개가 되어 어디에도 매칭되지 않고 **감점이 조용히 0** 이 된다
+// (실측: 1챕터 R3/R4 발화 26.2% → 0%, A 등급 73.8% → 96%). 그렇다고 무조건 쪼개면
+// `WBP_BossEncounterIntro`·`MonsterNameUI_Open` 같은 실제 식별자가 깨지고, 조각난 `UI` 가
+// 'Sample_UI_Title' 에 오매칭되는 과거 함정이 되살아난다. → **한글이 섞인 토큰만** 쪼갠다
+// (`기대결과_UI문구_토스트` 처럼 영문이 끼어도 한글 구문이면 쪼개야 하므로 isIdent 기준은 부족).
+const splitUnderscore = (w) => (w.includes('_') && /[가-힣]/.test(w) ? w.split('_') : [w]);
 const rawTokens = (t) => String(t).split(/[（(]/)[0].replace(/[=<>'"[\]]/g, ' ').split(/[\s/·,]+/)
+  .flatMap(splitUnderscore)
   .map((w) => w.trim()).filter((w) => w.length >= 2 && !/^(True|False)$/i.test(w));
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // 영문 식별자는 단어 경계 매칭 — 'UI'가 'Sample_UI_Title' 부분문자열에 오매칭되는 것 방지.
@@ -54,14 +94,20 @@ function buildStop(leaves) {
   return { stop: new Set([...STOP_BASE, ...auto]), auto };
 }
 
-function compute(SPEC) {
+function compute(SPEC, override) {
+  const { rules, tuning } = resolve(override);
+  const pen = (id, n) => penaltyOf(rules, id, n);
   const read = (f) => fs.readFileSync(path.join(SPEC, f), 'utf8');
-  const readJson = (f) => JSON.parse(read(f));
+  // 설계서만 필수. 나머지는 선택 — crossref_brain=off 환경에서는 dxr_crossref.json 자체가
+  // 생성되지 않는다(run_pipeline_s1only.sh 가 스킵 시 삭제). 없으면 해당 규칙만 쉬고 나머지는 채점한다.
+  const readJson = (f, dflt) => {
+    try { return JSON.parse(read(f)); } catch (e) { if (e.code === 'ENOENT') return dflt; throw e; }
+  };
 
   const L = read('tc_design.md').split('\n');
-  const gaps = readJson('coverage_gaps.json');
-  const crossref = readJson('dxr_crossref.json');
-  const skeleton = readJson('tc_skeleton.json');
+  const gaps = readJson('coverage_gaps.json', {});
+  const crossref = readJson('dxr_crossref.json', { items: [] });
+  const skeleton = readJson('tc_skeleton.json', null);
 
   const sectionSlice = (title, endRe = /^##\s/) => {
     const s = L.findIndex((l) => l.trim() === title);
@@ -126,7 +172,7 @@ function compute(SPEC) {
   });
 
   // 5) crossref 미해소 → 소분류 매칭 (식별자 1개 또는 비범용 토큰 2개 이상)
-  const unresolved = crossref.items.filter((i) => i.branch === 'keep' || i.branch === 'locate');
+  const unresolved = (crossref.items || []).filter((i) => i.branch === 'keep' || i.branch === 'locate');
   const xrefByLeaf = {};
   const anchorByLeaf = {};
   leaves.forEach((lf) => {
@@ -147,34 +193,40 @@ function compute(SPEC) {
 
     const jPlan = lf.items.filter((i) => i.jTag && /기획/.test(i.jTag));
     const jTodo = lf.items.filter((i) => i.jTag && /추후/.test(i.jTag));
-    if (jPlan.length) { score -= 45; reasons.push({ id: 'R1', d: -45, detail: `${jPlan.length}건 — ${jPlan.map((i) => i.stage + '-' + i.no).join(', ')}` }); }
-    if (lf.needImage) { score -= 20; reasons.push({ id: 'R2', d: -20, detail: '소분류 전체가 이미지 판독 의존' }); }
+    if (jPlan.length) {
+      const p = pen('R1', jPlan.length); score -= p;
+      reasons.push({ id: 'R1', d: -p, detail: `${jPlan.length}건 — ${jPlan.map((i) => i.stage + '-' + i.no).join(', ')}` });
+    }
+    if (lf.needImage) { const p = pen('R2'); score -= p; reasons.push({ id: 'R2', d: -p, detail: '소분류 전체가 이미지 판독 의존' }); }
 
     const xr = xrefByLeaf[lf.name] || [];
     const keeps = xr.filter((x) => x.branch === 'keep');
     const locs = xr.filter((x) => x.branch === 'locate');
-    if (keeps.length) { score -= 25; reasons.push({ id: 'R3', d: -25, detail: keeps.map((k) => k.term).join(' / ') }); }
-    else if (locs.length) { score -= 12; reasons.push({ id: 'R4', d: -12, detail: locs.map((k) => k.term).join(' / ') }); }
+    if (keeps.length) { const p = pen('R3', keeps.length); score -= p; reasons.push({ id: 'R3', d: -p, detail: keeps.map((k) => k.term).join(' / ') }); }
+    else if (locs.length) { const p = pen('R4', locs.length); score -= p; reasons.push({ id: 'R4', d: -p, detail: locs.map((k) => k.term).join(' / ') }); }
 
     const g = gapByLeaf[lf.name] || [];
     if (g.length) {
-      const p = Math.min(g.length * 15, 30);
+      const p = pen('R5', g.length);
       score -= p;
       reasons.push({ id: 'R5', d: -p, detail: `${g.length}건 (${[...new Set(g.map((x) => x.gen))].join(',')} / ${[...new Set(g.map((x) => x.stage))].join(',')})` });
     }
 
     const a = anchorByLeaf[lf.name];
-    if (a.max <= 1) { score -= 18; reasons.push({ id: 'R6', d: -18, detail: a.n ? `최대 깊이 ${a.max} (§${a.srcs.join(', §')})` : '커버리지 매핑 앵커 미검출' }); }
+    if (a.max <= 1) { const p = pen('R6'); score -= p; reasons.push({ id: 'R6', d: -p, detail: a.n ? `최대 깊이 ${a.max} (§${a.srcs.join(', §')})` : '커버리지 매핑 앵커 미검출' }); }
 
-    // R7 보너스는 감점 0일 때만 — 축이 다른 감점을 상쇄시키지 않는다.
+    // R7 — 설계기법 적용 '배지'. 점수에는 영향이 없다.
+    //   축이 다른 감점을 상쇄하지 않는다는 원칙(2026-07-29 적대 리뷰) 때문에 감점 0일 때만 붙는데,
+    //   그러면 100+8 이 클램프돼 실측 3,271건 중 점수 변동이 0건이었다. 보너스인 척하지 말고
+    //   "기법이 적용됐다"는 사실만 남긴다.
     const note = (allocByLeaf[lf.name] || {}).note || '';
     if (/ST-\d|DT-\d|BVA|전이 전수|경계/.test(note) && !reasons.some((r) => r.d < 0)) {
-      score += 8; reasons.push({ id: 'R7', d: +8, detail: note.slice(0, 60) });
+      reasons.push({ id: 'R7', d: 0, badge: true, detail: note.slice(0, 60) });
     }
 
     score = Math.max(0, Math.min(100, score));
     return {
-      ...lf, score, grade: score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D',
+      ...lf, score, grade: gradeOf(score, tuning.bands),
       reasons, anchor: a, note,
       counts: {
         정상: lf.items.filter((i) => i.stage === '정상').length,
@@ -206,16 +258,25 @@ function compute(SPEC) {
     .filter((s) => s.grade === 'C' || s.grade === 'D' || (s.risk === 'HIGH' && s.score < 85))
     .sort((a, b) => b.priority - a.priority);
 
-  return { scored, sections, charters, skeleton, cmRows, RULES, autoStop, tokenize };
+  // 진단 — 미해소 용어가 있는데 어느 소분류에도 매칭되지 않으면 R3/R4 감점이 통째로 사라진다.
+  // 원인은 보통 대조가 용어를 정규화해 쓴 것(`중독·환각` → `중독환각`, `전투/처치` → `전투_처치`).
+  // 실측(2026-07-30 1챕터): 이 상태에서 R3 발화 26.2%→0%, A 등급 73.8%→96% 로 조용히 관대해졌다.
+  const diag = {
+    unresolvedTerms: unresolved.length,
+    matchedLeaves: leaves.filter((lf) => (xrefByLeaf[lf.name] || []).length).length,
+  };
+
+  // RULES 는 리포트의 라벨 조회용 — 오버라이드가 있으면 실제 적용된 표를 넘긴다.
+  return { scored, sections, charters, skeleton, cmRows, RULES: rules, rules, tuning, pen, diag, autoStop, tokenize };
 }
 
 // ── TC(항목) 단위 확신도 ────────────────────────────────────────────────
 // 소분류 점수 = "이 화면 전체가 얼마나 근거 있나" / 항목 점수 = "이 TC 한 줄이".
 //   · 항목 고유 : R1(그 항목의 [J:기획확인]) · R5(그 단계의 gap) · R3/R4(항목 문장 매칭) · R6(항목별 앵커 깊이)
 //   · 소분류 상속 : R2(이미지 마커 — 화면 전체 속성)
-function computeItems(SPEC) {
-  const ctx = compute(SPEC);
-  const { scored, cmRows, tokenize } = ctx;
+function computeItems(SPEC, override) {
+  const ctx = compute(SPEC, override);
+  const { scored, cmRows, tokenize, tuning, pen } = ctx;
   const out = [];
 
   scored.forEach((lf) => {
@@ -223,31 +284,34 @@ function computeItems(SPEC) {
     const r7leaf = /ST-\d|DT-\d|BVA|전이 전수|경계/.test(lf.note || '');
     const xrefs = lf.reasons.filter((r) => r.id === 'R3' || r.id === 'R4');
 
-    lf.items.forEach((it) => {
+    lf.items.forEach((it, ii) => {
       const reasons = [];
       let score = 100;
       const hay = (it.text + ' ' + lf.name).toLowerCase();
+      // R3/R4 매칭 말뭉치는 별도 — 'text' 로 두면 소분류명이 항목 근거로 새는 것을 막는다.
+      const xhay = tuning.itemXrefHaystack === 'text' ? it.text.toLowerCase() : hay;
 
       // R1 — 그 항목에 직접 붙은 미결 질의만
-      if (it.jTag && /기획/.test(it.jTag)) { score -= 45; reasons.push({ id: 'R1', d: -45, detail: `${it.stage}-${it.no}` }); }
+      if (it.jTag && /기획/.test(it.jTag)) { const p = pen('R1'); score -= p; reasons.push({ id: 'R1', d: -p, detail: `${it.stage}-${it.no}` }); }
 
       // R2 — 화면 전체가 이미지 의존이면 전 항목 상속
-      if (r2) { score -= 20; reasons.push({ ...r2, inherited: true }); }
+      if (r2) { score += r2.d; reasons.push({ ...r2, inherited: true }); }
 
       // R5 — 그 항목의 단계에 gap이 걸린 경우만
       const r5 = lf.reasons.find((r) => r.id === 'R5');
-      if (r5 && new RegExp(it.stage).test(r5.detail)) { score -= 15; reasons.push({ id: 'R5', d: -15, detail: r5.detail, stage: it.stage }); }
+      if (r5 && new RegExp(it.stage).test(r5.detail)) { const p = pen('R5'); score -= p; reasons.push({ id: 'R5', d: -p, detail: r5.detail, stage: it.stage }); }
 
       // R3/R4 — 용어 단위로 항목 문장에 실제 걸리는 것만 (걸린 용어를 terms로 보존)
       xrefs.forEach((r) => {
         const terms = String(r.detail).split(' / ');
         const hit = terms.filter((t) => {
-          const tk = tokenize(t).filter((w) => matchTok(hay, w));
-          return tk.some(isIdent) || tk.length >= 1;
+          const tk = tokenize(t).filter((w) => matchTok(xhay, w));
+          return tk.some(isIdent) || tk.length >= tuning.itemXrefMinTokens;
         });
         if (hit.length) {
-          score += r.d;
-          reasons.push({ id: r.id, d: r.d, detail: hit.join(' / '), terms: hit.map((t) => t.split(/[（(]/)[0].trim()) });
+          const p = pen(r.id, hit.length);
+          score -= p;
+          reasons.push({ id: r.id, d: -p, detail: hit.join(' / '), terms: hit.map((t) => t.split(/[（(]/)[0].trim()) });
         }
       });
 
@@ -259,22 +323,31 @@ function computeItems(SPEC) {
       if (!anchors.length) anchors = lf.anchor.srcs;   // 항목 매칭 실패 시 소분류 앵커로 폴백
 
       // R6 — 이 항목을 콕 집은 앵커가 없거나 1단계뿐일 때
-      if (maxD <= 1) { score -= 18; reasons.push({ id: 'R6', d: -18, detail: anchors.length ? `§${anchors.join(' §')}` : '매핑 안 됨' }); }
+      if (maxD <= 1) { const p = pen('R6'); score -= p; reasons.push({ id: 'R6', d: -p, detail: anchors.length ? `§${anchors.join(' §')}` : '매핑 안 됨' }); }
 
-      // R7 — 감점 0일 때만
-      if (r7leaf && !reasons.some((r) => r.d < 0)) { score += 8; reasons.push({ id: 'R7', d: +8, detail: (lf.note || '').slice(0, 60), inherited: true }); }
+      // R7 — 배지 (점수 영향 없음, 위 소분류 블록 주석 참조)
+      if (r7leaf && !reasons.some((r) => r.d < 0)) {
+        reasons.push({ id: 'R7', d: 0, badge: true, detail: (lf.note || '').slice(0, 60), inherited: true });
+      }
 
       score = Math.max(0, Math.min(100, score));
       const unimplemented = !!(it.jTag && /추후/.test(it.jTag));
       out.push({
         leaf: lf.name, major: lf.major, mid: lf.mid, risk: lf.risk,
         stage: it.stage, no: it.no, text: it.text,
-        score, grade: unimplemented ? 'N' : (score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D'),
+        score, grade: unimplemented ? 'N' : gradeOf(score, tuning.bands),
         unimplemented, reasons, anchors,
       });
     });
   });
+  // 시트에 찍히는 건 항목 점수다 → 조용한 누락 판정도 항목 기준으로 한다.
+  // (소분류는 말뭉치가 화면 전체라 매칭되면서 개별 항목 문장은 하나도 안 걸리는 경우가 있다.)
+  ctx.diag = {
+    ...ctx.diag,
+    matchedItems: out.filter((i) => i.reasons.some((r) => r.id === 'R3' || r.id === 'R4')).length,
+  };
+  ctx.diag.xrefSilentMiss = ctx.diag.unresolvedTerms > 0 && ctx.diag.matchedItems === 0;
   return { items: out, ...ctx };
 }
 
-module.exports = { compute, computeItems, RULES, STOP_BASE };
+module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf };

@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.1.0] — 2026-07-30
+
+**Confidence scoring: measured, tuned, and tested — plus two silent-failure fixes that affected every default install.**
+
+The confidence score (stamped at S7, non-blocking) was shipped without a test suite and without ever being measured against real runs. This release closes both gaps. All findings below come from measurement over live pipeline output, not review.
+
+### Fixed
+- **Confidence scoring crashed under the default config.** `crossref_brain: "off"` is the shipped default, and it means `dxr_crossref.json` is never written — but the scorer read it (plus `coverage_gaps.json`, `tc_skeleton.json`) with an unguarded `JSON.parse`, so it threw `ENOENT` instead of degrading. Missing inputs now fall back to empty and scoring proceeds on the rules that still have data.
+- **`crossref_source` was a documented-but-dead config key.** v4.0.1 added it to `tc_config.json.example`, but `run_pipeline_s1only.sh` hardcoded the index name in the agent prompt, so setting it did nothing. Now read from config, with the previous value as fallback.
+- **`run-agent.sh` silently produced nothing under git-bash.** A git-bash `$HOME` — a POSIX path of the form `/c/<user-dir>` — was handed straight to a Windows-native `node`, which resolved it relative to the drive root as a nonexistent `C:\c\...` and failed. The failure mode was the bad part: the agent kept running and reported success while writing no file. Now converts via `cygpath` (with a manual `/c/x` → `C:/x` fallback), passes the path as `process.argv[1]` instead of interpolating it into JS source, and exits non-zero when the agent file is missing.
+- **Item-level cross-reference matching leaked the section name into the haystack.** A term that appeared only in the screen/section title — not in the test case line — still penalized that line. 199 TC lines (6.1%) in measurement.
+
+### Changed
+- **R3/R4 now scale with the number of unresolved terms.** They were flat, so one unresolved dependency scored identically to ten. Now `R3 = 25 + 8/extra (cap 45)` and `R4 = 12 + 5/extra (cap 25)`, chosen from a coefficient sweep. Effect on a real run: distinct score values 28 → 46, and the two most common scores went from 55.7% of all rows to 42.5% — the score separates cases that used to collapse together.
+- **R7 (design-technique correspondence) is now a display-only badge, not a bonus.** It was specified as `+8` gated on "no penalties on this row", but across live runs it fired 71 times and changed the score **0** times — the gate cannot realistically open. It stays visible in the report as a badge; it no longer implies a bonus that never arrives.
+- Rule penalties are resolved through a single helper, so a non-scaling rule can no longer be silently clamped by a decorative `cap`.
+
+### Added
+- **`tc-team/test/confidence.test.js` — 16 tests, with fixtures.** Locks the item/leaf score tables, R5 stage selectivity, R2 inheritance, R7-as-badge, absence of the section-name leak, count scaling, the `R4 max ≤ R3 min` ordering invariant, operation with cross-reference disabled, and tokenization. Runs under `node tc-team/test/run_all.js` with the rest of the suite.
+- **`tc-team/scripts/confidence/sweep.js`** — offline, read-only coefficient sweep. Re-tune the penalties against your own runs and see the score distribution before changing anything; it never writes pipeline output.
+- **Silent-miss detector.** When unresolved terms exist but zero items matched them, the HTML report shows a banner and the run warns on stderr. This is exactly how the `crossref_brain: "off"` breakage above stayed invisible — a scorer reporting high confidence because its input never loaded.
+- Knowledge-index preparation guide (`docs/`): what the optional cross-reference step actually needs, a three-rung readiness ladder, and the principle that you index your own documents — nothing project-specific ships in this repo.
+
+---
+
 ## [v4.0.1] — 2026-07-30
 
 **Setup-completeness patch — closes the gaps between "all files present" and "someone else can actually run it".**

@@ -64,7 +64,7 @@ A 277-row feature run, all figures measured rather than asserted:
 | Sheet read-back diff | **0** |
 | Exact duplicate rows reaching the sheet | **0** (the previous v2-era run shipped 3 duplicate pairs) |
 | Fabricated requirements caught **before** review | **7** — 5 confirmed by the cross-reference lens and promoted to "spec confirmation needed" |
-| Deterministic core test suite | **13 suites, ALL GREEN** |
+| Deterministic core test suite | **14 suites, ALL GREEN** |
 
 The 7 fabrications are the important number. In the prior run the same failure mode was only found *after* the sheet was delivered, by hand.
 
@@ -101,7 +101,9 @@ A gate failure stops the run. No gate consults a model.
 
 ### Confidence scoring — no LLM calls
 
-`tc-team/scripts/confidence/` scores each row deterministically (rules R1–R7: spec-confirmation needed, image-only reference, unresolved cross-reference, weak anchor, coverage gap, design-technique bonus). The output tells a reviewer where to spend attention. Because it is pure code, the same input always yields the same score.
+`tc-team/scripts/confidence/` scores each row deterministically (rules R1–R6: spec-confirmation needed, image-only reference, unresolved cross-reference, cross-reference located only, weak anchor, coverage gap — plus R7, a design-technique badge that is displayed but does not move the score). The output tells a reviewer where to spend attention. Because it is pure code, the same input always yields the same score.
+
+The penalties are tuned, not guessed — `tc-team/scripts/confidence/sweep.js` runs an offline coefficient sweep against your own completed runs so you can see the resulting score distribution before changing anything, and `tc-team/test/confidence.test.js` locks the tables so a retune cannot silently invert a rule.
 
 ---
 
@@ -215,7 +217,7 @@ AI_GAME_QA_TestCase/
 ├── tc-team/                      # The deterministic engine
 │   ├── lib/                      # 14 modules — gates, slicer, ledger, sheet I/O
 │   ├── scripts/                  # Chain drivers + confidence scoring
-│   ├── test/                     # 13 suites
+│   ├── test/                     # 14 suites
 │   └── docs/                     # Driver reference, EVAL digest, guides
 │
 ├── scripts/util/                 # Shared Node utilities + the 2 linters

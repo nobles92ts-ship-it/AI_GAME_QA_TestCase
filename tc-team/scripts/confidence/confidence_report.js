@@ -10,7 +10,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { compute } = require('./confidence_core');
+const { computeItems } = require('./confidence_core');
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : ''; };
@@ -18,7 +18,14 @@ const SPEC = opt('--spec');
 if (!SPEC || !fs.existsSync(SPEC)) { console.error('사용법: --spec <specs/기능명 폴더>'); process.exit(1); }
 const OUT = path.join(SPEC, 'confidence_heatmap.html');
 
-const { scored, sections, charters, skeleton, RULES } = compute(SPEC);
+// computeItems 를 쓰는 이유: 조용한 누락 판정이 항목 단위여야 한다(diag.matchedItems).
+const { scored, sections, charters, skeleton, RULES, diag } = computeItems(SPEC);
+
+// 조용한 실패 가시화 — 미해소 용어가 있는데 항목 매칭 0이면 R3/R4 감점이 통째로 빠진 상태다.
+if (diag && diag.xrefSilentMiss) {
+  process.stderr.write(`[확신도][경고] dxr_crossref 미해소 ${diag.unresolvedTerms}건인데 감점된 TC 0건 — `
+    + `R3/R4 가 전부 누락된다. 대조가 용어를 정규화해 쓴 것(예: '중독·환각'→'중독환각')이 원인일 수 있다.\n`);
+}
 
 const CHARTER_HINT = {
   R1: '기획 미결 → 실제 빌드 동작을 관찰해 기획팀 질의 근거를 확보',
@@ -42,7 +49,7 @@ const rowsHtml = scored.slice().sort((a, b) => a.score - b.score).map((s) => `
   <td><span class="risk r${s.risk}">${s.risk}</span></td>
   <td class="nm"><b>${esc(s.name)}</b><br><small>${esc(s.major)} › ${esc(s.mid)}</small></td>
   <td class="ct">${s.total}<small> (정${s.counts.정상}/부${s.counts.부정}/예${s.counts.예외})</small>${s.todo ? `<br><em>추후구현 ${s.todo}</em>` : ''}</td>
-  <td class="rs">${s.reasons.length ? s.reasons.map((r) => `<div class="rz ${r.d > 0 ? 'pos' : ''}"><b>${r.d > 0 ? '+' : ''}${r.d}</b> ${esc((RULES.find((x) => x.id === r.id) || {}).label)} <small>${esc(r.detail)}</small></div>`).join('') : '<span class="ok">감점 없음 — 기획서 근거 직접 인용</span>'}</td>
+  <td class="rs">${s.reasons.length ? s.reasons.map((r) => `<div class="rz ${r.d > 0 ? 'pos' : r.d === 0 ? 'badge' : ''}"><b>${r.d > 0 ? '+' + r.d : r.d === 0 ? '·' : r.d}</b> ${esc((RULES.find((x) => x.id === r.id) || {}).label)} <small>${esc(r.detail)}</small></div>`).join('') : '<span class="ok">감점 없음 — 기획서 근거 직접 인용</span>'}</td>
 </tr>`).join('');
 
 const secHtml = sections.map((b) => {
@@ -92,6 +99,7 @@ td{padding:8px;border-bottom:1px solid var(--bd);vertical-align:top}
 .score{white-space:nowrap}.nm small,.ct small{color:var(--mut)}.ct em{color:#d84315;font-style:normal;font-size:11px}
 .rs{max-width:430px}.rz{margin-bottom:3px;padding-left:8px;border-left:2px solid #d84315}
 .rz.pos{border-left-color:#2e7d32}.rz b{color:#d84315}.rz.pos b{color:#2e7d32}.rz small{color:var(--mut);display:block}
+.rz.badge{border-left-color:var(--mut)}.rz.badge b,.rz.badge{color:var(--mut)}
 .ok{color:#2e7d32;font-size:11.5px}
 tr.thin{background:rgba(216,67,21,.07)}tr.mid{background:rgba(249,168,37,.07)}
 .warn{color:#d84315}
@@ -107,6 +115,10 @@ tr.thin{background:rgba(216,67,21,.07)}tr.mid{background:rgba(249,168,37,.07)}
 </style></head><body>
 
 <h1>확신도 히트맵 — ${esc(path.basename(SPEC))}</h1>
+${diag && diag.xrefSilentMiss ? `<div style="border-left:4px solid #d84315;background:#fff3e0;color:#4e342e;padding:10px 14px;margin:0 0 14px;border-radius:0 6px 6px 0">
+<b>⚠ R3/R4 감점 전량 누락</b> — dxr_crossref 미해소 ${diag.unresolvedTerms}건인데 감점된 TC가 0건이다.
+대조가 용어를 정규화해 쓰면(예: <code>중독·환각</code> → <code>중독환각</code>) 설계서 문장과 부분문자열 매칭이 되지 않는다.
+이 점수표는 외부 의존 감점 없이 산출된 것이므로 실제보다 관대하다.</div>` : ''}
 <div class="sub">tc-team 산출물 기반 · 총 ${skeleton.total}TC / 소분류 ${scored.length}개 · 확신도는 <b>결정론 코드가 산출</b>(LLM 자가채점 없음) · TC별 점수는 시트 A열 색·메모와 confidence.json 참조</div>
 
 <div class="kpi">

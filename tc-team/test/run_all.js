@@ -16,6 +16,7 @@ const suites = [
   'origin_gate.test.js',
   'ab_compare.test.js',
   'eval_digest.test.js',
+  'confidence.test.js',
   'phase0_spike.js',
 ];
 let allPass = true;
