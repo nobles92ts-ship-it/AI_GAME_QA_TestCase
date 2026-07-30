@@ -34,11 +34,15 @@ STAGING = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 # 참조를 스캔할 소스 파일 확장자
 SCAN_EXTENSIONS = ('.md', '.js', '.py', '.sh', '.ps1', '.gs')
 # staging 의 "존재하는 파일" 집합을 만들 때 인덱싱할 확장자 (.template = 셋업이 생성하는 설정의 원본)
-INDEX_EXTENSIONS = SCAN_EXTENSIONS + ('.json', '.html', '.gas', '.template')
+INDEX_EXTENSIONS = SCAN_EXTENSIONS + ('.json', '.html', '.gas', '.template', '.mjs')
 
 # 경로형 참조 추출 패턴 (확장자 있는 참조)
-# ⚠ 확장자 alternation 은 긴 것 우선(json|js) — 'js' 가 먼저면 .json 이 .js 로 잘린다
-_EXT = r'(md|py|json|js|html|gs)'
+# ⚠ 확장자 alternation 은 긴 것 우선(json|js, mjs|js) — 'js' 가 먼저면 .json/.mjs 가 잘린다
+# ⚠ sh/ps1/mjs 는 2026-07-30 추가 — 빠져 있던 6주간 docs/SETUP.md 의 존재하지 않는
+#   preflight 스크립트(.ps1)와 install(.mjs) 지시를 못 잡았다(QA 항목 14가 있었는데도
+#   기계가 침묵 → 수동 체크가 스킵되며 v3.1.0 릴리스를 통과, 07-29 발견).
+#   (주석에 풀경로를 쓰면 이 스캐너가 자기 주석을 누락 참조로 잡는다 — 일부러 깨서 표기)
+_EXT = r'(mjs|md|py|json|js|html|gs|sh|ps1)'
 PATH_PATTERNS = [
     # 절대 Windows/Unix 경로. (?<![A-Za-z]) 로 'https:' 의 s: 가 드라이브로 오인되는 것 방지
     re.compile(r'(?<![A-Za-z])[A-Z]:[/\\][\w\-\\/\.가-힣]+\.' + _EXT, re.IGNORECASE),
@@ -47,7 +51,8 @@ PATH_PATTERNS = [
     # 플레이스홀더 경유 ({CLAUDE_HOME}/..., $UTIL/...)
     re.compile(r'[{$][A-Z_]+[}]?[/\\][\w\-\\/\.가-힣]+\.' + _EXT, re.IGNORECASE),
     # 레포 내부 상대 경로
-    re.compile(r'\b(skills|agents|commands|scripts|tc-team-v2|docs|appscript)/[\w\-\\/\.가-힣]+\.' + _EXT, re.IGNORECASE),
+    # tc-team-v2 가 tc-team 보다 먼저 (접두 관계 — 짧은 쪽이 먼저면 -v2 경로가 잘린다)
+    re.compile(r'\b(skills|agents|commands|scripts|tc-team-v2|tc-team|docs|appscript)/[\w\-\\/\.가-힣]+\.' + _EXT, re.IGNORECASE),
 ]
 
 # [CRITICAL] --agent <name> : 확장자 없는 에이전트 참조 → agents/<name>.md 요구

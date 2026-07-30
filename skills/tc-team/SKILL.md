@@ -75,6 +75,7 @@ mkdir -p "$WORK"
 ```
 ③ **Workflow 팬아웃** — 메인이 Workflow 도구 호출:
 `Workflow({ scriptPath: "<TCTEAM>/workflows/tcteam-s3-fmap.js", args: { workdir: "<WORK>", ranges: <s3_ranges.ranges> } })`
+> ⚠ **Workflow 도구가 세션에 없으면 여기서 진행 불가** — S3·S4는 Workflow 전용이다(동봉 대체 경로 없음). 계속 진행하는 척하지 말고 즉시 중단·보고: "Workflow(멀티에이전트 오케스트레이션) 도구가 필요합니다 — docs/PREREQUISITES.md §5". S0~S2 산출물은 보존되므로 도구 확보 후 S3부터 재개하면 된다.
 ④ 완료 통지 후 **journal에서 fmap 조립**(각 청크 result.rows 합치기 → `$WORK/tc_f_map.json`), 그 다음:
 ```bash
 "$NODE" "$UTIL/direct_convert.js" merge "$WORK"          # idx·d echo·해시·개수 게이트 → $WORK/tc_data.json
