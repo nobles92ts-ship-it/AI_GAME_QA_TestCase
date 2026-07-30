@@ -156,6 +156,16 @@ node scripts/util/ssot_drift_check.js
 
 ---
 
+## 🧠 Optional — plug in your own knowledge index
+
+Specs reference values they never define — a drop rate that lives in a table doc, a status effect defined on another team's page. The S1 chain can look those up in a **knowledge index of your project's own design docs** and resolve them instead of guessing: definition found → folded into the design · data-table location cited on the TC · **missing spec area discovered → added to the coverage denominator** · no evidence → flagged for spec confirmation rather than invented.
+
+This is a **socket, not a shipped component**: `crossref_brain` is off by default and the pipeline is 100% identical without it. Turning it on takes three things — your own design docs, a one-time `context-mode` indexing pass, and two lines in `team/tc_config.json`. The docs must be *your project's* (the whole point is testing TCs against the design world they belong to); resemblance to anyone else's wiki is irrelevant.
+
+The better the index, the more the pipeline resolves on its own instead of flagging for humans — see the **preparation ladder** in [PREREQUISITES](docs/PREREQUISITES.md).
+
+---
+
 ## 🔁 Migrating from v2
 
 **v2 is not deleted — it is pinned.** Everything from the v2 era remains permanently available at the [`v3.1.0`](https://github.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/releases/tag/v3.1.0) tag.
