@@ -106,6 +106,25 @@ The S1 chain can cross-check ambiguous spec items against a **knowledge index of
 - `crossref_brain: "off"` (default) — the step is skipped entirely; pipeline behavior is 100% identical. **Safe for every environment.**
 - `crossref_brain: "on"` — requires the `context-mode` MCP server plus an index of your project's design wiki, with its name in `crossref_source`. The index itself is yours to build — nothing project-specific ships in this repo.
 
+#### Why prepare one — and what "prepared" looks like
+
+A spec page almost never defines every value it relies on. Without a brain, those under-specified items become TCs written from assumption — flagged for human confirmation at best. With a brain, each one is looked up in **your** index during S1 and resolved one of four ways:
+
+| Resolution | Meaning |
+|---|---|
+| `apply` | Your wiki defines it → folded into the design |
+| `locate` | The value lives in a data table → location cited on the TC |
+| `discover` | The lookup reveals a spec area the design missed entirely → **added to the coverage denominator** |
+| `keep` | No evidence → left as-is, flagged for spec confirmation |
+
+**Preparation ladder** — every rung is a usable state:
+
+1. **No index** (default). Pipeline fully works; ambiguous items are simply flagged for humans. Zero setup.
+2. **Flat index.** Index your design docs with `context-mode` under one source name, put that name in `crossref_source`, set `crossref_brain: "on"`. Lookups work. One caveat: the anti-circular-citation guard keys off layered section headers, so with a flat index some evidence is conservatively downgraded to `keep`. The built-in fail-safe (no match / error → everything `keep`, non-blocking) means a rough index **degrades quietly — it never breaks the run**.
+3. **Layered index.** Structure chunk headers by tier — design wiki vs. past TC output vs. working notes — so the guard can reject past TC output as evidence. This prevents the failure mode where a TC cites an older TC as if it were spec. This is the configuration the pipeline was validated with, and where the feature pays off fully.
+
+One rule of thumb: it must be **your project's** docs. The step tests TCs against the design world they belong to — similarity to anyone else's wiki adds nothing.
+
 ---
 
 ## Environment variables
