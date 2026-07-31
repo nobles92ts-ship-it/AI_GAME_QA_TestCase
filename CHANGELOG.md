@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.1.1] — 2026-07-31
+
+**One cross-reference branch was swallowing the other.**
+
+### Fixed
+- **A row with any unresolved dependency ignored its located ones entirely.** The rule was `if (keeps) R3 else if (locates) R4` — exclusive — so `1 keep` and `1 keep + 5 locates` scored identically. The five located dependencies were invisible in both the score and the report. R3 and R4 are now recorded separately, each with its own penalty and its own term list.
+
+  Making them simply additive would have been wrong: `1 keep + 1 locate` (−25 −12 = −37) would score *worse* than `2 keeps` (−33), inverting the meaning of the two branches — a located dependency is a more advanced state than an unresolved one, never a worse one. So the first unresolved dependency sets the base penalty and the rest add at their branch's incremental rate, with the combined total capped at R3's ceiling. Converting a keep into a locate now always improves the score, at every count:
+
+  | 3 unresolved total | penalty |
+  |---|---|
+  | 3 keeps | −41 |
+  | 2 keeps + 1 locate | −38 |
+  | 1 keep + 2 locates | −35 |
+  | 3 locates | −22 |
+
+  Measured over 30 specs / 3347 test-case rows: **71 rows (2.1%)** had both branches and were losing the locate signal, average −6.2 further points, **17 of them changing grade**.
+
+- **The report's rule appendix was hardcoded and had drifted.** It still listed R7 as a `+8` bonus after v4.1.0 demoted it to a display badge, and it showed R3/R4 as flat `-25`/`-12` with no mention of the count scaling added in the same release. The table is now generated from the rule definitions, so it cannot drift again, and it states the combined R3+R4 ceiling.
+
+### Added
+- Test for the ordering invariant: for every total count from 1 to 8, converting a keep into a locate must not increase the penalty. Confidence suite is now 17 tests.
+
+---
+
 ## [v4.1.0] — 2026-07-30
 
 **Confidence scoring: measured, tuned, and tested — plus two silent-failure fixes that affected every default install.**
