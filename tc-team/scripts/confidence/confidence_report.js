@@ -36,6 +36,23 @@ const CHARTER_HINT = {
   R6: '앵커 얕음 → 기획서에 안 적힌 세부 동작을 훑어 요건 역추출',
 };
 
+// 부록 규칙표 — 점수는 RULES 에서 생성한다(하드코딩 금지).
+// 과거 하드코딩 표가 R7 배지화를 놓쳐 `+8` 로 남아 있었고, R3/R4 건수 비례도 안 보였다.
+const RULE_SRC = {
+  R1: 'tc_design.md 트리 [J:기획 확인 필요]',
+  R2: 'tc_design.md 트리 [이미지 참조 필요]',
+  R3: 'dxr_crossref.json branch=keep',
+  R4: 'dxr_crossref.json branch=locate',
+  R5: 'coverage_gaps.json',
+  R6: 'tc_design.md 커버리지 매핑 출처열',
+  R7: 'tc_design.md 검증단계 사전 배분표',
+};
+const penText = (r) => {
+  if (!r.penalty) return '표시 전용 (점수 영향 없음)';
+  const base = r.penalty < 0 ? `+${-r.penalty}` : `-${r.penalty}`;
+  return r.per ? `${base} (추가 1건마다 -${r.per}, 최대 -${r.cap})` : base;
+};
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const GC = { A: '#2e7d32', B: '#7cb342', C: '#f9a825', D: '#d84315' };
 const dist = { A: 0, B: 0, C: 0, D: 0 };
@@ -152,14 +169,9 @@ ${charterHtml}
 
 <h2>부록. 감점 규칙</h2>
 <div class="wrap"><table><thead><tr><th>ID</th><th>사유</th><th>점수</th><th>출처 산출물</th></tr></thead><tbody>
-<tr><td>R1</td><td>기획 확인 필요 (미결 질의)</td><td>-45</td><td>tc_design.md 트리 [J:기획 확인 필요]</td></tr>
-<tr><td>R2</td><td>이미지 참조 필요 (텍스트 근거 부재)</td><td>-20</td><td>tc_design.md 트리 [이미지 참조 필요]</td></tr>
-<tr><td>R3</td><td>외부 의존 미해소</td><td>-25</td><td>dxr_crossref.json branch=keep</td></tr>
-<tr><td>R4</td><td>외부 의존 위치만 확인</td><td>-12</td><td>dxr_crossref.json branch=locate</td></tr>
-<tr><td>R5</td><td>커버리지 floor 미달</td><td>-15/건 (최대 -30)</td><td>coverage_gaps.json</td></tr>
-<tr><td>R6</td><td>기획서 앵커 얕음 (1단계)</td><td>-18</td><td>tc_design.md 커버리지 매핑 출처열</td></tr>
-<tr><td>R7</td><td>설계기법 대응 (ST/DT/BVA) — 감점 0일 때만</td><td>+8</td><td>tc_design.md 검증단계 사전 배분표</td></tr>
+${RULES.map((r) => `<tr><td>${r.id}</td><td>${esc(r.label)}</td><td>${penText(r)}</td><td>${esc(RULE_SRC[r.id] || '')}</td></tr>`).join('\n')}
 </tbody></table></div>
+<div class="note">R3·R4 는 <b>합쳐서 최대 -${(RULES.find((r) => r.id === 'R3') || {}).cap}</b> 이다. 같은 줄에 둘 다 걸리면 첫 건이 기준 감점을 정하고 나머지는 증분만 더한다 — 그래야 <b>위치라도 찾은 의존(locate)이 아예 못 찾은 의존(keep)보다 나쁘게 채점되는 역전</b>이 생기지 않는다.</div>
 
 <script>
 document.querySelectorAll('.f button').forEach(b=>b.onclick=()=>{

@@ -48,6 +48,27 @@ function penaltyOf(rules, id, n = 1) {
   return Math.min(r.penalty + r.per * (Math.max(1, n) - 1), r.cap != null ? r.cap : Infinity);
 }
 
+/**
+ * 외부 의존(crossref) 감점 — keep 과 locate 를 **각각** 기록하되 총량은 함께 본다.
+ *
+ * 첫 미해소가 기준 감점을 정하고, 나머지는 분기별 증분으로 붙는다.
+ * ⚠ keep 이 이미 기준을 물었으면 locate 는 기준(12)을 다시 물지 않는다 — 단순 합산하면
+ *   keep1+locate1(-37) 이 keep2(-33) 보다 나빠져 **"위치라도 찾은 쪽이 아예 못 찾은 쪽보다
+ *   나쁨"** 이라는 역전이 생긴다. locate 는 keep 보다 진전된 상태이므로 그럴 수 없다.
+ * 합계는 R3 상한으로 클램프 — 외부 의존 감점 총량의 천장.
+ *
+ * (2026-07-31 이전에는 `keep 있으면 R3, 아니면 R4` 배타 분기라 keep 이 하나라도 있으면
+ *  locate 가 통째로 무시됐다. keep1 과 keep1+locate5 가 동점 = 5건이 점수에 안 보임.)
+ */
+function xrefPenalty(rules, nKeep, nLoc) {
+  const r3 = nKeep ? penaltyOf(rules, 'R3', nKeep) : 0;
+  const incr = (rules.find((x) => x.id === 'R4') || {}).per || 0;
+  let r4 = nLoc ? (nKeep ? incr * nLoc : penaltyOf(rules, 'R4', nLoc)) : 0;
+  const ceil = (rules.find((x) => x.id === 'R3') || {}).cap;
+  if (ceil != null && r3 + r4 > ceil) r4 = Math.max(0, ceil - r3);
+  return { r3, r4 };
+}
+
 /** 호출자 오버라이드를 기본 모델 위에 얕게 병합 (원본 상수는 불변). */
 function resolve(override) {
   const o = override || {};
@@ -202,8 +223,9 @@ function compute(SPEC, override) {
     const xr = xrefByLeaf[lf.name] || [];
     const keeps = xr.filter((x) => x.branch === 'keep');
     const locs = xr.filter((x) => x.branch === 'locate');
-    if (keeps.length) { const p = pen('R3', keeps.length); score -= p; reasons.push({ id: 'R3', d: -p, detail: keeps.map((k) => k.term).join(' / ') }); }
-    else if (locs.length) { const p = pen('R4', locs.length); score -= p; reasons.push({ id: 'R4', d: -p, detail: locs.map((k) => k.term).join(' / ') }); }
+    const xp = xrefPenalty(rules, keeps.length, locs.length);
+    if (xp.r3) { score -= xp.r3; reasons.push({ id: 'R3', d: -xp.r3, detail: keeps.map((k) => k.term).join(' / ') }); }
+    if (xp.r4) { score -= xp.r4; reasons.push({ id: 'R4', d: -xp.r4, detail: locs.map((k) => k.term).join(' / ') }); }
 
     const g = gapByLeaf[lf.name] || [];
     if (g.length) {
@@ -276,7 +298,7 @@ function compute(SPEC, override) {
 //   · 소분류 상속 : R2(이미지 마커 — 화면 전체 속성)
 function computeItems(SPEC, override) {
   const ctx = compute(SPEC, override);
-  const { scored, cmRows, tokenize, tuning, pen } = ctx;
+  const { scored, cmRows, tokenize, tuning, pen, rules } = ctx;
   const out = [];
 
   scored.forEach((lf) => {
@@ -301,18 +323,21 @@ function computeItems(SPEC, override) {
       const r5 = lf.reasons.find((r) => r.id === 'R5');
       if (r5 && new RegExp(it.stage).test(r5.detail)) { const p = pen('R5'); score -= p; reasons.push({ id: 'R5', d: -p, detail: r5.detail, stage: it.stage }); }
 
-      // R3/R4 — 용어 단위로 항목 문장에 실제 걸리는 것만 (걸린 용어를 terms로 보존)
+      // R3/R4 — 용어 단위로 항목 문장에 실제 걸리는 것만 (걸린 용어를 terms로 보존).
+      // 감점은 소분류와 같은 xrefPenalty 로 계산한다 — 여기서 분기별로 따로 pen() 하면
+      // keep·locate 가 각각 기준 감점을 물어 순서 역전이 항목 단위에서 되살아난다.
+      const xhit = { R3: [], R4: [] };
       xrefs.forEach((r) => {
-        const terms = String(r.detail).split(' / ');
-        const hit = terms.filter((t) => {
+        xhit[r.id] = String(r.detail).split(' / ').filter((t) => {
           const tk = tokenize(t).filter((w) => matchTok(xhay, w));
           return tk.some(isIdent) || tk.length >= tuning.itemXrefMinTokens;
         });
-        if (hit.length) {
-          const p = pen(r.id, hit.length);
-          score -= p;
-          reasons.push({ id: r.id, d: -p, detail: hit.join(' / '), terms: hit.map((t) => t.split(/[（(]/)[0].trim()) });
-        }
+      });
+      const xp = xrefPenalty(rules, xhit.R3.length, xhit.R4.length);
+      [['R3', xp.r3], ['R4', xp.r4]].forEach(([id, p]) => {
+        if (!p) return;
+        score -= p;
+        reasons.push({ id, d: -p, detail: xhit[id].join(' / '), terms: xhit[id].map((t) => t.split(/[（(]/)[0].trim()) });
       });
 
       // 항목별 기획서 앵커 (커버리지 매핑 키워드 → 원문 섹션 위치)
@@ -350,4 +375,4 @@ function computeItems(SPEC, override) {
   return { items: out, ...ctx };
 }
 
-module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf };
+module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty };

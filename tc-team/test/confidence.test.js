@@ -4,7 +4,7 @@
 // (= 점수가 바뀌는 변경은 반드시 눈에 보인다).
 const assert = require('assert');
 const path = require('path');
-const { compute, computeItems, RULES, penaltyOf } = require('../scripts/confidence/confidence_core.js');
+const { compute, computeItems, RULES, penaltyOf, xrefPenalty } = require('../scripts/confidence/confidence_core.js');
 
 const FIX = path.join(__dirname, 'fixtures', 'confidence');
 let pass = 0, fail = 0;
@@ -36,7 +36,7 @@ t('소분류 점수표 (감점 규칙별 1회씩)', () => {
   const want = [
     ['우편 배너', 100, 'A', 'R7'],       // 감점 0 + 설계기법 배지(점수 영향 없음)
     ['쿠폰 코드', 35, 'D', 'R1,R2'],     // 미결 질의 -45, 이미지 의존 -20
-    ['우편함 보상', 52, 'C', 'R3,R5'],   // crossref keep 2건 -(25+8), 커버리지 gap -15
+    ['우편함 보상', 47, 'D', 'R3,R4,R5'], // keep 2건 -(25+8) + locate 1건 -5(증분) + gap -15
     ['환전 비율', 70, 'B', 'R4,R6'],     // crossref locate 1건 -12, 얕은 앵커 -18
   ];
   for (const [n, score, grade, rs] of want) {
@@ -52,8 +52,15 @@ t('어느 리프에도 안 걸리는 crossref 용어는 감점하지 않는다 (
   assert.ok(!fired.some((r) => /길드 창고/.test(r.detail)), '무관 용어 "길드 창고 정원"이 발화');
 });
 
-t('R3(keep)가 있으면 R4(locate)는 중복 발화하지 않는다', () => {
-  scored.forEach((s) => assert.ok(!(ids(s).includes('R3') && ids(s).includes('R4')), s.name));
+t('keep과 locate는 각각 기록된다 (한쪽이 다른 쪽을 삼키지 않는다)', () => {
+  // 2026-07-31 이전엔 `keep 있으면 R3, 아니면 R4` 배타 분기라, keep 이 하나라도 있으면
+  // locate 는 점수에도 리포트에도 나타나지 않았다 — keep1 과 keep1+locate5 가 동점.
+  const l = leaf('우편함 보상');
+  const r3 = l.reasons.find((r) => r.id === 'R3');
+  const r4 = l.reasons.find((r) => r.id === 'R4');
+  assert.ok(r3 && r4, 'keep·locate 가 같이 있는 리프인데 한쪽만 기록됨');
+  assert.ok(/초과 요청 차단 기준/.test(r4.detail), 'locate 용어가 detail 에 안 보임');
+  assert.ok(r3.d < 0 && r4.d < 0, '기록만 되고 점수에 반영되지 않음');
 });
 
 // ── 항목 단위 감점 ──────────────────────────────────────────────────────
@@ -66,7 +73,7 @@ t('항목 점수표 (9건 전수)', () => {
     ['쿠폰 코드', '정상', 3, 80, 'N', 'R2'],   // [J:추후구현] → 등급 N
     ['우편함 보상', '정상', 1, 67, 'C', 'R3'], // 문장이 용어 2개를 물음 → -(25+8)
     ['우편함 보상', '정상', 2, 100, 'A', ''],  // 문장에 용어 0개 → 소분류명 누출 차단으로 무감점
-    ['우편함 보상', '부정', 1, 60, 'C', 'R3,R5'], // 용어 1개 -25 + 단계 gap -15
+    ['우편함 보상', '부정', 1, 55, 'C', 'R3,R4,R5'], // keep 1개 -25 + locate 1개 -5 + 단계 gap -15
     ['환전 비율', '정상', 1, 70, 'B', 'R4,R6'],
   ];
   for (const [n, st, no, score, grade, rs] of want) {
@@ -136,6 +143,19 @@ t('용어 토큰화 — 한글 언더스코어는 쪼개고 영문 식별자는 
 t('locate(R4) 최대 감점이 keep(R3) 최소 감점을 넘지 않는다 (신호 강도 역전 금지)', () => {
   assert.ok(penaltyOf(RULES, 'R4', 99) <= penaltyOf(RULES, 'R3', 1),
     '위치라도 찾은 항목이 아예 못 찾은 항목보다 나쁘게 채점됨');
+});
+
+t('총건수가 같으면 keep을 locate로 바꿀수록 좋아진다 (R3/R4 동시 발화 시 역전 금지)', () => {
+  // R3·R4 를 각각 독립으로 더하면 keep1+locate1(-37) 이 keep2(-33) 보다 나빠진다.
+  // locate 는 keep 보다 진전된 상태이므로 그럴 수 없다 — xrefPenalty 가 막는 지점.
+  const tot = (k, l) => { const x = xrefPenalty(RULES, k, l); return x.r3 + x.r4; };
+  for (let n = 1; n <= 8; n++) {
+    for (let k = n; k > 0; k--) {
+      assert.ok(tot(k, n - k) >= tot(k - 1, n - k + 1),
+        `총 ${n}건에서 keep${k}(-${tot(k, n - k)}) 가 keep${k - 1}+locate${n - k + 1}(-${tot(k - 1, n - k + 1)}) 보다 관대함`);
+    }
+  }
+  assert.ok(tot(1, 5) > tot(1, 0), 'keep1 에 locate 5건을 얹었는데 점수가 그대로 — 구 배타분기 회귀');
 });
 
 t('crossref 산출물이 없어도 채점한다 (crossref_brain=off 환경)', () => {
