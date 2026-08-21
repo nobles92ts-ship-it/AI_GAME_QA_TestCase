@@ -59,10 +59,7 @@ On first pipeline run, a browser window will open for you to authorize the app. 
 
 **Verify**: `claude --version`
 
-**Note**: The full path to `cli.js` is required in `.env` as `CLI_JS`. On Windows with npm global install, this is typically:
-```
-C:/Users/YourName/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/cli.js
-```
+**Note**: The agents are spawned through the `claude` executable on your `PATH` — no interpreter path has to be configured.
 
 ### 5. Workflow tool (multi-agent orchestration) — required for S3·S4
 
@@ -136,7 +133,6 @@ After installing everything, create `.env` from `.env.example` and fill in:
 | `WORK_ROOT` | yes | `C:/Users/You/tc-work` |
 | `CLAUDE_HOME` | yes | `C:/Users/You/.claude` |
 | `NODE_PATH` | yes | `node` (or full path) |
-| `CLI_JS` | yes | `.../claude-code/cli.js` |
 | `GOOGLE_OAUTH_CLIENT_SECRET_PATH` | yes | `./credentials/client_secret.json` |
 | `MASTER_DASHBOARD_ID` | yes | Google Sheets ID |
 | `CONFLUENCE_SITE` | yes | `https://yourcompany.atlassian.net` |

@@ -1,4 +1,4 @@
-#requires -Version 5
+﻿#requires -Version 5
 # install.ps1 — 한 줄 "딸깍" 설치 부트스트랩
 #
 #   PowerShell에 아래 한 줄만 붙여넣으면 됩니다:

@@ -6,7 +6,7 @@
 #
 # 예시:
 #   bash pipeline_retry.sh "$SPECS/feature/step4_stderr.log" -- \
-#     "$NODE" "$CLI_JS" -p --agent <agent-name> --model haiku ...
+#     claude -p --agent <agent-name> --model haiku ...
 #
 # 종료 코드:
 #   0   성공
