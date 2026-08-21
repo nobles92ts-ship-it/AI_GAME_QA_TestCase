@@ -24,7 +24,7 @@ const path = require('path');
 const crypto = require('crypto');
 const {
   parseDesignTree, parseBasicTable, checkAllotmentStrict, normCatName,
-  validatePreWrite, formatViolations,
+  validatePreWrite, validateSkeleton, formatViolations,
 } = require('./validate_tc_rows.js');
 
 function designHash(text) { return crypto.createHash('sha256').update(text).digest('hex').slice(0, 12); }
@@ -74,8 +74,18 @@ if (cmd === 'convert') {
   if (p20.length) saveBlocker(specDir, 'p20', p20);
 
   const rows = [];
-  for (const b of basic.rows) rows.push({ idx: rows.length, b: b.cat1, c: b.cat2, d: b.cat3, e: b.stage, leaf: b.text, g: b.platform, j: '' });
-  for (const lf of tree.leaves) rows.push({ idx: rows.length, b: lf.cat1, c: lf.cat2, d: lf.cat3, e: lf.stage, leaf: lf.text, g: lf.platform, j: lf.j });
+  const srcLines = []; // 골격 행 → 설계 파일 줄번호 (blocker 위치 보고용 — rows와 같은 문장에서 채운다)
+  for (const b of basic.rows) { rows.push({ idx: rows.length, b: b.cat1, c: b.cat2, d: b.cat3, e: b.stage, leaf: b.text, g: b.platform, j: '' }); srcLines.push(b.line); }
+  for (const lf of tree.leaves) { rows.push({ idx: rows.length, b: lf.cat1, c: lf.cat2, d: lf.cat3, e: lf.stage, leaf: lf.text, g: lf.platform, j: lf.j }); srcLines.push(lf.line); }
+
+  // 골격 열 검사 (2026-08-16) — merge preWrite 검사 중 F 없이 판정 가능한 것만 shift-left.
+  // 여기서 막지 않으면 위반 설계가 S3 문장화(LLM 수십 분)를 태운 뒤 merge에서 exit 4로 죽는다.
+  const skelCheck = validateSkeleton(rows);
+  if (!skelCheck.ok) {
+    saveBlocker(specDir, 'skeleton_cols', skelCheck.violations
+      .filter(v => v.sev === 'CRITICAL' || v.sev === 'HIGH')
+      .map(v => ({ type: 'skeleton_' + v.col, line: srcLines[v.idx], msg: `[${v.sev}] ${v.msg}` })));
+  }
 
   const skeleton = {
     design_hash: designHash(text),

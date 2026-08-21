@@ -22,6 +22,8 @@
 
 const fs = require('fs');
 const path = require('path');
+// 트리 줄 모양은 design_tree_lines.js 가 SSoT — confidence_core.js 와 같은 계약을 쓴다.
+const { DESIGN_TREE_RE, classifyDesignLine } = require('./design_tree_lines');
 
 const COL_C = 1; // 중분류 (tc_data idx 1, 시트 C열)
 const COL_D = 2; // 소분류 (tc_data idx 2, 시트 D열)
@@ -106,6 +108,64 @@ function hasBlocking(violations) {
   return violations.some(v => v.sev === 'CRITICAL' || v.sev === 'HIGH');
 }
 
+/**
+ * 골격 열(B/C/D/E/G)만으로 판정 가능한 검사 — validatePreWrite ①-2/②/③의 단일 소스.
+ * F(재현스탭)를 보지 않으므로 문장화 전(convert 단계)에도 그대로 적용된다.
+ * locate는 위반 객체에 그대로 펼쳐진다 (preWrite={row: 시트행}, skeleton={idx: 골격행}).
+ */
+function checkSkeletonCols({ b, c, d, e, g }, locate, violations, opts = {}) {
+  const allowEmptyCDE = opts.allowEmptyCDE !== false; // 그룹핑 빈 값 기본 허용
+
+  // ①-2 검증단계/플랫폼 enum — 컬럼 꼬임(idx4↔idx5 스왑)도 여기서 기계 검출됨
+  //   (스왑 시 G에 한글 서술문이 들어와 enum 위반 — 2026-04-17 사고 유형의 사전 차단)
+  if (e && !STAGE_ENUM.includes(e)) {
+    violations.push({ ...locate, col: 'E', sev: 'HIGH', msg: `검증단계 "${e}" — 허용값(정상/부정/예외) 외` });
+  }
+  if (g && !PLATFORM_ENUM.includes(g)) {
+    violations.push({ ...locate, col: 'G', sev: 'HIGH', msg: `플랫폼 "${g.slice(0, 30)}" — 허용값(PC/모바일/PC/모바일) 외 (idx4↔5 스왑 의심)` });
+  }
+
+  // ② B/C/D 빈 값 (옵션)
+  if (!allowEmptyCDE) {
+    if (!b) violations.push({ ...locate, col: 'B', sev: 'CRITICAL', msg: '대분류 빈 값' });
+    if (!c) violations.push({ ...locate, col: 'C', sev: 'CRITICAL', msg: '중분류 빈 값' });
+    if (!d) violations.push({ ...locate, col: 'D', sev: 'CRITICAL', msg: '소분류 빈 값' });
+  }
+
+  // ③ B/C/D(대/중/소분류) 동사·동작 표현 금지
+  [['B', b], ['C', c], ['D', d]].forEach(([col, val]) => {
+    if (!val) return;
+    for (const re of FORBIDDEN_VERBS_IN_CATEGORY) {
+      if (re.test(val)) {
+        violations.push({
+          ...locate, col, sev: 'HIGH',
+          msg: `분류에 동작 표현 금지: "${val}" (패턴: ${re})`,
+        });
+        break;
+      }
+    }
+  });
+}
+
+/**
+ * 골격(tc_skeleton.json rows) 전용 사전 검사 — F 문장화 이전에 실행 (fail-fast, 2026-08-16).
+ * 검사 항목은 checkSkeletonCols 단일 소스 = merge 단계 validatePreWrite와 동일 패턴이므로
+ * 두 게이트가 드리프트하지 않는다. 골격은 fill-down 이전이라 B/C/D 빈 값도 결함으로 본다.
+ * 위반 위치는 골격 행 인덱스(idx)로 보고한다 — 이 시점엔 시트 행이 없다.
+ */
+function validateSkeleton(rows) {
+  const violations = [];
+  rows.forEach((row, idx) => {
+    checkSkeletonCols(
+      { b: s(row.b), c: s(row.c), d: s(row.d), e: s(row.e), g: s(row.g) },
+      { idx },
+      violations,
+      { allowEmptyCDE: false },
+    );
+  });
+  return { ok: !hasBlocking(violations), violations, totalRows: rows.length };
+}
+
 function validatePreWrite(rows, opts = {}) {
   const violations = [];
   const allowEmptyCDE = opts.allowEmptyCDE !== false; // 그룹핑 빈 값 기본 허용
@@ -129,35 +189,8 @@ function validatePreWrite(rows, opts = {}) {
       violations.push({ row: lineNo, col: 'F', sev: 'CRITICAL', msg: '재현스탭(F열) 빈 값' });
     }
 
-    // ①-2 검증단계/플랫폼 enum — 컬럼 꼬임(idx4↔idx5 스왑)도 여기서 기계 검출됨
-    //   (스왑 시 G에 한글 서술문이 들어와 enum 위반 — 2026-04-17 사고 유형의 사전 차단)
-    if (e && !STAGE_ENUM.includes(e)) {
-      violations.push({ row: lineNo, col: 'E', sev: 'HIGH', msg: `검증단계 "${e}" — 허용값(정상/부정/예외) 외` });
-    }
-    if (g && !PLATFORM_ENUM.includes(g)) {
-      violations.push({ row: lineNo, col: 'G', sev: 'HIGH', msg: `플랫폼 "${g.slice(0, 30)}" — 허용값(PC/모바일/PC/모바일) 외 (idx4↔5 스왑 의심)` });
-    }
-
-    // ② B/C/D 빈 값 (옵션)
-    if (!allowEmptyCDE) {
-      if (!b) violations.push({ row: lineNo, col: 'B', sev: 'CRITICAL', msg: '대분류 빈 값' });
-      if (!c) violations.push({ row: lineNo, col: 'C', sev: 'CRITICAL', msg: '중분류 빈 값' });
-      if (!d) violations.push({ row: lineNo, col: 'D', sev: 'CRITICAL', msg: '소분류 빈 값' });
-    }
-
-    // ③ B/C/D(대/중/소분류) 동사·동작 표현 금지
-    [['B', b], ['C', c], ['D', d]].forEach(([col, val]) => {
-      if (!val) return;
-      for (const re of FORBIDDEN_VERBS_IN_CATEGORY) {
-        if (re.test(val)) {
-          violations.push({
-            row: lineNo, col, sev: 'HIGH',
-            msg: `분류에 동작 표현 금지: "${val}" (패턴: ${re})`,
-          });
-          break;
-        }
-      }
-    });
+    // ①-2/②/③ 골격 열(E·G enum, B/C/D 빈 값, 분류 동작 표현) — convert 단계와 공유 (checkSkeletonCols)
+    checkSkeletonCols({ b, c, d, e, g }, { row: lineNo }, violations, { allowEmptyCDE });
 
     // ④ F(재현스탭)에 진입 동작 중복 금지
     if (f) {
@@ -781,7 +814,7 @@ function parseDesignTree(text, opts = {}) {
   const strict = opts.strict !== false;
   const allowCompound = !!opts.allowCompound;
   const lines = text.split('\n');
-  const start = lines.findIndex(l => /^##\s*분류\s*그룹핑\s*트리/.test(l));
+  const start = lines.findIndex(l => DESIGN_TREE_RE.section.test(l));
   if (start < 0) {
     return { ok: false, leaves: [], blockers: [{ type: 'no_tree_heading', line: 0, msg: "'## 분류 그룹핑 트리' 헤딩 미발견" }] };
   }
@@ -791,14 +824,14 @@ function parseDesignTree(text, opts = {}) {
   for (let i = start + 1; i < lines.length; i++) {
     const raw = lines[i];
     if (/^##\s/.test(raw)) break; // 다음 섹션 — 경계 (F6)
-    const t = raw.trim();
-    if (!t || t === '---') continue;
-    let m;
-    if ((m = t.match(/^\d+\.\s+\*\*(.+?)\*\*/))) { cat1 = m[1].trim(); cat2 = ''; sub = null; continue; }
-    if ((m = t.match(/^\d+\.\d+\s+(.+?)\s*\(중분류\)/))) { cat2 = m[1].trim(); sub = null; continue; }
-    if ((m = t.match(/^-\s+(.+)$/))) {
+    const c = classifyDesignLine(raw);   // 줄 모양 판정은 design_tree_lines.js 한 곳
+    const t = c.text;
+    if (c.kind === 'blank') continue;
+    if (c.kind === 'major') { cat1 = c.name; cat2 = ''; sub = null; continue; }
+    if (c.kind === 'mid') { cat2 = c.name; sub = null; continue; }
+    if (c.kind === 'leaf') {
       const tags = [];
-      const name = m[1].replace(/\[([^\]]+)\]/g, (_, tag) => { tags.push(tag.trim()); return ''; }).replace(/\s+/g, ' ').trim();
+      const name = c.body.replace(/\[([^\]]+)\]/g, (_, tag) => { tags.push(tag.trim()); return ''; }).replace(/\s+/g, ' ').trim();
       const risk = tags.find(x => TREE_RISK.has(x)) || '';
       const platform = tags.find(x => PLATFORM_ENUM.includes(x)) || '';
       if (strict) {
@@ -812,10 +845,10 @@ function parseDesignTree(text, opts = {}) {
       sub = { name, risk, platform };
       continue;
     }
-    if ((m = t.match(/^→\s*(정상|부정|예외)-(\d+)\s*:\s*(.+)$/))) {
+    if (c.kind === 'item') {
       if (!sub || !cat1 || !cat2) { blockers.push({ type: 'orphan_leaf', line: i + 1, msg: `소분류 컨텍스트 없는 leaf: ${t.slice(0, 60)}` }); continue; }
       let jTag = '';
-      let body = m[3].replace(/\[J:\s*([^\]]+)\]/g, (_, j) => { jTag = j.trim(); return ''; });
+      let body = c.body.replace(/\[J:\s*([^\]]+)\]/g, (_, j) => { jTag = j.trim(); return ''; });
       body = body.replace(/\(\s*(?:ST|DT|C|B|P)-\d+[^)]*\)/g, '').replace(/\s+/g, ' ').trim(); // 괄호 주석 제거 (F5)
       const leftover = body.match(/\[[^\]]+\]/);
       if (strict && leftover) blockers.push({ type: 'unknown_token', line: i + 1, msg: `leaf 잔여 대괄호 토큰 ${leftover[0]}` });
@@ -823,7 +856,7 @@ function parseDesignTree(text, opts = {}) {
         blockers.push({ type: 'compound_leaf', line: i + 1, msg: `복합문 leaf(설계 단계 분해 필요 — F4): ${body.slice(0, 70)}` });
       }
       const j = jTag || (/미지정/.test(body) ? '기획 확인 필요' : '');
-      leaves.push({ cat1, cat2, cat3: sub.name, stage: m[1], seq: parseInt(m[2], 10), text: body, j, platform: sub.platform, risk: sub.risk, line: i + 1 });
+      leaves.push({ cat1, cat2, cat3: sub.name, stage: c.stage, seq: c.seq, text: body, j, platform: sub.platform, risk: sub.risk, line: i + 1 });
       continue;
     }
     if (strict) blockers.push({ type: 'unparsed_line', line: i + 1, msg: `트리 내 미인식 행(스킵 금지 — L2P3-01): ${t.slice(0, 60)}` });
@@ -920,7 +953,7 @@ function checkAllotmentStrict(text, leaves) {
 }
 
 module.exports = {
-  validatePreWrite, validatePostWrite, formatViolations,
+  validatePreWrite, validateSkeleton, validatePostWrite, formatViolations,
   normJ, isJAllowed, expectedHI, adaptInput, fillDownRecords,
   parseDesignTables, validateFull,
   parseDesignTree, parseBasicTable, checkAllotmentStrict, normCatName,

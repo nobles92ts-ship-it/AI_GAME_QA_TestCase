@@ -93,7 +93,7 @@ const tdoc = [
   '| image-20260724-030647.png | 챕터 이동 | 합성 구역 선택 버튼을 만듭니다.   * MapGroup 값이 1이면 좌측 화살표를 표현하지 않습니다.    + 딤드 처리한 경우 별도 토스트 메시지는 출력하지 않습니다. |',
   '| **UI 설명** | **항목** | **설명** |',   // 문서 중간 반복 헤더 — 배제
   '| Icon_WorldMap_Village.PNG | **Grade** | 합성 노드A는 넓게, 합성 노드B는 작게 그립니다. |',
-  '| Common | NameCode | <https://{CONFLUENCE_SITE}/wiki/x> |',   // 한글 없음 — 전부 배제
+  '| Common | NameCode | <https://your-site.atlassian.net/wiki/x> |',   // 한글 없음 — 전부 배제
   '',
   '* 합성 미리보기의 확대 비율에 따라 투명도가 변경되도록 수정합니다.',
 ].join('\n');

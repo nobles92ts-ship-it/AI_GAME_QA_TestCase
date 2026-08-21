@@ -11,6 +11,9 @@
  *   ranges <skeleton.json> <out.json>            25행 청크 범위 계산 (SKILL.md S3-② 동일)
  *   validate-chunk <skeleton> <chunk> <s> <e>    fmap 청크 검증 (개수·idx범위·d echo) exit 0/1
  *   assemble-fmap <workdir>                      fmap_chunk_*.json → tc_f_map.json (flat, 전체 연속 검증)
+ *   cov-ranges <slices> <out.json> [size]        S4 커버리지 청크 범위 + 청크별 rule_id 목록
+ *   validate-cov-chunk <ranges> <chunk> <ci>     커버리지 청크 검증 (담당 id·중복·동시등재) exit 0/1
+ *   assemble-coverage <workdir>                  cov_chunk_*.json → coverage.json + exclusions.json
  *   validate-json <file> <kind>                  findings|fixplan|coverage|exclusions|labels 구조 검증
  *   readback-diff <final.json> <dump.json>       S6 read-back: A~G+J 0-diff + #ERROR 검사 exit 0/1
  *   seal-coverage <workdir>                      봉합 후 coverage.json에 신규 tc_id 결정론 병합
@@ -107,6 +110,70 @@ if (cmd === 'extract-s3-rules') {
   for (let i = 0; i < n; i++) if (all[i].idx !== i) die(`idx 연속성 깨짐: 위치 ${i}에 idx ${all[i].idx}`);
   fs.writeFileSync(path.join(W, 'tc_f_map.json'), JSON.stringify(all, null, 1));
   console.log(JSON.stringify({ ok: true, count: n }));
+
+} else if (cmd === 'cov-ranges') {
+  // S4 커버리지 청크 범위. 청크 경계를 인덱스가 아니라 **rule_id 목록**으로 넘긴다 —
+  // 인덱스만 주면 LLM이 slices.json 순서를 다시 세어야 해서 경계에서 어긋난다. id 대조는 결정론.
+  const s = readJ(a[0]);
+  const rules = s.rules || [];
+  const size = Math.max(1, parseInt(a[2] || '50', 10));
+  const chunks = [];
+  for (let i = 0; i < rules.length; i += size) {
+    const part = rules.slice(i, i + size);
+    chunks.push({ s: i, e: i + part.length, ids: part.map(r => r.rule_id) });
+  }
+  // rules 0개는 즉사시키지 않는다 — 호출부가 빈 원장으로 단락시킨다(구 동작 보존).
+  fs.writeFileSync(a[1], JSON.stringify({ n: rules.length, size, chunks }));
+  console.log(JSON.stringify({ n: rules.length, chunks: chunks.length, size }));
+
+} else if (cmd === 'validate-cov-chunk') {
+  const rg = readJ(a[0]);
+  const spec = rg.chunks[parseInt(a[2], 10)];
+  if (!spec) { console.log('청크 인덱스 밖: ' + a[2]); process.exit(1); }
+  let ch;
+  try { ch = JSON.parse(fs.readFileSync(a[1], 'utf8')); }
+  catch (err) { console.log('청크 파일 없음/파싱 실패: ' + err.message); process.exit(1); }
+  const cov = ch && ch.coverage, ex = ch && ch.exclusions;
+  if (!Array.isArray(cov) || !Array.isArray(ex)) { console.log('coverage/exclusions 배열 아님'); process.exit(1); }
+  const allow = new Set(spec.ids);
+  const seen = new Set();
+  for (const c of cov) {
+    if (!c.rule_id || !Array.isArray(c.tc_ids)) { console.log('coverage 항목 불량'); process.exit(1); }
+    if (!allow.has(c.rule_id)) { console.log('담당 밖 rule_id: ' + c.rule_id); process.exit(1); }
+    if (seen.has(c.rule_id)) { console.log('중복 rule_id: ' + c.rule_id); process.exit(1); }
+    if (!c.tc_ids.length) { console.log('tc_ids 비어있음(커버면 1개 이상): ' + c.rule_id); process.exit(1); }
+    seen.add(c.rule_id);
+  }
+  for (const x of ex) {
+    if (!x.rule_id || !['타기획서', '비TC성서술', '중복규칙'].includes(x.reason)) { console.log('제외 사유 불량: ' + (x && x.reason)); process.exit(1); }
+    if (!allow.has(x.rule_id)) { console.log('담당 밖 rule_id: ' + x.rule_id); process.exit(1); }
+    if (seen.has(x.rule_id)) { console.log('커버·제외 동시 등재: ' + x.rule_id); process.exit(1); }
+    seen.add(x.rule_id);
+  }
+  console.log('ok');
+
+} else if (cmd === 'assemble-coverage') {
+  // 청크 산출을 합친다. 미커버 규칙은 어느 배열에도 없는 것이 정상(M-021) — 완전성은 요구하지 않고,
+  // 대신 청크 간 rule_id 중복·동시등재만 막는다(traceability가 미커버를 따로 판정하므로).
+  const W = a[0];
+  const files = fs.readdirSync(W).filter(f => /^cov_chunk_\d+\.json$/.test(f))
+    .sort((x, y) => parseInt(x.match(/\d+/)[0], 10) - parseInt(y.match(/\d+/)[0], 10));
+  if (!files.length) die('cov_chunk_*.json 없음');
+  const cov = [], ex = [], seen = new Map();
+  for (const f of files) {
+    const ch = readJ(path.join(W, f));
+    for (const c of (ch.coverage || [])) {
+      if (seen.has(c.rule_id)) die(`rule_id 중복(${seen.get(c.rule_id)} ↔ ${f}): ${c.rule_id}`);
+      seen.set(c.rule_id, f); cov.push(c);
+    }
+    for (const x of (ch.exclusions || [])) {
+      if (seen.has(x.rule_id)) die(`rule_id 중복/동시등재(${seen.get(x.rule_id)} ↔ ${f}): ${x.rule_id}`);
+      seen.set(x.rule_id, f); ex.push(x);
+    }
+  }
+  fs.writeFileSync(path.join(W, 'coverage.json'), JSON.stringify(cov, null, 1));
+  fs.writeFileSync(path.join(W, 'exclusions.json'), JSON.stringify(ex, null, 1));
+  console.log(JSON.stringify({ ok: true, chunks: files.length, covered: cov.length, excluded: ex.length }));
 
 } else if (cmd === 'validate-json') {
   const j = readJ(a[0]);
@@ -214,10 +281,25 @@ if (cmd === 'extract-s3-rules') {
   let times = '';
   try { times = fs.readFileSync(path.join(W, '.stage_times.txt'), 'utf8').trim(); } catch (e) { /* 없으면 생략 */ }
   const timeLine = times ? times.split('\n').map(l => l.replace('=', ' ')).join(' · ') : '(미기록)';
+  // FINAL 실패 배너(finalize.sh) — 있으면 보고 최상단에 그대로 올린다.
+  // 2026-08-07 실사고: L/M 패널이 통째로 빠졌는데 완주 보고는 ✅로 끝나 사흘간 아무도 몰랐다.
+  // 2026-08-16 실사고: 확신도가 통째로 빠졌는데(점수 0건) FINAL-0:✓로 완주 보고 — 같은 통에 넣는다.
+  const alerts = ['.final0_alert.txt', '.final5_alert.txt'].map((f) => {
+    try { return fs.readFileSync(path.join(SPEC, f), 'utf8').trim(); } catch (e) { return ''; }
+  }).filter(Boolean);
+  const alert5 = alerts.join('\n');
+  // FINAL-5 경고(finalize.sh) — 기재는 됐고 문구만 손볼 건. alert5 와 통을 나눈 이유:
+  //   alert5 는 헤더를 ⚠(일부 실패)로 뒤집는데, 금지 어휘는 기재가 성공한 건이라
+  //   같은 통에 넣으면 성공한 런이 실패로 보고된다. 심각도가 달라 파일도 다르다.
+  // 2026-08-10 실측: 규칙 도입 후 라벨 77건 중 9건에 금지어가 남았는데 chain.log 에만 떠 아무도 못 봤다.
+  let notice5 = '';
+  try { notice5 = fs.readFileSync(path.join(SPEC, '.final5_notice.txt'), 'utf8').trim(); } catch (e) { /* 없으면 정상 */ }
   const report = [
-    `✅ tc-team 풀체인 완료 — 탭 \`${tab}\` · ${rows}행`,
+    alert5,
+    `${alert5 ? '⚠ tc-team 풀체인 완료(일부 실패)' : '✅ tc-team 풀체인 완료'} — 탭 \`${tab}\` · ${rows}행`,
     sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : '',
     `단계 시간(초): ${timeLine}`,
+    notice5,
     '',
     '🖼 이미지 매칭(선택): 시각자료가 필요한 TC가 있으면 "/tc-이미지매칭"으로 수동 추가할 수 있습니다. (비-기본기능 10~20% 권장 / 파이프라인 자동 미포함)',
     '🧪 테스트 데이터 셋팅(선택): 테스트 데이터 생성 요청 라벨이 필요하면 "테스트 데이터 라벨링 해줘"로 수동 추가할 수 있습니다. (기준: 같은 폴더 라벨링_기준.md / 파이프라인 자동 미포함)',

@@ -11,7 +11,9 @@
  *   - 멱등: 적용 전 A열 데이터범위 배경을 흰색으로 초기화 후 다시 칠한다
  *   - 메모 보호: "TC N점" 시그니처가 있는 메모(=우리 것)나 빈 칸만 갱신·삭제.
  *     사람이 단 메모는 건드리지 않고 경고만 남긴다
- *   - non-blocking: 실패해도 완료처리를 막지 않는다 (finalize.sh가 ✗ 기록 후 계속)
+ *   - non-blocking: 실패해도 뒤 단계(FINAL-1·2·3·5)를 막지 않는다 (finalize.sh가 ✗ 기록 후 계속)
+ *   - fail-loud (2026-08-16): 항목 0건 · 드리프트 과반은 경고가 아니라 rc=2. 시트는 손대지 않는다.
+ *     판정은 confidence_core.stampGate (순수함수 — test/confidence.test.js가 잠근다)
  *
  * 사용: node confidence_apply.js --spec <specs/기능명 폴더> [--sheet-id ID] [--tab 탭명]
  *       (미지정 시 spec/sheet_info.txt 의 SHEET_ID·TAB_NAME 사용)
@@ -20,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const { getAuthClient } = require(path.resolve(__dirname, '../../../scripts/util/google_auth'));
-const { computeItems } = require('./confidence_core');
+const { computeItems, stampGate } = require('./confidence_core');
 
 // ── 인자 ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -91,9 +93,20 @@ function noteOf(it) {
   return L.join('\n');
 }
 
+// 게이트 실패 = 시트 미변경 종료. 색·메모 초기화(멱등 리셋)조차 하기 전에 빠져나온다 —
+// 항목 0건으로 진행하면 전 행의 기존 색·메모를 지우고 아무것도 다시 칠하지 못한다.
+const gateFail = (g, extra) => {
+  console.error(`[확신도] ✗ 스탬핑 중단 (${g.code}) — ${g.msg}`);
+  if (extra) console.error(`[확신도]   ${extra}`);
+  console.error(`[확신도]   시트는 변경하지 않았습니다: 탭 "${TAB}"`);
+  process.exit(2);
+};
+
 (async () => {
   const t0 = Date.now();
-  const { items } = computeItems(SPEC);
+  const { items, scored } = computeItems(SPEC);
+  const g0 = stampGate({ items: items.length });
+  if (!g0.ok) gateFail(g0, `설계서: ${path.join(SPEC, 'tc_design.md')} (소분류 ${scored.length}건 / 항목 ${items.length}건)`);
   const byKey = new Map(items.map((i) => [`${i.leaf}\0${i.stage}\0${i.no}`, i]));
 
   const auth = await getAuthClient();
@@ -136,6 +149,9 @@ function noteOf(it) {
       perRow.push({ row: i, tcid: rows[i][0], it });
     }
   });
+
+  const g1 = stampGate({ items: items.length, matched: perRow.length, drift: drift.length });
+  if (!g1.ok) gateFail(g1, `예: ${drift.slice(0, 3).map((d) => `${d.tcid}(${d.leaf})`).join(' · ')}`);
 
   const dist = perRow.reduce((a, p) => { a[p.it.grade] = (a[p.it.grade] || 0) + 1; return a; }, {});
   const colored = perRow.filter((p) => BG[p.it.grade]);
