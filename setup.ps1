@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Game QA Testcase — Setup Script (Windows PowerShell)
 # =============================================================================
 # 사용법: PowerShell에서 이 스크립트가 있는 폴더로 이동 후
@@ -12,6 +12,13 @@ $ClaudeDir = "$env:USERPROFILE\.claude"
 $AgentsDir = "$ClaudeDir\agents"
 $SkillsDir = "$ClaudeDir\skills"
 
+# 이 스크립트가 만드는 모든 파일은 BOM 없는 UTF-8 로 쓴다.
+# BOM 이 붙으면 셔뱅(#!/bin/bash)이 인식되지 않고 JSON.parse 가 실패한다.
+# ⚠ 기존 두 방식은 안전하지 않다:
+#     [System.Text.Encoding]::UTF8      → 두 셸 모두 BOM 을 쓴다
+#     Set-Content -Encoding UTF8        → 5.1 은 BOM, pwsh 7 은 무BOM (같은 인스톨러가 셸에 따라 다른 바이트를 남김)
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 Write-Host ""
 Write-Host "========================================"
 Write-Host "  Game QA Testcase - Setup"
@@ -23,24 +30,14 @@ New-Item -ItemType Directory -Force -Path $AgentsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
 
 # 2. Node.js 경로 감지
-$NodePath = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+$NodePath = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $NodePath) {
     Write-Host "[ERROR] Node.js를 찾을 수 없습니다. https://nodejs.org 에서 설치 후 다시 실행해주세요." -ForegroundColor Red
     exit 1
 }
 Write-Host "[OK] Node.js: $NodePath"
 
-# 3. Claude Code cli.js 경로 감지 (npm global root 기반)
-$NpmRoot = (npm root -g 2>$null)?.Trim()
-$CliPath = if ($NpmRoot) { "$NpmRoot/@anthropic-ai/claude-code/cli.js" } else { "" }
-if (-not $CliPath -or -not (Test-Path $CliPath)) {
-    Write-Host "[WARN] Claude Code cli.js를 찾을 수 없습니다. 설치 후 agent 파일의 {CLI_JS}를 직접 수정해주세요." -ForegroundColor Yellow
-    Write-Host "       설치: npm install -g @anthropic-ai/claude-code" -ForegroundColor Yellow
-    $CliPath = "CLI_JS_NOT_FOUND"
-}
-Write-Host "[OK] Claude CLI: $CliPath"
-
-# 4. 에이전트 파일 복사 + 플레이스홀더 치환
+# 3. 에이전트 파일 복사 + 플레이스홀더 치환
 Write-Host ""
 Write-Host "[STEP 1] 에이전트 파일 설치..."
 Get-ChildItem "$RepoDir\agents\*.md" | ForEach-Object {
@@ -48,16 +45,15 @@ Get-ChildItem "$RepoDir\agents\*.md" | ForEach-Object {
     $content = $content `
         -replace '\{NODE_PATH\}',          $NodePath `
         -replace '\{PROJECT_ROOT\}',       $RepoDir `
-        -replace '\{CLI_JS\}',             $CliPath `
         -replace '\{CLAUDE_AGENTS_DIR\}',  $AgentsDir `
         -replace '\{CLAUDE_SKILLS_DIR\}',  $SkillsDir
     $dest = "$AgentsDir\$($_.Name)"
-    [System.IO.File]::WriteAllText($dest, $content, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($dest, $content, $Utf8NoBom)
     Write-Host "  -> $($_.Name)"
 }
 Write-Host "[OK] 에이전트 설치 완료"
 
-# 4-1. 슬래시 커맨드 설치 (구버전은 이 단계가 없어 /tc-이미지매칭 이 설치되지 않았다 — 2026-07-29 추가)
+# 3-1. 슬래시 커맨드 설치 (구버전은 이 단계가 없어 /tc-이미지매칭 이 설치되지 않았다 — 2026-07-29 추가)
 $CommandsDir = "$ClaudeDir\commands"
 if (Test-Path "$RepoDir\commands") {
     Write-Host ""
@@ -69,16 +65,15 @@ if (Test-Path "$RepoDir\commands") {
             -replace '\{NODE_PATH\}',          ($NodePath -replace '\\', '/') `
             -replace '\{PROJECT_ROOT\}',       ($RepoDir -replace '\\', '/') `
             -replace '\{WORK_ROOT\}',          ($RepoDir -replace '\\', '/') `
-            -replace '\{CLI_JS\}',             ($CliPath -replace '\\', '/') `
             -replace '\{CLAUDE_HOME\}',        ($ClaudeDir -replace '\\', '/') `
             -replace '\{CLAUDE_SKILLS_DIR\}',  ($SkillsDir -replace '\\', '/')
-        [System.IO.File]::WriteAllText("$CommandsDir\$($_.Name)", $content, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText("$CommandsDir\$($_.Name)", $content, $Utf8NoBom)
         Write-Host "  -> $($_.Name)"
     }
     Write-Host "[OK] 커맨드 설치 완료"
 }
 
-# 5. 스킬 파일 복사 + 플레이스홀더 치환
+# 4. 스킬 파일 복사 + 플레이스홀더 치환
 #    구버전은 복사만 해서 skills/ 안의 {PROJECT_ROOT} 등이 리터럴로 남았다 (2026-07-29 수정).
 Write-Host ""
 Write-Host "[STEP 2] 스킬 파일 설치..."
@@ -100,19 +95,18 @@ foreach ($sub in @('tc-team', 'scripts', 'docs')) {
 }
 foreach ($f in $targets) {
     $c = Get-Content $f.FullName -Raw -Encoding UTF8
-    if ($c -notmatch '\{(PROJECT_ROOT|WORK_ROOT|NODE_PATH|CLI_JS|CLAUDE_HOME|CLAUDE_AGENTS_DIR|CLAUDE_SKILLS_DIR)\}') { continue }
+    if ($c -notmatch '\{(PROJECT_ROOT|WORK_ROOT|NODE_PATH|CLAUDE_HOME|CLAUDE_AGENTS_DIR|CLAUDE_SKILLS_DIR)\}') { continue }
     $c = $c -replace '\{NODE_PATH\}', $nodeFwd `
             -replace '\{PROJECT_ROOT\}', $repoFwd `
             -replace '\{WORK_ROOT\}', $repoFwd `
-            -replace '\{CLI_JS\}', ($CliPath -replace '\\', '/') `
             -replace '\{CLAUDE_HOME\}', $claudeFwd `
             -replace '\{CLAUDE_AGENTS_DIR\}', $agentsFwd `
             -replace '\{CLAUDE_SKILLS_DIR\}', $skillsFwd
-    Set-Content -Path $f.FullName -Value $c -Encoding UTF8 -NoNewline
+    [System.IO.File]::WriteAllText($f.FullName, $c, $Utf8NoBom)
 }
 Write-Host "[OK] 스킬 설치 완료 (플레이스홀더 치환 포함)"
 
-# 6. npm 의존성 설치
+# 5. npm 의존성 설치
 Write-Host ""
 Write-Host "[STEP 3] npm 패키지 설치..."
 Push-Location $RepoDir
@@ -120,7 +114,7 @@ npm install
 Pop-Location
 Write-Host "[OK] 패키지 설치 완료"
 
-# 7. pipeline_config.json 생성
+# 6. pipeline_config.json 생성
 Write-Host ""
 Write-Host "[STEP 4] pipeline_config.json 생성..."
 $ConfigDest = "$RepoDir\pipeline_config.json"
@@ -129,20 +123,20 @@ if (-not (Test-Path $ConfigDest)) {
     $config = $config `
         -replace 'C:/YOUR_PATH/node\.exe',      ($NodePath -replace '\\', '/') `
         -replace 'C:/YOUR_PATH/AI_AntiGravity',  ($RepoDir -replace '\\', '/')
-    [System.IO.File]::WriteAllText($ConfigDest, $config, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($ConfigDest, $config, $Utf8NoBom)
     Write-Host "[OK] pipeline_config.json 생성됨 — Drive ID / Confluence site를 직접 수정해주세요."
 } else {
     Write-Host "[SKIP] pipeline_config.json 이미 존재합니다."
 }
 
-# 8. .env 생성
+# 7. .env 생성
 Write-Host ""
 Write-Host "[STEP 5] .env 파일 생성..."
 $EnvDest = "$RepoDir\.env"
 if (-not (Test-Path $EnvDest)) {
     $env_content = Get-Content "$RepoDir\.env.example" -Raw -Encoding UTF8
     $env_content = $env_content -replace 'C:/Users/YourName/Documents/Game_QA_Testcase', ($RepoDir -replace '\\', '/')
-    [System.IO.File]::WriteAllText($EnvDest, $env_content, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($EnvDest, $env_content, $Utf8NoBom)
     Write-Host "[OK] .env 생성됨 — Google OAuth 정보와 Spreadsheet ID를 입력해주세요."
 } else {
     Write-Host "[SKIP] .env 이미 존재합니다."

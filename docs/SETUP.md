@@ -28,9 +28,9 @@ bash ./setup.sh
 ```
 
 The setup script:
-1. Detects Node.js and the Claude Code CLI, and stops with instructions if either is missing
+1. Detects Node.js, and stops with instructions if it is missing
 2. Copies `agents/` into `$CLAUDE_HOME/agents/` and `skills/` into `$CLAUDE_HOME/skills/`
-3. Substitutes `{PROJECT_ROOT}` / `{NODE_PATH}` / `{CLI_JS}` / `{CLAUDE_HOME}` placeholders — in the installed skills **and** in the repo's `tc-team/` and `scripts/` trees
+3. Substitutes `{PROJECT_ROOT}` / `{NODE_PATH}` / `{CLAUDE_HOME}` placeholders — in the installed skills **and** in the repo's `tc-team/` and `scripts/` trees
 4. Runs `npm install`
 5. Creates `pipeline_config.json` and `.env` from their templates, if they don't already exist
 

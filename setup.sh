@@ -28,20 +28,7 @@ if [ -z "$NODE_PATH" ]; then
 fi
 echo "[OK] Node.js: $NODE_PATH"
 
-# 3. Claude Code cli.js 경로 감지 (npm global root 기반)
-NPM_ROOT=$(npm root -g 2>/dev/null || echo "")
-CLI_JS=""
-if [ -n "$NPM_ROOT" ]; then
-  CLI_JS="$NPM_ROOT/@anthropic-ai/claude-code/cli.js"
-fi
-if [ -z "$CLI_JS" ] || [ ! -f "$CLI_JS" ]; then
-  echo "[WARN] Claude Code cli.js를 찾을 수 없습니다. 설치 후 agent 파일의 {CLI_JS}를 직접 수정해주세요."
-  echo "       설치: npm install -g @anthropic-ai/claude-code"
-  CLI_JS="CLI_JS_NOT_FOUND"
-fi
-echo "[OK] Claude CLI: $CLI_JS"
-
-# 4. 에이전트 파일 복사 + 플레이스홀더 치환
+# 3. 에이전트 파일 복사 + 플레이스홀더 치환
 echo ""
 echo "[STEP 1] 에이전트 파일 설치..."
 for file in "$REPO_DIR/agents/"*.md; do
@@ -49,7 +36,6 @@ for file in "$REPO_DIR/agents/"*.md; do
   sed \
     -e "s|{NODE_PATH}|$NODE_PATH|g" \
     -e "s|{PROJECT_ROOT}|$REPO_DIR|g" \
-    -e "s|{CLI_JS}|$CLI_JS|g" \
     -e "s|{CLAUDE_AGENTS_DIR}|$AGENTS_DIR|g" \
     -e "s|{CLAUDE_SKILLS_DIR}|$SKILLS_DIR|g" \
     "$file" > "$AGENTS_DIR/$filename"
@@ -57,7 +43,7 @@ for file in "$REPO_DIR/agents/"*.md; do
 done
 echo "[OK] 에이전트 설치 완료"
 
-# 4-1. 슬래시 커맨드 설치 (구버전은 이 단계가 없어 /tc-이미지매칭 이 설치되지 않았다 — 2026-07-29 추가)
+# 3-1. 슬래시 커맨드 설치 (구버전은 이 단계가 없어 /tc-이미지매칭 이 설치되지 않았다 — 2026-07-29 추가)
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 if [ -d "$REPO_DIR/commands" ]; then
   echo ""
@@ -70,7 +56,6 @@ if [ -d "$REPO_DIR/commands" ]; then
       -e "s|{NODE_PATH}|$NODE_PATH|g" \
       -e "s|{PROJECT_ROOT}|$REPO_DIR|g" \
       -e "s|{WORK_ROOT}|$REPO_DIR|g" \
-      -e "s|{CLI_JS}|$CLI_JS|g" \
       -e "s|{CLAUDE_HOME}|$CLAUDE_DIR|g" \
       -e "s|{CLAUDE_SKILLS_DIR}|$SKILLS_DIR|g" \
       "$file" > "$COMMANDS_DIR/$filename"
@@ -79,7 +64,7 @@ if [ -d "$REPO_DIR/commands" ]; then
   echo "[OK] 커맨드 설치 완료"
 fi
 
-# 5. 스킬 파일 복사 + 플레이스홀더 치환
+# 4. 스킬 파일 복사 + 플레이스홀더 치환
 #    ⚠ 구버전은 cp -r 만 해서 skills/ 안의 {PROJECT_ROOT} 등이 리터럴로 남았다(2026-07-29 수정).
 #      규칙 md 는 파이프라인이 런타임에 읽으므로 치환 없이는 경로 참조가 전부 깨진다.
 echo ""
@@ -90,7 +75,6 @@ find "$SKILLS_DIR" -type f \( -name '*.md' -o -name '*.json' \) -print0 | while 
     -e "s|{NODE_PATH}|$NODE_PATH|g" \
     -e "s|{PROJECT_ROOT}|$REPO_DIR|g" \
     -e "s|{WORK_ROOT}|$REPO_DIR|g" \
-    -e "s|{CLI_JS}|$CLI_JS|g" \
     -e "s|{CLAUDE_HOME}|$CLAUDE_DIR|g" \
     -e "s|{CLAUDE_AGENTS_DIR}|$AGENTS_DIR|g" \
     -e "s|{CLAUDE_SKILLS_DIR}|$SKILLS_DIR|g" \
@@ -98,7 +82,7 @@ find "$SKILLS_DIR" -type f \( -name '*.md' -o -name '*.json' \) -print0 | while 
 done
 echo "[OK] 스킬 설치 완료 (플레이스홀더 치환 포함)"
 
-# 5-1. 레포 내 문서·스크립트 플레이스홀더 치환 (tc-team 엔진 · 공용 스크립트)
+# 4-1. 레포 내 문서·스크립트 플레이스홀더 치환 (tc-team 엔진 · 공용 스크립트)
 #      실행 스크립트는 자기 위치에서 루트를 유도하므로 치환이 필수는 아니지만,
 #      문서(docs/*.md)의 경로 안내가 리터럴로 남으면 사용자가 따라할 수 없다.
 echo ""
@@ -115,14 +99,14 @@ find "$REPO_DIR/tc-team" "$REPO_DIR/scripts" "$REPO_DIR/docs" -type f \( -name '
 done
 echo "[OK] 치환 완료"
 
-# 6. npm 의존성 설치
+# 5. npm 의존성 설치
 echo ""
 echo "[STEP 3] npm 패키지 설치..."
 cd "$REPO_DIR"
 npm install
 echo "[OK] 패키지 설치 완료"
 
-# 7. pipeline_config.json 생성
+# 6. pipeline_config.json 생성
 echo ""
 echo "[STEP 4] pipeline_config.json 생성..."
 if [ ! -f "$REPO_DIR/pipeline_config.json" ]; then
@@ -135,7 +119,7 @@ else
   echo "[SKIP] pipeline_config.json 이미 존재합니다."
 fi
 
-# 8. .env 생성
+# 7. .env 생성
 echo ""
 echo "[STEP 5] .env 파일 생성..."
 if [ ! -f "$REPO_DIR/.env" ]; then
