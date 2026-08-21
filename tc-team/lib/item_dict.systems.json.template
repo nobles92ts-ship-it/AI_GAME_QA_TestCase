@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "item_dict.js 의 테이블 바인딩. 게임마다 다르므로 코드가 아니라 여기서 소유한다.",
+    "복사해서 실제 이름으로 채운 뒤 tc_config.json 의 item_dict_systems 에 경로를 지정한다.",
+    "레이아웃 전제: 헤더행=0 · 한글설명=1 · DevFlag=2 · 타입=3 · 데이터=4~ (item_dict.js DATA_ROW).",
+    "systems[] 는 아이템을 '쓰는' 곳만 담는다 — 보상·퀘스트·우편은 '얻는' 경로라 대상이 아니다.",
+    "시트나 컬럼이 없으면 그 시스템만 스킵되고 산출물 skipped[] 에 사유가 남는다."
+  ],
+  "item_file": "Item.xlsx",
+  "item_sheet": "ItemInfo",
+  "systems": [
+    { "key": "제작", "file": "SystemA.xlsx", "sheet": "TableA", "col": "ColA", "cond": "SystemA.TableA.ColA 등재" },
+    { "key": "강화", "file": "SystemB.xlsx", "sheet": "TableB", "col": "ColB", "cond": "SystemB.TableB.ColB 등재" },
+    { "key": "가공", "file": "SystemC.xlsx", "sheet": "TableC", "col": "ColC", "cond": "SystemC.TableC.ColC 등재" },
+    { "key": "수집", "file": "SystemD.xlsx", "sheet": "TableD", "col": "ColD", "cond": "SystemD.TableD.ColD 등재" }
+  ]
+}

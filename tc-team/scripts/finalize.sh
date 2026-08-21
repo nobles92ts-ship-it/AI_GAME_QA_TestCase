@@ -79,12 +79,34 @@ fi
 
 declare -A RESULT=( [0]="—" [1]="—" [2]="—" [3]="—" [5]="—" )
 
+# FINAL-5a validate_labels.js가 센 금지 어휘(라벨링_기준.md §문장 형식) 건수.
+# 기재를 막지 않는 경고라 RESULT[5]는 ✓로 남는다 — 요약 줄에 안 실으면 chain.log에 묻힌다.
+# 2026-08-10 실측: 규칙 도입 후 라벨 77건 중 9건에 금지어가 남았는데 아무도 못 봤다.
+# FINAL-5를 안 도는 런(--only 1 등)에서는 0으로 남아 배너에 아무것도 붙지 않는다.
+LABEL_BANNED=0
+
 # ── FINAL-0: 확신도 스탬핑 (TC별 근거 점수 → A열 색·메모 + confidence.json/HTML) ──
 # 판단 0 — S1~S2가 남긴 신호를 확정된 행에 옮겨 적기만 한다. 실패해도 완료처리는 계속.
+# 2026-08-16 실사고(자동_사냥_기능_v3): 설계 트리 파싱이 0건이라 점수 0·색칠 0·드리프트 218행이
+#   났는데 confidence_apply.js가 rc=0으로 끝나 FINAL-0:✓로 보고됐다. 이제 게이트가 rc=2를 내므로
+#   ✗가 찍히지만, ✗ 한 글자는 완료 보고에서 묻힌다 — FINAL-5와 같은 방식으로 배너를 남긴다.
 final_0() {
+  rm -f "$SPEC/.final0_alert.txt"          # 지난 런의 배너를 물려받지 않는다
   say "FINAL-0 확신도 스탬핑"
   if "$NODE" "$CONFDIR/confidence_apply.js" --spec "$SPEC" --sheet-id "$SHEET_ID" --tab "$TAB" \
-     && "$NODE" "$CONFDIR/confidence_report.js" --spec "$SPEC"; then RESULT[0]="✓"; else RESULT[0]="✗"; fi
+     && "$NODE" "$CONFDIR/confidence_report.js" --spec "$SPEC"; then
+    RESULT[0]="✓"
+  else
+    RESULT[0]="✗"
+    { echo "❌ FINAL-0 실패 — 확신도 미적용 (A열 색·메모 없음, 시트는 변경되지 않음)"
+      echo "   사유: 위 [확신도] 라인 참조 (설계 트리 파싱 0건 / 설계↔시트 드리프트 과반)"
+      echo "   확인: $SPEC/tc_design.md 의 '## 분류 그룹핑 트리'"
+      echo "   복구: bash finalize.sh --feature \"$FEAT\" --sheet-id \"$SHEET_ID\" --tab \"$TAB\" --only 0"
+    } > "$SPEC/.final0_alert.txt"
+    say "══════════════════════════════════════════════════════════════"
+    while IFS= read -r l; do say "$l"; done < "$SPEC/.final0_alert.txt"
+    say "══════════════════════════════════════════════════════════════"
+  fi
 }
 
 # ── FINAL-1: 대시보드 ─────────────────────────────────────────────────────────
@@ -104,14 +126,32 @@ final_2() {
   else RESULT[2]="✗"; fi
 }
 
+# ── FINAL-5 실패 배너 — 경고 한 줄로 흘려보내지 않는다 ───────────────────────
+# 2026-08-07 실사고(기능B_v3): 5a가 인용부호를 이스케이프하지 않아 _labels.json이
+#   무효 JSON이 됐고, try/continue 정책 탓에 "기재 스킵" 한 줄만 남기고 런이 완주했다.
+#   L/M 패널(기획 확인 요청 9건)이 통째로 빠진 걸 사흘 뒤 사람이 시트를 열어보고서야 발견.
+# → 사유를 $SPEC/.final5_alert.txt 에 남긴다. chain_helpers.js final-report가 이 파일을 읽어
+#   완주 보고(final_report.txt) 최상단에 붙이므로 초록불 보고로 끝나지 않는다.
+alert_5() {
+  { echo "❌ FINAL-5 실패 — L/M 패널(기획 확인 요청) 미기재"
+    echo "   사유: $1"
+    echo "   확인: $SPEC/_labels.json  (교정 실패한 원본은 _labels.broken.json)"
+    echo "   복구: bash finalize.sh --feature \"$FEAT\" --sheet-id \"$SHEET_ID\" --tab \"$TAB\" --only 5"
+  } > "$SPEC/.final5_alert.txt"
+  say "══════════════════════════════════════════════════════════════"
+  while IFS= read -r l; do say "$l"; done < "$SPEC/.final5_alert.txt"
+  say "══════════════════════════════════════════════════════════════"
+}
+
 # ── FINAL-5: 기획 확인 라벨링 (5a 도출=agent 위임 / 5b 기재=스크립트) ─────────
 final_5() {
+  rm -f "$SPEC/.final5_alert.txt" "$SPEC/.final5_notice.txt"   # 지난 런의 배너를 물려받지 않는다
   say "FINAL-5a 기획확인 라벨 도출 (agent)"
   local p
   p="너는 기획 확인 라벨 도출 담당이다 (tc-team S7 FINAL-5a — 절차 SSoT: 완료처리.md).
 1. \"$SPEC/analysis.md\"(C-1 미지정값·C-2 모호) + \"$SPEC/tc_design.md\"(기획 확인 필요 항목) Read.
 2. \"$RULESDIR/라벨링_기준.md\" Read — **기획 확인(태그 4종)만** 도출. 품질 가드 4종 적용, 근거 확인, 키워드 매칭 금지.
-3. \"$SPEC/_labels.json\" Write: {\"기획확인\": [\"[태그] 본문\\n→ ...\", ...]} — 테스트데이터 키는 생략(선택·수동 정책).
+3. \"$SPEC/_labels.json\" Write: {\"기획확인\": [\"[태그] 질문 한 문장?\\n왜 필요한지 한 줄 (사람 말)\", ...]} — 라벨링_기준.md §문장 형식 그대로. 화살표 접두 금지(구 형식 \\n→ 는 08-04 폐기). 테스트데이터 키는 생략(선택·수동 정책).
 다른 파일 금지. 저장 후 \"LABELS_DONE\"만 출력."
   # 쿼터·인증 감지는 pipeline_retry.sh가 소유(rc 10=인증, 11=쿼터) — 있으면 경유한다.
   local arc=0
@@ -125,18 +165,31 @@ final_5() {
   fi
   [[ $arc -eq 10 ]] && say "FINAL-5a 인증 만료 — 재로그인 후 라벨링만 재실행 필요"
   [[ $arc -eq 11 ]] && say "FINAL-5a 쿼터 초과 — 리셋 후 라벨링만 재실행 필요"
-  # 산출물 구조 검증(기획확인 배열) — 깨진 JSON을 apply_labeling에 넘기지 않는다
-  if [[ -f "$SPEC/_labels.json" ]] && ! "$NODE" -e "
-const j=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));
-if(!j||!Array.isArray(j['기획확인'])) throw new Error('기획확인 배열 없음');
-" "$SPEC/_labels.json" 2>/dev/null; then
-    say "FINAL-5a 산출 형식 불량(_labels.json) — 기재 스킵"; RESULT[5]="✗"; return
+  # 산출물 검증 — 깨진 JSON을 apply_labeling에 넘기지 않는다.
+  # validate_labels.js가 파싱·규격을 보고, 깨졌으면 인용부호 이스케이프 교정을 1회 시도한다.
+  local vout vrc
+  vout=$("$NODE" "$UTIL/validate_labels.js" "$SPEC/_labels.json" 2>&1); vrc=$?
+  while IFS= read -r l; do [[ -n "$l" ]] && say "FINAL-5a $l"; done <<< "$vout"
+  if [[ $vrc -ne 0 ]]; then
+    alert_5 "_labels.json 검증 실패 (위 FINAL-5a 라인 참조) — 기획 확인 요청이 한 건도 기재되지 않았습니다"
+    RESULT[5]="✗"; return
   fi
-  if [[ -f "$SPEC/_labels.json" ]]; then
-    say "FINAL-5b 라벨 기재"
-    if "$NODE" "$UTIL/apply_labeling.js" "$SHEET_ID" "$TAB" "$SPEC/_labels.json"; then RESULT[5]="✓"; else RESULT[5]="✗"; fi
+  # 금지 어휘 건수 회수 — 요약 첫 줄만 본다(상세 라인엔 숫자 대신 어휘명이 온다).
+  # 구버전 validate_labels.js(이 필드 없음)로 롤백돼도 매칭 실패 → 0 유지(fail-safe).
+  LABEL_BANNED=$(grep -o '금지 어휘 [0-9]\+' <<< "$vout" | head -1 | grep -o '[0-9]\+')
+  LABEL_BANNED=${LABEL_BANNED:-0}
+  say "FINAL-5b 라벨 기재"
+  if "$NODE" "$UTIL/apply_labeling.js" "$SHEET_ID" "$TAB" "$SPEC/_labels.json"; then
+    RESULT[5]="✓"
+    # 기재는 됐고 문구만 손볼 건 → alert_5(실패)와 통을 나눈다.
+    # 같은 통에 넣으면 chain_helpers.js가 헤더를 ⚠(일부 실패)로 뒤집어 성공한 런이 실패로 보고된다.
+    if [[ "$LABEL_BANNED" -gt 0 ]]; then
+      echo "⚠ 라벨 금지 어휘 ${LABEL_BANNED}건 — 기재는 완료, 문구만 손보면 됩니다 (라벨링_기준.md §문장 형식 · 항목 번호는 chain.log FINAL-5a 라인)" \
+        > "$SPEC/.final5_notice.txt"
+    fi
   else
-    say "FINAL-5a 산출(_labels.json) 없음 — 기재 스킵"; RESULT[5]="✗"
+    alert_5 "apply_labeling.js 기재 실패 — _labels.json은 정상인데 시트 기재가 실패했습니다"
+    RESULT[5]="✗"
   fi
 }
 
@@ -183,6 +236,12 @@ try{
 " "$RULES_MD" > "$SPEC/.final6_notice.txt" 2>/dev/null
 [[ -s "$SPEC/.final6_notice.txt" ]] && { echo "[FINALIZE] FINAL-6 안내:"; cat "$SPEC/.final6_notice.txt"; }
 
-say "완료 — FINAL-0:${RESULT[0]} 1:${RESULT[1]} 2:${RESULT[2]} 5:${RESULT[5]} 3:${RESULT[3]}"
+LABEL_WARN=""
+[[ "${LABEL_BANNED:-0}" -gt 0 ]] && LABEL_WARN="  ⚠ 라벨 금지어 ${LABEL_BANNED}건"
+say "완료 — FINAL-0:${RESULT[0]} 1:${RESULT[1]} 2:${RESULT[2]} 5:${RESULT[5]} 3:${RESULT[3]}${LABEL_WARN}"
+# 실패는 요약의 ✗ 한 글자로 묻히지 않게 마지막에 한 번 더 — 완료 보고에 그대로 옮긴다
+for a in "$SPEC/.final0_alert.txt" "$SPEC/.final5_alert.txt"; do
+  [[ -s "$a" ]] && { echo "[FINALIZE] ⚠ 완료 보고에 반드시 포함할 것:"; cat "$a"; }
+done
 for k in 0 1 2 3 5; do [[ "${RESULT[$k]}" == "✗" ]] && exit 20; done
 exit 0

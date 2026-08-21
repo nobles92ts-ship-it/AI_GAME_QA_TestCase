@@ -133,10 +133,57 @@ printf '[{"feature":"%s","confluence":"%s"}]\n' "$FEAT" "${CONF_URL:-}" > "$SPEC
   && log "[SLACK] 착수 공지 OK" || log "[SLACK][경고] 실패 — 계속"
 fi
 
-LOCK="$SPEC/.pipeline.lock"
-[[ -f "$LOCK" ]] && "$NODE" -e "require('fs').rmSync(process.argv[1],{force:true})" "$LOCK"
-date +%s > "$LOCK"
+# 실행락 — 주인은 "런 전체"이지 이 하위 단계가 아니다 (2026-07-31 정리).
+#   상위(run_pipeline_full.sh · 세션 드라이버)가 이미 잡았으면 건드리지 않고,
+#   단독 실행이면 여기서 잡고 trap 으로 반드시 푼다(완료·중단 공통).
+# 이전에는 문서에 없는 두 번째 락($SPEC/.pipeline.lock — 구 v2 체인 scripts/util/run_pipeline.sh:132
+#   에서 물려받음)을 걸기만 하고 푸는 코드가 없어 폴더마다 영구 잔존했다(실측 9곳·최고령 21일).
+#   편집 가드가 그 유령 락을 "실행 중"으로 오독해 끝난 런 뒤 3시간 동안 .sh 편집을 막았고,
+#   반대로 3시간 넘는 런은 보호를 잃었다. 정본 락은 SKILL.md S0-0 의 team/.pipeline.lock 하나뿐.
+TEAMLOCK="$PROJECT_ROOT/team/.pipeline.lock"
+if [[ ! -f "$TEAMLOCK" ]]; then
+  date +%s > "$TEAMLOCK"
+  trap 'rm -f "$TEAMLOCK"' EXIT
+fi
 [[ $START -eq 0 ]] && do_transition designing 0 ""
+
+# ── STEP 0-사전 (조건부·결정론) — 아이템 실명 사전 생성 (2026-08-13 신설) ────────
+# 왜 STEP 1 앞인가: 아이템 실명은 tc_design.md 의 **leaf(확인 내용)** 에 박혀야 한다.
+#   S3 문장화(tcteam-s3-fmap)는 leaf 를 받아 F열 문장을 만들 뿐 사전을 읽지 않으므로,
+#   설계가 leaf 에 안 넣으면 "세공 재료 아이템을…" 같은 유형만 적힌 문장이 시트까지 간다(실측 44건).
+# 기능과 무관한 전역 사전이라 analysis.md 를 기다릴 필요가 없다 → 가장 이른 지점에 둔다.
+# off/원본없음/모듈없음 = 스킵(현행 동작 100% 동일, exit 4). fail-safe 비차단.
+ITEMDICT=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict==='on'?'on':'off')}catch(e){process.stdout.write('off')}" 2>/dev/null)
+[[ -z "$ITEMDICT" ]] && ITEMDICT=off
+# 원본 경로도 config 에서 읽는다 — 머신마다 트렁크 위치가 다르다(하드코딩 금지).
+IDT=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict_tables||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+IDG=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict_gamestring||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+# 테이블·시트·컬럼 바인딩도 config 소유 — 게임마다 다르므로 코드에 박지 않는다.
+# 형식은 tc-team/lib/item_dict.systems.json.template 참조. 미지정이면 생성기가 exit 4 로 스킵(비차단).
+IDS=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict_systems||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+# ⚠ 삭제·재생성은 반드시 START 가드 **안**에서 한다. 밖에 두면 --resume-from step4 재개 때
+#   기존 사전을 지우고 재생성하지 않아, S4 quality 렌즈가 파일을 못 찾고 조용히 넘어간다.
+#   (crossref 쪽 rmSync 가 STEP 2 블록 안에 있는 것과 같은 이유)
+if [[ "$ITEMDICT" == "on" && $START -le 1 ]]; then
+  "$NODE" -e "require('fs').rmSync('$SPEC/item_dict.json',{force:true})" 2>/dev/null || true
+  IDARGS=(--out "$SPEC/item_dict.json")
+  [[ -n "$IDT" ]] && IDARGS+=(--tables "$IDT")
+  [[ -n "$IDG" ]] && IDARGS+=(--gamestring "$IDG")
+  [[ -n "$IDS" ]] && IDARGS+=(--systems "$IDS")
+  "$NODE" "$PROJECT_ROOT/tc-team/lib/item_dict.js" "${IDARGS[@]}" >>"$CHAIN_LOG" 2>&1
+  idrc=$?
+  case $idrc in
+    0) log "[STEP 0-사전] 아이템 사전 생성 — $("$NODE" -e "try{const d=JSON.parse(require('fs').readFileSync('$SPEC/item_dict.json','utf8'));const s=(d.systems||[]).map(x=>x.key+'='+x.item_count).join(' ');const z=(d.combos||[]).filter(c=>c.item_count===0).map(c=>c.systems.join('+'));process.stdout.write('아이템 '+d.item_count+'종 / '+s+(z.length?(' / 겸용0건 '+z.length+'조합'):''))}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)" ;;
+    4) log "[STEP 0-사전] 스킵 — 원본 테이블/모듈 없음 (비차단)" ;;
+    *) log "[STEP 0-사전][경고] 생성기 비정상 종료 rc=$idrc — fail-safe 스킵(비차단)" ;;
+  esac
+elif [[ "$ITEMDICT" == "on" ]]; then
+  # 재개 런: 기존 사전을 그대로 재사용한다(지우지 않는다).
+  if [[ -f "$SPEC/item_dict.json" ]]; then log "[STEP 0-사전] 재개 — 기존 사전 재사용"
+  else log "[STEP 0-사전][경고] 재개인데 사전 없음 — 실명 병기 없이 진행(비차단). 필요하면 START=0 으로 재실행"; fi
+else
+  log "[STEP 0-사전] 스킵 (item_dict=$ITEMDICT)"
+fi
 
 # ── STEP 1 설계 (opus) ───────────────────────────────────────────────────────
 if [[ $START -le 1 ]]; then
@@ -147,6 +194,7 @@ HANDOFF="## HANDOFF
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 - Confluence URL: ${CONF_URL:-} (참조용)
 - specs 경로: $SPEC
+- 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭에 아이템 유형을 일반명사로 쓸 때 대표 실아이템 병기. 규칙 SSoT=tc-설계.md §아이템 실명 병기. 없으면 현행대로 유형만 기재)
 
 ## 작업 지시
 confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) → 드라이브 업로드.
@@ -193,6 +241,11 @@ tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2�
   if [[ -f "$SPEC/dxr_crossref.json" ]]; then
     XC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const lo=it.filter(x=>x.branch==='locate').length+it.filter(x=>x.branch==='apply'&&x.approved!==true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;const ke=it.filter(x=>x.branch==='keep').length;process.stdout.write('apply='+ap+' locate='+lo+' discover='+di+' keep='+ke)}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)
     log "[STEP 2-대조] 완료 — $XC"
+    # 해소율 경고 (비차단, 2026-07-31) — 전 항목 keep 이어도 파이프라인은 정상 종료하므로
+    # 무인 런에서는 이 한 줄이 "뇌가 헛돌았다"는 유일한 단서다. 임계 20%·최소 5건은 실측 기준
+    # (07-31 재료_아이템 런: 해소 2/15 = 13% 인데 아무 경고 없이 완주 → 확신도 항목 18건 불필요 감점).
+    XW=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const n=it.length;const r=it.filter(x=>x.branch!=='keep').length;process.stdout.write(n>=5&&r*5<n?(r+'/'+n):'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+    [[ -n "$XW" ]] && log "[STEP 2-대조][경고] 해소 $XW — 20% 미만. 색인 이름 오류·뇌 미탑재·질의 헛돔(제목형 질의가 메타데이터 헤더 청크만 물어오는 경우) 의심. tc-대조.md §1.5 ⓑ 내용어 질의 확인"
   else
     log "[STEP 2-대조] 산출 없음 — 뇌 미적중/미탑재로 간주(비차단, 현행 동작)"
   fi
@@ -253,6 +306,7 @@ run_step3() { # $1=모드 라벨 (review|blocker)
 - 검수 보고서: $SPEC/design_review.md
 - DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 직접 소비) — apply(approved:true)→커버리지 매핑표에 확정 규칙+출처, discover→TC 후보 추가. approved:false·locate·keep은 기획확인 블록 유지(설계 변경 아님). 규칙 SSoT=tc-대조.md §3. 분석누락 아닌 설계보강이라 sonnet.
 - 직변환 차단 보고서: $SPEC/conversion_blocker.json (존재 시 최우선 — 차단 항목 외과 수정)
+- 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭을 고칠 때 아이템 실명 병기 유지. 규칙 SSoT=tc-설계.md §아이템 실명 병기)
 
 ## 작업 지시
 design_review.md 이슈(존재 시) + DXR 대조 결과(apply/discover, 존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.

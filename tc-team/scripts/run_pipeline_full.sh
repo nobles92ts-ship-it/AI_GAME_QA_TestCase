@@ -82,9 +82,10 @@ mark() { echo "$1=$((SECONDS-T0))" >> "$WORK/.stage_times.txt"; T0=$SECONDS; }
 
 # LLM 호출: RETRY(쿼터/인증 감지) + run-agent.sh(claude -p, env 격리·모델 고정)
 run_llm() { # $1=라벨 $2=모델 $3=프롬프트 [$4=effort]
+  # 병렬 호출 시 RUN_LLM_ERRLOG로 stderr 로그를 호출별 분리할 것 — 공유하면 재시도 분류가 타 호출 출력을 읽는다 (2026-08-09)
   local extra=()
   [[ -n "${4:-}" ]] && extra=(--effort "$4")
-  bash "$RETRY" "$SPEC/.chain_llm_stderr.log" -- \
+  bash "$RETRY" "${RUN_LLM_ERRLOG:-$SPEC/.chain_llm_stderr.log}" -- \
     bash "$RUNAGENT" $CLI_BASE --model "$2" "${extra[@]}" "$3" >>"$CHAIN_LOG" 2>&1
   local rc=$?
   [[ $rc -eq 10 ]] && stop_auth "$1"
@@ -152,17 +153,42 @@ if [[ $ST -le 3 ]]; then
   vhelp ranges "$WORK/tc_skeleton.json" "$WORK/s3_ranges.json" || fail "S3 ranges 계산 실패"
 
   S3RULES=$("$NODE" "$HELPERS" extract-s3-rules "$WFDIR") || fail "S3 규칙 추출 실패(워크플로우 구조 변경?)"
-  rm -f "$WORK"/fmap_chunk_*.json
+  rm -f "$WORK"/fmap_chunk_*.json "$WORK"/.chunk_verr_*.txt
 
+  # 문장화 청크 병렬 (2026-08-19, 근거: docs/s3_병렬화_실측_20260816.md):
+  #   청크는 서로 독립(fmap_chunk_<S>.json 분리)이라 동시 진행 가능. S4 커버리지 원장과 같은
+  #   웨이브 배치 — 동시 인스턴스를 S3PAR로 묶는다(무제한 팬아웃 = 순간 레이트 폭주).
+  #   실측 300TC 환산: 순차 40분46초 → 동시 3에서 16분36초 / 동시 4에서 13분08초 [estimated].
+  #   기본값 4 (2026-08-19 승인). 실측 문서 권고는 3이었으나 그 근거인 "K=4 지연 +13.2%"는
+  #   13행 이상치 청크 1개(213초)에 기인하고, 같은 문서 관측 2가 그 청크를 분산 이상치로 지목한다.
+  #   그 하나를 빼면 K=4 평균 131.3초 < K=1 기준선 135.5초. K=6 이상은 실측 표본 없음 — 올리려면 먼저 재기.
+  #   - stderr 로그는 청크별 분리(.chunk_<S>_stderr.log) — 공유하면 재시도 분류가 타 청크 출력을 읽는다(85행 경고).
+  #   - 검증 실패 사유도 청크별 분리(.chunk_verr_<S>.txt) — 공유하면 재시도 프롬프트에 남의 실패 사유가 붙는다.
+  #   - 자식 안 stop_auth/stop_quota의 exit 10/15는 서브셸만 종료 → 부모가 wait 코드로 회수해 전파.
+  #   - 청크 재시도(2회)는 서브셸 안에 지역화 — 한 청크 재시도가 웨이브의 다른 청크를 막지 않는다.
+  #   - 웨이브 전원 wait 완료 전에는 assemble-fmap 진입 불가 — 부분 완료가 merge로 새는 경로 없음.
+  S3PAR="${TCTEAM_S3_PAR:-4}"
   N_CHUNK=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).ranges.length)" "$WORK/s3_ranges.json")
+  log "[S3] 문장화 — 청크 ${N_CHUNK}개(25행/청크) · 동시 ${S3PAR}"
+  S3_AUTH="" ; S3_QUOTA="" ; S3_FAIL=""
   CI=0
   while [[ $CI -lt $N_CHUNK ]]; do
-    RANGE=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).ranges[process.argv[2]];console.log(r[0]+' '+r[1])" "$WORK/s3_ranges.json" "$CI")
-    S=${RANGE% *}; E=${RANGE#* }
-    log "[S3] 문장화 청크 $((CI+1))/$N_CHUNK (idx $S~$((E-1)))"
-    ATT=0
-    while :; do
-      read -r -d '' P <<'PEOF' || true
+    # 인증·한도는 남은 배치를 띄워봐야 같이 죽는다. 검증 2회 실패(S3_FAIL)도 여기서 끊는다 —
+    # 구 직렬판이 그 자리에서 fail 하던 fail-fast 보존. S4 렌즈·커버리지와 달리 S3는 재진입 시
+    # fmap_chunk_*.json 을 전부 지우고 다시 만들므로, 계속 띄운 청크의 산출물은 재개에 쓰이지 않는다(순수 낭비).
+    [[ -n "$S3_AUTH$S3_QUOTA$S3_FAIL" ]] && break
+    declare -A S3_PID=()
+    B=0
+    while [[ $B -lt $S3PAR && $CI -lt $N_CHUNK ]]; do
+      RANGE=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).ranges[process.argv[2]];console.log(r[0]+' '+r[1])" "$WORK/s3_ranges.json" "$CI")
+      S=${RANGE% *}; E=${RANGE#* }
+      log "[S3] 문장화 청크 $((CI+1))/$N_CHUNK (idx $S~$((E-1)))"
+      (
+        RUN_LLM_ERRLOG="$WORK/.chunk_${S}_stderr.log"
+        VERR="$WORK/.chunk_verr_$S.txt"
+        ATT=0
+        while :; do
+          read -r -d '' P <<'PEOF' || true
 __RULES__
 
 ## 작업
@@ -171,20 +197,36 @@ __RULES__
 {"rows":[{"idx":<번호>,"d":"<입력 그대로>","f":"<완성 문장>"}, ...]}
 저장 후 "CHUNK_DONE __S__" 한 줄만 출력하고 종료.
 PEOF
-      P=${P//__RULES__/$S3RULES}; P=${P//__WORK__/$WORK}; P=${P//__S__/$S}; P=${P//__E__/$E}; P=${P//__CNT__/$((E-S))}
-      [[ $ATT -gt 0 ]] && P="$P
+          P=${P//__RULES__/$S3RULES}; P=${P//__WORK__/$WORK}; P=${P//__S__/$S}; P=${P//__E__/$E}; P=${P//__CNT__/$((E-S))}
+          [[ $ATT -gt 0 ]] && P="$P
 
-⚠ 직전 시도는 검증 실패였다: $(cat "$WORK/.chunk_verr.txt" 2>/dev/null). 형식·개수·echo를 정확히 지켜 다시."
-      run_llm "S3-fmap($S-$E)" sonnet "$P" || true
-      if "$NODE" "$HELPERS" validate-chunk "$WORK/tc_skeleton.json" "$WORK/fmap_chunk_$S.json" "$S" "$E" > "$WORK/.chunk_verr.txt" 2>&1; then
-        break
-      fi
-      ATT=$((ATT+1))
-      [[ $ATT -ge 2 ]] && fail "S3 청크 $S~$E 검증 2회 실패: $(cat "$WORK/.chunk_verr.txt")"
-      log "[S3] 청크 $S 재시도 ($(cat "$WORK/.chunk_verr.txt"))"
+⚠ 직전 시도는 검증 실패였다: $(cat "$VERR" 2>/dev/null). 형식·개수·echo를 정확히 지켜 다시."
+          run_llm "S3-fmap($S-$E)" sonnet "$P" || true
+          if "$NODE" "$HELPERS" validate-chunk "$WORK/tc_skeleton.json" "$WORK/fmap_chunk_$S.json" "$S" "$E" > "$VERR" 2>&1; then
+            exit 0
+          fi
+          ATT=$((ATT+1))
+          if [[ $ATT -ge 2 ]]; then log "[S3] 청크 $S~$E 검증 2회 실패: $(cat "$VERR")"; exit 1; fi
+          log "[S3] 청크 $S 재시도 ($(cat "$VERR"))"
+        done
+      ) &
+      S3_PID[$S]=$!
+      CI=$((CI+1)); B=$((B+1))
     done
-    CI=$((CI+1))
+    for K in "${!S3_PID[@]}"; do
+      wait "${S3_PID[$K]}"; rc=$?
+      case $rc in
+        0)  ;;
+        10) S3_AUTH="$S3_AUTH $K" ;;
+        15) S3_QUOTA="$S3_QUOTA $K" ;;
+        *)  S3_FAIL="$S3_FAIL $K" ;;
+      esac
+    done
+    unset S3_PID
   done
+  [[ -n "$S3_AUTH" ]]  && exit 10
+  [[ -n "$S3_QUOTA" ]] && exit 15
+  [[ -n "$S3_FAIL" ]]  && fail "S3 문장화 청크 실패(시작 idx):$S3_FAIL — 청크별 .chunk_verr_<S>.txt / .chunk_<S>_stderr.log 확인"
 
   vhelp assemble-fmap "$WORK" || fail "S3 fmap 조립 실패"
 
@@ -220,6 +262,9 @@ fi
 
 # ══ S4 — 적대 리뷰(3렌즈+판정) + 커버리지 원장 (LLM, 파일 계약) ═══════════════
 if [[ $ST -le 4 ]]; then
+  # S3→S4 입력 계약 (2026-08-09): 재개(--start-from s4) 경로에서 S3 산출물이 없으면
+  # dup_gate는 경고만 남기고 렌즈가 빈 입력으로 진행하는 사각이 있다 — 여기서 명시 정지.
+  [[ -f "$WORK/tcteam_snapshot.json" ]] || fail "S4 입력 없음 — tcteam_snapshot.json (S3 먼저 완료 필요)"
   log "[S4] 리뷰 입력 배치"
   # tc_design.md는 $WORK=$SPEC이라 이미 제자리 (07-29 경로 통합 — 구 cp 제거)
   [[ -f "$TCTEAM/docs/eval_digest.md" ]] && cp "$TCTEAM/docs/eval_digest.md" "$WORK/eval_digest.md"
@@ -237,14 +282,31 @@ if [[ $ST -le 4 ]]; then
   ORC=$?
   [[ $ORC -eq 2 ]] && log "[S4][경고] origin_gate 입력 오류 — 원문대조 후보 없이 진행"
   [[ $ORC -eq 3 ]] && log "[S4] 원문 미근거 후보 검출 — origin_report.json → 판정자 입력"
+  # 아이템 실명 병기 게이트 (2026-08-13) — item_dict.json 있을 때만. 확정 위반 4종 + 축1 후보.
+  #   규칙 SSoT=rules/tc-설계.md §아이템 실명 병기. 사전 없으면 exit 4로 스킵(비차단).
+  "$NODE" "$LIB/item_cite_gate.js" "$WORK/tcteam_snapshot.json" "$SPEC/item_dict.json" --out "$WORK/item_cite_report.json" >>"$CHAIN_LOG" 2>&1
+  IRC=$?
+  [[ $IRC -eq 2 ]] && log "[S4][경고] item_cite_gate 입력 오류 — 병기 검사 없이 진행"
+  [[ $IRC -eq 4 ]] && log "[S4] item_cite_gate 스킵 — item_dict.json 없음(비차단)"
+  [[ $IRC -eq 3 ]] && log "[S4] 아이템 병기 위반·후보 검출 — item_cite_report.json → 판정자 입력"
 
   LENSJSON=$("$NODE" "$HELPERS" extract-s4-lenses "$WFDIR" "$WORK") || fail "S4 렌즈 추출 실패(워크플로우 구조 변경?)"
+  # 렌즈 3종 병렬 실행 (2026-08-09, 실측: 순차 렌즈 구간 중앙값 9.9분/런 단축):
+  #   - 입출력이 서로 독립(lens_<key>.json 분리)이라 동시 진행 가능. 재시도 루프째 서브셸로 격리.
+  #   - stderr 로그는 렌즈별 분리(.lens_<key>_stderr.log) — 공유하면 재시도 분류가 타 렌즈 출력을 읽는다.
+  #   - 자식 안 stop_auth/stop_quota의 exit 10/15는 서브셸만 종료 → 부모가 wait 코드로 회수해 전파.
+  #     ([STOP:...] 로그는 자식 run_llm이 이미 남기므로 부모는 exit만 한다 — 중복 로그 금지)
+  #   - 3렌즈 전원 wait 완료 전에는 판정자 진입 불가 — 부분 완료 상태가 S5로 새는 경로 없음.
+  #     실패 렌즈가 있어도 나머지는 끝까지 기다린다(산출물 보존 → --start-from s4 재개 시 활용).
+  declare -A LENS_PID=()
   for KEY in structure quality crossref; do
     FOCUS=$("$NODE" -e "const l=JSON.parse(process.argv[1]).find(x=>x.key===process.argv[2]);if(!l)process.exit(1);console.log(l.focus)" "$LENSJSON" "$KEY") || fail "S4 렌즈($KEY) 없음"
-    log "[S4] 렌즈 진단: $KEY"
-    ATT=0
-    while :; do
-      read -r -d '' P <<'PEOF' || true
+    log "[S4] 렌즈 진단(병렬): $KEY"
+    (
+      RUN_LLM_ERRLOG="$WORK/.lens_${KEY}_stderr.log"
+      ATT=0
+      while :; do
+        read -r -d '' P <<'PEOF' || true
 너는 TC 리뷰어의 "__KEY__" 렌즈다. 아래 관점으로만 진단(타 렌즈 영역 침범 금지). 확실한 것만, 없으면 빈 배열.
 
 __FOCUS__
@@ -252,13 +314,29 @@ __FOCUS__
 각 결함에 tc_id·severity(CRITICAL|HIGH|MEDIUM|LOW)·issue·suggested_fix·kind(edit|add|delete).
 결과는 반드시 "__WORK__/lens___KEY__.json" 에 {"findings":[...]} JSON으로 Write 도구로 저장하라(다른 파일 생성·수정 금지). 저장 후 "LENS_DONE __KEY__"만 출력.
 PEOF
-      P=${P//__KEY__/$KEY}; P=${P//__FOCUS__/$FOCUS}; P=${P//__WORK__/$WORK}
-      run_llm "S4-렌즈($KEY)" sonnet "$P" || true
-      if "$NODE" "$HELPERS" validate-json "$WORK/lens_$KEY.json" findings >/dev/null 2>&1; then break; fi
-      ATT=$((ATT+1)); [[ $ATT -ge 2 ]] && fail "S4 렌즈 $KEY 산출 검증 2회 실패"
-      log "[S4] 렌즈 $KEY 재시도"
-    done
+        P=${P//__KEY__/$KEY}; P=${P//__FOCUS__/$FOCUS}; P=${P//__WORK__/$WORK}
+        run_llm "S4-렌즈($KEY)" sonnet "$P" || true
+        if "$NODE" "$HELPERS" validate-json "$WORK/lens_$KEY.json" findings >/dev/null 2>&1; then exit 0; fi
+        ATT=$((ATT+1))
+        if [[ $ATT -ge 2 ]]; then log "[S4] 렌즈 $KEY 산출 검증 2회 실패"; exit 1; fi
+        log "[S4] 렌즈 $KEY 재시도"
+      done
+    ) &
+    LENS_PID[$KEY]=$!
   done
+  LENS_AUTH="" ; LENS_QUOTA="" ; LENS_FAIL=""
+  for KEY in structure quality crossref; do
+    wait "${LENS_PID[$KEY]}"; rc=$?
+    case $rc in
+      0)  ;;
+      10) LENS_AUTH="$LENS_AUTH $KEY" ;;
+      15) LENS_QUOTA="$LENS_QUOTA $KEY" ;;
+      *)  LENS_FAIL="$LENS_FAIL $KEY" ;;
+    esac
+  done
+  [[ -n "$LENS_AUTH" ]]  && exit 10
+  [[ -n "$LENS_QUOTA" ]] && exit 15
+  [[ -n "$LENS_FAIL" ]]  && fail "S4 렌즈 병렬 실행 실패:$LENS_FAIL (렌즈별 .lens_<key>_stderr.log 확인)"
 
   log "[S4] 판정자 (상호반박 → fix_plan)"
   ATT=0
@@ -282,28 +360,83 @@ PEOF
     log "[S4] 판정자 재시도"
   done
 
-  log "[S4] 커버리지 원장 (rules→tc_ids 의미 매핑)"
-  ATT=0
-  while :; do
-    read -r -d '' P <<'PEOF' || true
+  # 커버리지 원장 — 청크 분할 + 청크 병렬 (2026-08-10)
+  #   규칙 전량을 한 번에 뱉으면 출력이 **32k 토큰 상한**에 걸린다. 실사고 3건
+  #   (아이템_강화_연출·기능B·월드맵_시스템_개선_v2). 상한 초과는 매핑을 다 끝낸 뒤
+  #   출력만 못 하고 죽어 시간이 100% 날아가고, 재시도까지 겹쳐 실측 88.3분(LLM 3회분)이 됐다.
+  #   → S3 문장화와 같은 방식으로 rules를 끊고 결정론 조립. 청크는 서로 독립이라 병렬 실행하되
+  #     동시 인스턴스는 COVPAR로 묶는다(무제한 팬아웃 = 순간 레이트 폭주).
+  COVSIZE="${TCTEAM_COV_CHUNK:-50}"
+  COVPAR="${TCTEAM_COV_PAR:-3}"
+  "$NODE" "$HELPERS" cov-ranges "$WORK/slices.json" "$WORK/s4_cov_ranges.json" "$COVSIZE" >>"$CHAIN_LOG" 2>&1 \
+    || fail "S4 커버리지 청크 범위 계산 실패"
+  rm -f "$WORK"/cov_chunk_*.json
+  N_COV=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).chunks.length)" "$WORK/s4_cov_ranges.json")
+  if [[ "$N_COV" -eq 0 ]]; then
+    # 규칙 0개(슬라이서가 아무것도 못 뽑은 기획서) — LLM 호출 없이 빈 원장. traceability가 이어서 판정한다.
+    log "[S4][경고] slices.json 규칙 0개 — 커버리지 원장 빈 배열로 단락"
+    printf '[]' > "$WORK/coverage.json"; printf '[]' > "$WORK/exclusions.json"
+  else
+  log "[S4] 커버리지 원장 — 청크 ${N_COV}개(규칙 ${COVSIZE}개/청크) · 동시 ${COVPAR}"
+  COV_AUTH="" ; COV_QUOTA="" ; COV_FAIL=""
+  CI=0
+  while [[ $CI -lt $N_COV ]]; do
+    [[ -n "$COV_AUTH$COV_QUOTA" ]] && break   # 인증·한도는 남은 배치를 띄워봐야 같이 죽는다
+    declare -A COV_PID=()
+    B=0
+    while [[ $B -lt $COVPAR && $CI -lt $N_COV ]]; do
+      IDS=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).chunks[process.argv[2]].ids.join(', '))" "$WORK/s4_cov_ranges.json" "$CI") \
+        || fail "S4 커버리지 청크 $CI id 목록 추출 실패"
+      (
+        RUN_LLM_ERRLOG="$WORK/.cov_${CI}_stderr.log"
+        ATT=0
+        while :; do
+          read -r -d '' P <<'PEOF' || true
 너는 커버리지 원장 담당이다. 규칙→TC 의미 매핑만 한다(문장 수정 금지).
-1. "__WORK__/slices.json" Read — rules[] (rule_id + 원문)
-2. "__WORK__/tcteam_snapshot.json" Read — rows (A열 tc_id, F열 문장)
-3. 각 rule을 의미로 커버하는 tc_ids 매핑 — 키워드 매칭이 아니라 의미 판단.
+**이번에 담당하는 규칙은 아래 목록뿐이다. 목록 밖 rule_id는 절대 언급·처리하지 마라.**
+
+담당 rule_id: __IDS__
+
+1. "__WORK__/slices.json" Read — rules[] 중 담당 rule_id의 원문만 본다.
+2. "__WORK__/tcteam_snapshot.json" Read — rows (A열 tc_id, F열 문장). TC는 전체를 본다(담당 규칙을 커버하는 TC가 어디에 있든 찾아야 한다).
+3. 각 담당 rule을 의미로 커버하는 tc_ids 매핑 — 키워드 매칭이 아니라 의미 판단.
 4. 커버 TC가 없는 규칙만 제외 검토 — 제외 사유는 딱 3종: "타기획서" | "비TC성서술" | "중복규칙".
-   '추후구현'은 제외 사유가 될 수 없다(M-021) — 그런 규칙은 미커버로 남겨라(봉합 루프가 TC로 전개한다).
-5. Write 2파일(다른 파일 금지):
-   - "__WORK__/coverage.json": [{"rule_id":"...","tc_ids":["..."],"note":"..."}] (커버된 규칙만)
-   - "__WORK__/exclusions.json": [{"rule_id":"...","reason":"타기획서|비TC성서술|중복규칙","detail":"..."}] (없으면 [])
-저장 후 "COVERAGE_DONE"만 출력.
+   '추후구현'은 제외 사유가 될 수 없다(M-021) — 그런 규칙은 **두 배열 어디에도 넣지 마라**(미커버로 남기면 봉합 루프가 TC로 전개한다).
+5. "__WORK__/cov_chunk___CI__.json" 에 아래 형식으로 Write(다른 파일 생성·수정 금지):
+{"coverage":[{"rule_id":"...","tc_ids":["..."],"note":"..."}],"exclusions":[{"rule_id":"...","reason":"타기획서|비TC성서술|중복규칙","detail":"..."}]}
+   같은 rule_id를 두 배열에 동시에 넣지 마라. 담당 목록 밖 rule_id 금지.
+저장 후 "COVERAGE_DONE __CI__"만 출력.
 PEOF
-    P=${P//__WORK__/$WORK}
-    run_llm "S4-커버리지" sonnet "$P" || true
-    if "$NODE" "$HELPERS" validate-json "$WORK/coverage.json" coverage >/dev/null 2>&1 \
-       && "$NODE" "$HELPERS" validate-json "$WORK/exclusions.json" exclusions >/dev/null 2>&1; then break; fi
-    ATT=$((ATT+1)); [[ $ATT -ge 2 ]] && fail "S4 커버리지 산출 검증 2회 실패"
-    log "[S4] 커버리지 재시도"
+          P=${P//__IDS__/$IDS}; P=${P//__WORK__/$WORK}; P=${P//__CI__/$CI}
+          run_llm "S4-커버리지($CI)" sonnet "$P" || true
+          if "$NODE" "$HELPERS" validate-cov-chunk "$WORK/s4_cov_ranges.json" "$WORK/cov_chunk_$CI.json" "$CI" >/dev/null 2>&1; then exit 0; fi
+          ATT=$((ATT+1))
+          if [[ $ATT -ge 2 ]]; then log "[S4] 커버리지 청크 $CI 검증 2회 실패"; exit 1; fi
+          log "[S4] 커버리지 청크 $CI 재시도"
+        done
+      ) &
+      COV_PID[$CI]=$!
+      CI=$((CI+1)); B=$((B+1))
+    done
+    for K in "${!COV_PID[@]}"; do
+      wait "${COV_PID[$K]}"; rc=$?
+      case $rc in
+        0)  ;;
+        10) COV_AUTH="$COV_AUTH $K" ;;
+        15) COV_QUOTA="$COV_QUOTA $K" ;;
+        *)  COV_FAIL="$COV_FAIL $K" ;;
+      esac
+    done
+    unset COV_PID
   done
+  [[ -n "$COV_AUTH" ]]  && exit 10
+  [[ -n "$COV_QUOTA" ]] && exit 15
+  [[ -n "$COV_FAIL" ]]  && fail "S4 커버리지 청크 실패:$COV_FAIL (청크별 .cov_<n>_stderr.log 확인)"
+  vhelp assemble-coverage "$WORK" || fail "S4 커버리지 조립 실패(청크 간 rule_id 중복/동시등재)"
+  fi
+  "$NODE" "$HELPERS" validate-json "$WORK/coverage.json" coverage >/dev/null 2>&1 \
+    && "$NODE" "$HELPERS" validate-json "$WORK/exclusions.json" exclusions >/dev/null 2>&1 \
+    || fail "S4 커버리지 조립 결과 검증 실패"
   log "[S4] 완료"
   mark s4
 fi
@@ -385,6 +518,9 @@ if [[ $ST -le 7 ]]; then
   mark s7
   vhelp final-report "$SPEC" "$WORK" "$FEAT" || log "[S7][경고] final_report 생성 실패"
 fi
+
+# Evidence Pack 공통 봉투 (정본: {WORK_ROOT}/tool/_registry/evidence_pack.schema.json) — 실패해도 체인에 영향 없음
+"$NODE" "$LIB/evidence_pack.js" --feature "$FEAT" --work "$WORK" --spec "$SPEC" --sheet "$SHEET_ID" --tab "$(resolved_tab)" >>"$CHAIN_LOG" 2>&1 || log "[EVIDENCE][경고] evidence pack 기록 실패 (체인 영향 없음)"
 
 log "[CHAIN-FULL] 전 구간 완료 — $FEAT"
 exit 0

@@ -136,7 +136,7 @@ ${diag && diag.xrefSilentMiss ? `<div style="border-left:4px solid #d84315;backg
 <b>⚠ R3/R4 감점 전량 누락</b> — dxr_crossref 미해소 ${diag.unresolvedTerms}건인데 감점된 TC가 0건이다.
 대조가 용어를 정규화해 쓰면(예: <code>중독·환각</code> → <code>중독환각</code>) 설계서 문장과 부분문자열 매칭이 되지 않는다.
 이 점수표는 외부 의존 감점 없이 산출된 것이므로 실제보다 관대하다.</div>` : ''}
-<div class="sub">tc-team 산출물 기반 · 총 ${skeleton.total}TC / 소분류 ${scored.length}개 · 확신도는 <b>결정론 코드가 산출</b>(LLM 자가채점 없음) · TC별 점수는 시트 A열 색·메모와 confidence.json 참조</div>
+<div class="sub">tc-team 산출물 기반 · ${skeleton ? `총 ${skeleton.total}TC / ` : ''}소분류 ${scored.length}개 · 확신도는 <b>결정론 코드가 산출</b>(LLM 자가채점 없음) · TC별 점수는 시트 A열 색·메모와 confidence.json 참조</div>
 
 <div class="kpi">
   <div class="k"><b>${avg}</b><span>평균 확신도 (소분류)</span></div>

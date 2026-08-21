@@ -21,7 +21,7 @@ const { google } = require('googleapis');
 const { getAuthClient } = require('./google_auth');
 const { addResultCondFormat, addVerifCondFormat } = require('./tc_utilities');
 
-const DEFAULT_SHEET_ID = process.env.MASTER_SPREADSHEET_ID || '';  // 배포본: 실 시트 ID 미포함 — env 또는 --spreadsheet-id 로 지정
+const DEFAULT_SHEET_ID = 'YOUR_SPREADSHEET_ID';
 
 async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEFAULT_SHEET_ID) {
   const auth = await getAuthClient();

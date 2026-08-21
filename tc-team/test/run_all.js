@@ -14,9 +14,12 @@ const suites = [
   'traceability.test.js',
   'dup_gate.test.js',
   'origin_gate.test.js',
+  'item_dict.test.js',
+  'item_cite_gate.test.js',
   'ab_compare.test.js',
   'eval_digest.test.js',
   'confidence.test.js',
+  'convert_gate.test.js',
   'phase0_spike.js',
 ];
 let allPass = true;

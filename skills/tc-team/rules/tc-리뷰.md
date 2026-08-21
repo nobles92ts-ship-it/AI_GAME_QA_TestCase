@@ -43,15 +43,14 @@ user-invocable: false
 
 ## TC 데이터 읽기
 
-> ⚠ **v2 파이프라인(tc-팀-v2) 우선 규칙**: 핸드오프에 **시트 스냅샷 경로**가 있으면 Read 도구로 스냅샷을 직접 읽는다 (MCP·read_gsheet_data 재호출 금지). 기획서 원문도 `confluence_raw.md`/`analysis.md`를 Read로 사용 — v2 리뷰 에이전트(tc-리뷰1수정1-v2·tc-리뷰2수정2-v2, 롤백 보존 qa-reviewer-v2 포함)는 Sheets/Confluence MCP 도구가 없다. **아래 MCP 직접 읽기 절차는 스냅샷 없는 단독/v1 실행 시의 폴백**이다.
+> ⚠ **v2 파이프라인(tc-팀-v2) 우선 규칙**: 핸드오프에 **시트 스냅샷 경로**가 있으면 Read 도구로 스냅샷을 직접 읽는다 (MCP·read_gsheet_data 재호출 금지). 기획서 원문도 `confluence_raw.md`/`analysis.md`를 Read로 사용 — v2 리뷰 에이전트(tc-리뷰1수정1-v2·tc-리뷰2수정2-v2, 롤백 보존 qa-reviewer-v2 포함)는 Sheets/Confluence MCP 도구가 없다. **아래 시트 직접 읽기 절차는 스냅샷 없는 단독/v1 실행 시의 폴백**이다.
 
-TC 데이터는 스냅샷(우선) 또는 **Google Sheets MCP(폴백)로 읽고, 기획서(tc_design.md)를 반드시 병행 참조**한다.
+TC 데이터는 스냅샷(우선) 또는 **`read_gsheet_data.js`(폴백)로 읽고, 기획서(tc_design.md)를 반드시 병행 참조**한다.
 
 ```
 1. sheet_info.txt에서 SHEET_ID, TAB_NAME 확인
-2. mcp__google-sheets__get_sheet_data 로 시트 직접 읽기:
-   - spreadsheet_id: SHEET_ID
-   - range: "[TAB_NAME]!A:J"
+2. read_gsheet_data.js 로 시트 직접 읽기 (google-sheets MCP 는 제거됨):
+   node "{PROJECT_ROOT}/scripts/util/read_gsheet_data.js" $SHEET_ID "$TAB_NAME" --range A:J --minify
 3. specs 폴더의 tc_design.md를 읽어 기획서 구조 파악:
    - 경로: {PROJECT_ROOT}/team/specs/[기능명]/tc_design.md
    - 대/중/소분류 목록, 암묵적 요구사항, 리스크 레벨, 커버리지 매핑표 확인
@@ -82,7 +81,7 @@ TC 데이터는 스냅샷(우선) 또는 **Google Sheets MCP(폴백)로 읽고, 
 3. precheck `violations`는 보고서 이슈로 **그대로 인용**하고 처방만 작성 (재검증 금지)
 4. 핸드오프에 precheck 경로가 없거나 파일이 없으면 — 종전대로 LLM 전수 판정 (폴백, 비차단)
 
-기계/LLM 분담: 1차 ⚙ = EVAL-02·04·05·06·08·16기계부·19①~③ / 2차 ⚙ = EVAL-14·15추출·17·18(a) + 04/05/06 회귀 — 전체 매핑표: `{PROJECT_ROOT}/docs/stability.md` 부록 3
+기계/LLM 분담: 1차 ⚙ = EVAL-02·04·05·06·08·16기계부·19①~③ / 2차 ⚙ = EVAL-14·15추출·17·18(a) + 04/05/06 회귀 — 전체 매핑표: `~/.claude/tc-team-v2/docs/stability.md` 부록 3
 
 ---
 
@@ -157,7 +156,7 @@ TC 내용의 품질과 정확성에 집중한다. 구조(01, 02 등)는 **보지
   - F열에 기획서 안내 문구 없음 → 처방: `F열에 기획서 정의 안내 문구를 큰따옴표로 인용 추가`
   - 회색 배경(#D9D9D9)은 `apply_format_tab.js`가 대분류 값으로 자동 적용 (별도 검사 불필요)
 - **EVAL-17**: J열-H/I 정합성 — 기대값은 단일 함수 `expectedHI(J, G열, 기본기능여부)` 기준 (⚠ L4-01: **플랫폼 차원 필수** — PC-only 행의 I=`N/A`는 정상이지 위반이 아님): `추후 구현` 행 → H/I 모두 `N/A` (플랫폼 무관), 위반 시 **HIGH** 처방 `H/I 모두 N/A로 변경`. 그 외(빈값·`구현 우선순위 낮음`·`기획 확인 필요`·`DXBUG-####`) → **플랫폼 파생**: G에 PC 포함 시 H=`미진행` 아니면 `N/A`, 모바일 포함 시 I=`미진행` 아니면 `N/A`, 위반 시 **HIGH**. **대분류=`기본기능` 행**의 G≠`PC` 또는 I≠`N/A` → **CRITICAL** (EVAL-16과 연동). 기계 판정: precheck round 2가 수행 — 리뷰어는 결과 채택
-- **EVAL-18**: F열 내부 표기 노출 검출 — **(a) 설계 태그**: 정규식 `\((ST|DT|C|B)-\d+(\s*#\d+(?:,\s*#?\d+)*)?[^)]*\)` / `\(§\d+-\d+\)` / `` `[A-Za-z_]+`\s*\(미지정\) `` 매칭. **(b) 데이터 식별자 주어화**: 영문 식별자(`[A-Z][A-Za-z0-9]*(_[A-Za-z0-9]+)+` snake/Pascal, 예 `RewardGroup_Sample`·`VisibleConditionType`·`SpawnCondition`·`ClassType`)가 **괄호 밖**에 등장하는 행 추출 → 사람 언어 동작 서술인지 판정. **정상 제외 2종**: ① 괄호 병기 `(식별자)` ② 식별자 직후 큰따옴표 문구가 따라오는 **UI/토스트 텍스트 키 인용** `Xxx_Yyy "문구"`(예 `Feature_TOAST_X "보유한 아이템이 없습니다."`·`Tooltip_BTN_SampleInfo "확률 정보"`) — 문구로 QA 이해 가능 + 자동화 메시지 추적용(EVAL-16 문구 인용과 동일). **금지=데이터 테이블·Enum·확률/수치 로직 변수**(`RewardGroup`·`GroupProb`·`Feature_HighGradeCondition` 등)가 큰따옴표 문구 없이 주어/술어. ⚠ **특히 미지정 키 `Xxx(N=미지정)`/`Xxx(미지정)`이 문장 첫 주어인 패턴 우선 검출** (값이 없어 키로만 표현되다 주어화되기 쉬움 — v6 025 `Feature_HighGradeCondition(N=미지정) 등급 이상…`이 검수에서 누락된 사례, 동일 패턴 078·079는 잡았으나 025 놓침 = LLM 비일관). 둘 다 **HIGH** 이슈. 처방:
+- **EVAL-18**: F열 내부 표기 노출 검출 — **(a) 설계 태그**: 정규식 `\((ST|DT|C|B)-\d+(\s*#\d+(?:,\s*#?\d+)*)?[^)]*\)` / `\(§\d+-\d+\)` / `` `[A-Za-z_]+`\s*\(미지정\) `` 매칭. **(b) 데이터 식별자 주어화**: 영문 식별자(`[A-Z][A-Za-z0-9]*(_[A-Za-z0-9]+)+` snake/Pascal, 예 `SampleGroup_Package`·`VisibleConditionType`·`SpawnCondition`·`ClassType`)가 **괄호 밖**에 등장하는 행 추출 → 사람 언어 동작 서술인지 판정. **정상 제외 2종**: ① 괄호 병기 `(식별자)` ② 식별자 직후 큰따옴표 문구가 따라오는 **UI/토스트 텍스트 키 인용** `Xxx_Yyy "문구"`(예 `Sample_TOAST_X "보유한 소환권이 없습니다."`·`Tooltip_BTN_SampleInfo "확률 정보"`) — 문구로 QA 이해 가능 + 자동화 메시지 추적용(EVAL-16 문구 인용과 동일). **금지=데이터 테이블·Enum·확률/수치 로직 변수**(`RewardGroup`·`GroupProb`·`Sample_HighGradeCondition` 등)가 큰따옴표 문구 없이 주어/술어. ⚠ **특히 미지정 키 `Xxx(N=미지정)`/`Xxx(미지정)`이 문장 첫 주어인 패턴 우선 검출** (값이 없어 키로만 표현되다 주어화되기 쉬움 — v6 025 `Sample_HighGradeCondition(N=미지정) 등급 이상…`이 검수에서 누락된 사례, 동일 패턴 078·079는 잡았으나 025 놓침 = LLM 비일관). 둘 다 **HIGH** 이슈. 처방:
   - (a) `(ST-N #M)` / `(DT-N)` / `(B-N)` / `(§N-M)` 같은 보조 표기 → **태그만 제거** (자연어 의미 유지)
   - (a) `(C-N #M)` 또는 `(미지정)` 동반 → **태그 제거 + J열 `기획 확인 필요` + H/I `미진행`**
   - (a) 의미 손실 우려 시 tc_design.md의 해당 태그 정의를 자연어로 인용해 재작성 (처방에 새 F열 초안 포함)
@@ -199,7 +198,7 @@ TC 내용의 품질과 정확성에 집중한다. 구조(01, 02 등)는 **보지
 | EVAL-15 | **F열 "또는" 분기 검출** — 사전조건/과정/결과 어느 하나라도 "또는"으로 분기되면 1NF 위반 | F열 grep `또는` → 매칭 행마다 (사전조건 분기 / 과정 분기 / 결과 분기 / 허용 상태 나열) 4분류 → 분기 발견 시 분리 또는 J=`기획 확인 필요` 처방 | 2차 |
 | EVAL-16 | **기본기능 섹션 CRITICAL** — 대분류=`기본기능` 행 5가지 모두 충족: ①대분류(B)=`기본기능` / ②G=`PC` / ③I=`N/A` / ④F열에 GlobalDefine 키 인용 / ⑤F열에 기획서 안내 문구 인용 | 기본기능 행 단일 검증, 5항목 중 1개라도 미충족 시 CRITICAL | 1차 |
 | EVAL-17 | **J열 값별 H/I 정합성** — `추후 구현`→H/I 모두 `N/A`(플랫폼 무관) / 그 외→**플랫폼 파생**(PC 포함→H `미진행`, 모바일 포함→I `미진행`, 미포함 열은 `N/A`) / 대분류=`기본기능` 행 G·I 불일치→**CRITICAL**(EVAL-16 연동) | expectedHI 단일함수 대조 (precheck ⚙) | 2차 |
-| EVAL-18 | **F열 내부 표기 노출** — (a) 설계 태그 `(ST-N #M)`/`(DT-N)`/`(C-N #M)`/`(B-N)`/`(§N-M)`/`` `var`(미지정) `` (b) **데이터 식별자 주어화** `RewardGroup_Sample의`·`VisibleConditionType이`·`SpawnCondition 판정` 등 영문 식별자가 괄호 밖 주어/술어 | (a) 정규식 매칭→태그 의미 분류 (b) 영문 식별자 괄호밖 등장 행 추출→사람 언어 판정(괄호 병기 제외) → 처방 차등 | 2차 |
+| EVAL-18 | **F열 내부 표기 노출** — (a) 설계 태그 `(ST-N #M)`/`(DT-N)`/`(C-N #M)`/`(B-N)`/`(§N-M)`/`` `var`(미지정) `` (b) **데이터 식별자 주어화** `SampleGroup_Package의`·`VisibleConditionType이`·`SpawnCondition 판정` 등 영문 식별자가 괄호 밖 주어/술어 | (a) 정규식 매칭→태그 의미 분류 (b) 영문 식별자 괄호밖 등장 행 추출→사람 언어 판정(괄호 병기 제외) → 처방 차등 | 2차 |
 | EVAL-19 | **분류 계층 적합성** — 대=카테고리/진입 컨텍스트, 중=뎁스/셋업, 소=현재 화면명, F열=화면 위 액션만 (자동화 사전조건 계층) | ①대분류 동사 표현 ②소분류 동작 표현 ③F열 진입 동작 중복 ④같은 소분류 셋업 불일치 4종 검출 | 1차 |
 | EVAL-20 | **데이터 시트 대상 행 값 존재 검증** — 데이터 시트(표) 컬럼 동작을 특정 대상(행/Index)에 검증하는 TC는, 대상 행의 해당 컬럼 셀이 기획서 원문에서 실제 값을 갖는지 확인 (공란=미구성 행 기반 TC 금지) | 대상 행의 컬럼 셀 값 유무를 기획서 원문 대조 → 공란인데 TC 존재 시 HIGH, 처방 `해당 TC 삭제`(실값 보유 대상 있으면 교체·재현스탭 재작성), '기획 확인 필요' 존치 금지 (근거: GitHub issue #4) | 2차 |
 

@@ -33,7 +33,7 @@ model: sonnet
 4. **4분기 분류** (§1.3) + **가드 전부 ON** (§1.4: 스텁·`(작성중)`·`(홀드)`·애매·출처없음 → keep): 각 항목 → apply / locate / discover / keep.
    - **스코프 경계 엄수** (§1.2): 위키의 정의·위치·규칙만. `TargetRange` 실제 수치처럼 **로컬 PC 데이터테이블 값은 가져오지 말고 locate**(위치만 안내, approved:false).
    - **계층 가드 (§1.5, #10)**: `ctx_search` 결과에서 `[D/DXR]` 헤더 청크만 근거로 채택. `[R]/[P]/[E]` 청크만 걸리면 `keep`(과거 tc_design 순환 인용 차단). note 에 채택 청크 헤더 경로 기록.
-   - **테이블맵 직접 Grep (§1.5, #11)**: locate 후보는 `Grep pattern=<테이블/컬럼명> path="{WORK_ROOT}\DXR_관리\_DXR_테이블맵.md"` 로 직접 대조 → 적중 시 note 에 xlsx·시트·컬럼·조인율 + "값은 원본 xlsx 확인" 기재(FTS 랭킹에 안 밀리게).
+   - **테이블맵 직접 Grep (§1.5, #11)**: locate 후보는 `Grep pattern=<테이블/컬럼명> path="{WORK_ROOT}\<프로젝트>_관리\_테이블맵.md"` 로 직접 대조 → 적중 시 note 에 xlsx·시트·컬럼·조인율 + "값은 원본 xlsx 확인" 기재(FTS 랭킹에 안 밀리게).
    - **apply는 위키에 값까지 완전할 때만 approved 후보**. 값이 외부면 `approved:false`(→ 사람 승인 대기).
 5. **능동 발굴(③)** (§1.5): 마지막 1회 — "이 기능 유형(보스/몬스터)에 보통 적용되는 DXR 공통 규칙 중 대상 페이지에 빠진 것?" → 결과는 전부 `discovered`(후보+기획확인, 사실 단정 금지).
 6. **dxr_crossref.json 저장** (§2.1 강제 구조) + **자체 검증** (§2.2 체크리스트 5항 통과).

@@ -4,6 +4,49 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.2.0] — 2026-08-21
+
+**Two silent failures made loud, one bottleneck cut by 60%, and a name for every item a tester has to pick up.**
+
+### Added
+- **Item citation, end to end.** A reproduction step that says "use a crafting material item" does not tell a tester what to pick up. On one 159-row run, 44 rows named only a *type*, and six rows assumed a material that serves two systems at once — a combination that does not exist in the tables at all. Type-only wording cannot distinguish "hard to reproduce" from "impossible to reproduce".
+
+  Three pieces now cover it. `lib/item_dict.js` builds a dictionary by joining the game's own tables — type → representative real items, plus which consumption systems each item crosses. It is a *dictionary generator and nothing else*: it never writes a sentence. `lib/item_cite_gate.js` then decides what a machine can decide without context — a display name shared by many items but cited without an index, a name that is not in the tables at all (i.e. guessed), a single example attached to a sentence that verifies the whole type, and a repeated citation. Those four are confirmed violations. A fifth signal, "type named but no citation", is deliberately *not* a violation: it is a question for the review lens, because whether a citation is needed depends on whether the tester must hold that item, and that needs context the code does not have.
+
+  Zero-count combinations are kept in the output on purpose. "The data contains no such item" is the most valuable thing the dictionary can report, and the design rules use it to raise a spec question instead of deleting the case.
+
+  The table bindings live in config (`item_dict.systems.json.template`), not in the code — every game names its tables differently, and a tool that hardcodes one game's schema is not a tool.
+
+- **`stampGate` — confidence stamping now fails loudly.** A parser returned zero design items, so every sheet row fell through as drift; the applier logged "0 rows coloured, 218 rows drifted" as a single warning and exited 0, and the finalizer reported it as a green check. A sheet with the confidence pass missing entirely looked like a clean run. Zero items, or drift above half the rows, is now a failure with a message that names the likely cause.
+
+- **Evidence pack** (`lib/evidence_pack.js`) — a common envelope written best-effort at the chain's success point.
+
+### Changed
+- **Sentence generation runs in parallel** (`TCTEAM_S3_PAR`, default 4). It was the single largest cost in a run. Chunks are independent, so they now go out in waves. Measured on six live chunks: 5m40s wall clock against 14m19s serial — **60.4% saved**, with zero duplicates and zero retries.
+
+  Isolation was the hard part, not the concurrency. stderr logs *and* validation-failure reasons are both split per chunk — sharing either one means a retry prompt gets fed another chunk's failure. Auth and quota exits propagate from the subshell through `wait`; retries stay local to their chunk; and fail-fast is preserved, because a re-entry deletes all chunk output anyway, so continuing to launch work would be pure waste.
+
+- **Coverage ledger chunking** — chunk boundaries are passed as explicit rule-id lists rather than indices, so the model never has to recount the source order.
+
+- **One lock, released.** A second lock nobody had documented was being taken and never released — found in nine spec folders, the oldest 21 days. The edit guard read those ghosts as "a run is in progress" and blocked script edits for three hours after a finished run, while any run *longer* than three hours lost its protection entirely.
+
+- **S3 → S4 input contract** is now checked explicitly; resuming at S4 without the snapshot used to let the lenses proceed on empty input with only a warning.
+
+- **Cross-reference resolution rate** is reported. A run where nothing resolved used to finish silently, which is exactly the run you most need to hear about.
+
+### Rules
+- **"Not yet implemented" outranks "needs spec confirmation."** If a feature is scheduled for later, an absent expected value is not a question for the planner — asking produces "it'll be decided when it's built" and the tester has no build to verify against. Of 104 rows in one run, 74 were labelled wrong. Deletion-type items are explicitly excluded: those *are* verifiable now.
+- **QA scope directive** — an optional file that narrows what this round verifies. A design once expanded from "is the stat displayed" into "does the stat actually increase", and no review lens caught it, because the lenses did not know the scope.
+- **Linked-page prefetch** — resolve unspecified values from pages the spec links to before raising a question. Also documents the opposite case: prose can name a document that does not exist yet.
+- **Non-requirement sections** (competitor research, as-is descriptions) no longer become test-case candidates.
+- **Re-query gate on cross-reference** — a batch where *everything* missed usually means the query was wrong, not that the knowledge base is empty. Re-querying with shorter noun-only terms flipped one run from 25 unresolved to 17 located / 2 discovered / 8 unresolved.
+- **Spec-question hygiene** — do not ask about our own process, do not ask what the document already answers, and when asking for a number, offer candidate values.
+
+### Tests
+- New suites for the item dictionary, the citation gate, and the conversion gate; the confidence suite grows to 24 cases. Full deterministic core: **183 passing**.
+
+---
+
 ## [v4.1.1] — 2026-07-31
 
 **One cross-reference branch was swallowing the other.**

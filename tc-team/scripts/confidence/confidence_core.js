@@ -16,6 +16,10 @@
  */
 const fs = require('fs');
 const path = require('path');
+// 트리 줄 모양(대·중·소분류/항목)은 validate_tc_rows.js 와 **같은 계약**을 쓴다 — 2026-08-16 실사고.
+// 여기만 `^\s+`·`^\s{2,}` 로 들여쓰기를 요구하던 시절, 설계기가 들여쓰기 없이 트리를 내자
+// convert·merge·S4 는 통과하고 확신도만 leaves=[] 로 조용히 죽었다. 계약은 한 벌만 존재한다.
+const { DESIGN_TREE_RE, classifyDesignLine, splitLeafMarkers } = require(path.resolve(__dirname, '../../../scripts/util/design_tree_lines'));
 
 // ── 점수 모델 (튜닝 노브) ───────────────────────────────────────────────
 // penalty = 감점(음수는 보너스) / per = 2건째부터 건당 추가 감점 / cap = 스케일링 상한.
@@ -131,26 +135,25 @@ function compute(SPEC, override) {
   const skeleton = readJson('tc_skeleton.json', null);
 
   const sectionSlice = (title, endRe = /^##\s/) => {
-    const s = L.findIndex((l) => l.trim() === title);
+    const hit = title instanceof RegExp ? (l) => title.test(l.trim()) : (l) => l.trim() === title;
+    const s = L.findIndex(hit);
     if (s < 0) return [];
     const e = L.findIndex((l, i) => i > s + 2 && endRe.test(l));
     return L.slice(s + 1, e > 0 ? e : L.length);
   };
 
   // 1) 분류 그룹핑 트리 → 소분류별 마커·검증항목
-  const tree = sectionSlice('## 분류 그룹핑 트리');
+  const tree = sectionSlice(DESIGN_TREE_RE.section);
   const leaves = [];
   let curMajor = '', curMid = '', cur = null;
   for (const line of tree) {
-    const mMajor = line.match(/^\d+\.\s+\*\*(.+?)\*\*/);
-    if (mMajor) { curMajor = mMajor[1]; continue; }
-    const mMid = line.match(/^\s+\d+\.\d+\s+(.+?)\s*\(중분류\)/);
-    if (mMid) { curMid = mMid[1]; continue; }
-    const mLeaf = line.match(/^\s{4,}-\s+(.+?)\s*(\[.*)?$/);
-    if (mLeaf) {
-      const markers = (mLeaf[2] || '').match(/\[[^\]]+\]/g) || [];
+    const c = classifyDesignLine(line);
+    if (c.kind === 'major') { curMajor = c.name; continue; }
+    if (c.kind === 'mid') { curMid = c.name; continue; }
+    if (c.kind === 'leaf') {
+      const { name, markers } = splitLeafMarkers(c.body);
       cur = {
-        major: curMajor, mid: curMid, name: mLeaf[1].trim(),
+        major: curMajor, mid: curMid, name,
         risk: (markers.find((m) => /HIGH|MEDIUM|LOW/.test(m)) || '[MEDIUM]').replace(/[[\]]/g, ''),
         needImage: markers.some((m) => m.includes('이미지 참조 필요')),
         items: [],
@@ -158,11 +161,10 @@ function compute(SPEC, override) {
       leaves.push(cur);
       continue;
     }
-    const mItem = line.match(/→\s*(정상|부정|예외)-(\d+):\s*(.+)$/);
-    if (mItem && cur) {
+    if (c.kind === 'item' && cur) {
       cur.items.push({
-        stage: mItem[1], no: +mItem[2], text: mItem[3].replace(/\s*\[J:[^\]]+\]/g, '').trim(),
-        jTag: (mItem[3].match(/\[J:([^\]]+)\]/) || [])[1] || null,
+        stage: c.stage, no: c.seq, text: c.body.replace(/\s*\[J:[^\]]+\]/g, '').trim(),
+        jTag: (c.body.match(/\[J:([^\]]+)\]/) || [])[1] || null,
       });
     }
   }
@@ -375,4 +377,23 @@ function computeItems(SPEC, override) {
   return { items: out, ...ctx };
 }
 
-module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty };
+// ── 스탬핑 진입 게이트 (fail-loud) ──────────────────────────────────────
+// 2026-08-16 자동_사냥_기능_v3: 파서가 항목 0건을 내자 시트 전 행이 드리프트로 떨어졌는데
+// confidence_apply.js 는 "색칠 0행 · 드리프트 218행"을 **경고 한 줄**로 찍고 rc=0 으로 끝났다.
+// finalize.sh 는 그걸 FINAL-0:✓ 로 보고했다. 확신도가 통째로 빠진 시트가 정상 완주로 보인다.
+// → 아래 두 조건은 경고가 아니라 실패다. 판정만 여기(순수함수)에 두고 종료는 호출자가 한다.
+const STAMP_DRIFT_MAX = 0.5;   // 드리프트가 전체의 절반을 넘으면 매핑이 깨진 것으로 본다
+function stampGate({ items = 0, matched = 0, drift = 0, driftMax = STAMP_DRIFT_MAX } = {}) {
+  if (!items) {
+    return { ok: false, code: 'no_items',
+      msg: '설계서에서 TC 항목을 0건 파싱했습니다 — tc_design.md 의 "## 분류 그룹핑 트리" 형식을 확인하세요 (소분류 "- 이름 [리스크] [플랫폼]" / 항목 "→ 정상-1: 본문")' };
+  }
+  const total = matched + drift;
+  if (total && drift / total > driftMax) {
+    return { ok: false, code: 'drift',
+      msg: `설계와 시트가 어긋납니다 — 점수 없는 행 ${drift}/${total} (${Math.round(drift / total * 100)}%, 허용 ${Math.round(driftMax * 100)}%). 소분류명·검증단계 순번이 설계서와 다른지 확인하세요` };
+  }
+  return { ok: true };
+}
+
+module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty, stampGate, STAMP_DRIFT_MAX };

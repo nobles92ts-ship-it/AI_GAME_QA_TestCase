@@ -4,7 +4,7 @@
 // (= 점수가 바뀌는 변경은 반드시 눈에 보인다).
 const assert = require('assert');
 const path = require('path');
-const { compute, computeItems, RULES, penaltyOf, xrefPenalty } = require('../scripts/confidence/confidence_core.js');
+const { compute, computeItems, RULES, TUNING, penaltyOf, xrefPenalty, stampGate } = require('../scripts/confidence/confidence_core.js');
 
 const FIX = path.join(__dirname, 'fixtures', 'confidence');
 let pass = 0, fail = 0;
@@ -140,6 +140,17 @@ t('용어 토큰화 — 한글 언더스코어는 쪼개고 영문 식별자는 
     .forEach((w) => assert.deepStrictEqual(tokenize(w), [w], w));
 });
 
+t('R1만 걸려도 노란색(C) 이하 — 임의 판단 TC가 무색으로 남을 수 없다', () => {
+  // 형근님 규칙(2026-07-31): 기획서에 없는 내용을 설계가 판단해 넣은 TC는 무조건 노란색 이상.
+  // 집행 경로 = tc-설계 L3-7 이 그런 항목에 [J:기획 확인 필요] 를 달고 → 여기 R1 이 발화한다.
+  // 시트 색은 confidence_apply.js 기준 D=빨강 · C=노랑 · A/B=무색이므로, 다른 감점이 하나도
+  // 없는 만점 출발 TC조차 B 밴드 아래로 내려가야 규칙이 성립한다.
+  // R1 penalty 를 31 미만으로 낮추면(=100-R1 이 70 이상) 색이 안 칠해지고 규칙이 조용히 깨진다.
+  const best = 100 - penaltyOf(RULES, 'R1', 1);
+  assert.ok(best < TUNING.bands.B,
+    `R1만 걸린 TC가 ${best}점 — B(${TUNING.bands.B}) 이상이라 무색 처리됨`);
+});
+
 t('locate(R4) 최대 감점이 keep(R3) 최소 감점을 넘지 않는다 (신호 강도 역전 금지)', () => {
   assert.ok(penaltyOf(RULES, 'R4', 99) <= penaltyOf(RULES, 'R3', 1),
     '위치라도 찾은 항목이 아예 못 찾은 항목보다 나쁘게 채점됨');
@@ -166,6 +177,80 @@ t('crossref 산출물이 없어도 채점한다 (crossref_brain=off 환경)', ()
   assert.strictEqual(r.items.length, 9);
   assert.ok(!r.items.some((i) => i.reasons.some((x) => x.id === 'R3' || x.id === 'R4')), 'crossref 없이 R3/R4 발화');
   fsx.rmSync(d, { recursive: true, force: true });
+});
+
+// ── 설계서 표기 흔들림 (2026-08-16 조용한 실패 회귀) ─────────────────────
+// 실사고: 설계기가 트리를 **들여쓰기 없이** 냈는데 파서가 `^\s+`·`^\s{2,}` 를 요구해
+//   leaves=[] → 점수 0건 · 색칠 0행 · 드리프트 218행. 그런데 rc=0 으로 FINAL-0:✓ 보고.
+//   같은 파일을 읽는 validate_tc_rows.js(parseDesignTree)는 정상 처리해 앞 단계는 전부 통과했다.
+// 이제 줄 모양 계약은 scripts/util/design_tree_lines.js 한 벌이다.
+const mkSpec = (xform) => {
+  const os = require('os'), fsx = require('fs');
+  const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-fmt-'));
+  fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+  const p = path.join(d, 'tc_design.md');
+  fsx.writeFileSync(p, xform(fsx.readFileSync(p, 'utf8')), 'utf8');
+  return d;
+};
+const shape = (r) => r.items.map((i) => [i.leaf, i.stage, i.no, i.score, i.grade, ids(i)]);
+
+t('들여쓰기 없는 설계서도 동일하게 채점된다 (CRLF 포함 — 실사고 재현형)', () => {
+  const d = mkSpec((s) => s.split('\n').map((l) => l.replace(/^[ \t]+/, '')).join('\r\n'));
+  const r = computeItems(d);
+  assert.ok(r.items.length > 0, '들여쓰기 없는 설계에서 항목 0건 — 조용한 실패 재발');
+  assert.strictEqual(r.scored.length, scored.length, `소분류 ${r.scored.length} ≠ ${scored.length}`);
+  assert.deepStrictEqual(shape(r), shape({ items }), '들여쓰기 유무가 점수를 바꿈');
+  require('fs').rmSync(d, { recursive: true, force: true });
+});
+
+// 트리 섹션 안의 줄만 건드린다 — 마크다운 표(`|`)는 열 0 이 문법이라 통째 들여쓰면 표가 깨진다.
+const inTree = (s, f) => {
+  let on = false;
+  return s.split('\n').map((l) => {
+    if (/^\s*##\s/.test(l)) { on = /분류\s*그룹핑\s*트리/.test(l); return l; }
+    return on && l.trim() ? f(l) : l;
+  }).join('\n');
+};
+
+t('들여쓰기를 더 넣어도 동일하게 채점된다 (양방향)', () => {
+  const d = mkSpec((s) => inTree(s, (l) => '        ' + l.trim()));
+  const r = computeItems(d);
+  assert.ok(r.items.length > 0, '깊게 들여쓴 설계에서 항목 0건');
+  assert.deepStrictEqual(shape(r), shape({ items }));
+  require('fs').rmSync(d, { recursive: true, force: true });
+});
+
+t('두 파서(확신도 · validate_tc_rows)가 같은 항목 집합을 본다', () => {
+  // 계약이 갈라진 게 실사고의 구조적 원인 — 표기가 흔들려도 둘의 (소분류,단계,순번)이 같아야 한다.
+  const { parseDesignTree } = require(path.resolve(__dirname, '../../scripts/util/validate_tc_rows.js'));
+  const fsx = require('fs');
+  const key = (a) => a.slice().sort().join('|');
+  [(s) => s, (s) => s.split('\n').map((l) => l.replace(/^[ \t]+/, '')).join('\r\n')].forEach((xform, n) => {
+    const md = xform(fsx.readFileSync(path.join(FIX, 'tc_design.md'), 'utf8'));
+    const v = parseDesignTree(md, { strict: false }).leaves.map((l) => `${l.cat3}\0${l.stage}\0${l.seq}`);
+    const d = mkSpec(() => md);
+    const c = computeItems(d).items.map((i) => `${i.leaf}\0${i.stage}\0${i.no}`);
+    assert.strictEqual(key(c), key(v), `표기 ${n === 0 ? '들여쓰기 있음' : '없음'}에서 두 파서가 불일치`);
+    fsx.rmSync(d, { recursive: true, force: true });
+  });
+});
+
+// ── 조용한 실패 차단 (stampGate) ────────────────────────────────────────
+t('항목 0건이면 스탬핑 게이트가 막는다 (경고 아님)', () => {
+  const g = stampGate({ items: 0 });
+  assert.strictEqual(g.ok, false);
+  assert.strictEqual(g.code, 'no_items');
+});
+
+t('드리프트가 과반이면 게이트가 막는다 / 절반 이하는 통과', () => {
+  assert.strictEqual(stampGate({ items: 9, matched: 0, drift: 218 }).code, 'drift'); // 실사고 수치
+  assert.strictEqual(stampGate({ items: 9, matched: 99, drift: 100 }).code, 'drift');
+  assert.strictEqual(stampGate({ items: 9, matched: 100, drift: 100 }).ok, true);    // 정확히 50%는 통과
+  assert.strictEqual(stampGate({ items: 9, matched: 200, drift: 3 }).ok, true);
+});
+
+t('정상 픽스처는 게이트를 통과한다 (게이트가 정상 런을 막지 않는다)', () => {
+  assert.strictEqual(stampGate({ items: items.length, matched: items.length, drift: 0 }).ok, true);
 });
 
 t('오버라이드는 원본 모델을 오염시키지 않는다 (스윕 안전성)', () => {
