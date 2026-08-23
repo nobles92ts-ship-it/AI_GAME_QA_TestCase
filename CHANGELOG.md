@@ -16,13 +16,13 @@ All notable changes to this project are documented here.
 
   97 → 0. Sensitivity was re-checked by deleting a shipped file: the gate names it correctly and exits non-zero. The old `+N more` truncation is gone too — it capped output at five and said nothing useful about the rest.
 
-- **The domain-term scan matched one shape and missed three.** It looked for `<TableName>_<Word>` — asset and localisation keys. It did not look for table *file* references, sheet names, or column names, so `Crafting.xlsx`, `RecipeInfo`, and `NeedMaterialId` all passed at zero hits, even though every one of those tables was listed in the reference map it was already reading.
+- **The domain-term scan matched one shape and missed three.** It looked for `<TableName>_<Word>` — asset and localisation keys. It did not look for table *file* references, sheet names, or column names, so a spreadsheet filename, a sheet name, and a column name all passed at zero hits, even though every table involved was listed in the reference map the scan was already reading.
 
-  Now three shapes: the key form, `<TableName>.xlsx`, and sheet/column names. Sheet and column names are only checked inside files that also reference a table file — without that condition the scan returns 96 hits on a clean tree, because names like `GlobalDefine` and `ItemType` are also this project's own vocabulary. With it, a clean tree returns 4 and an unsanitised one returns 31. The structural-name dictionary keeps entries of at least 8 characters with two or more capitals appearing in at most two tables; measured against the known cases, that passes all six real ones and rejects `Index`, `Type`, `Name`, `Description`, `Grade`, `ItemType`, `GroupID`, `SubType`, and `UseInLive`.
+  Now three shapes: the key form, `<TableName>.xlsx`, and sheet/column names. Sheet and column names are only checked inside files that also reference a table file — without that condition the scan returns 96 hits on a clean tree, because a fair number of schema names are also this project's own vocabulary. With it, a clean tree returns 4 and an unsanitised one returns 31. The structural-name dictionary keeps entries of at least 8 characters with two or more capitals appearing in at most two tables; measured against the known cases, that passes all six real ones and rejects the nine generic column names that had been flooding the results.
 
   The scan runs at both the pre-push and post-push checkpoints. Having it at only one meant the moment of deciding to publish was the unguarded one.
 
-- **Three things the fixed scan caught that the manual pass had not**: the item table's own column names, still hardcoded in `item_dict.js`; one `GlobalDefine` key in the labelling rules; and two asset-key examples in comments.
+- **Three things the fixed scan caught that the manual pass had not**: the item table's own column names, still hardcoded in `item_dict.js`; one settings key in the labelling rules; and two asset-key examples in comments. A fourth, found while writing this entry: these release notes had themselves named the tables involved.
 
 ### Changed
 
