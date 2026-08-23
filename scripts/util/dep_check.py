@@ -14,8 +14,23 @@ v1 대비 추가 (2026-06-14, 검증 사고 재발 방지):
     또는 appscript/<name>.gs 로 부르는 동반 파일을 staging 존재 강제.
   - .gs / .gas 를 스캔·인덱싱 확장자에 포함.
 
+v3 (2026-08-23, 오탐 97건 전수 분류 후 수정):
+  이 스크립트는 **이미 정상 배포된 트리(v4.1.1·v4.2.0)에도 `⛔ STOP` 을 내고 있었다.**
+  97건을 전수 분류하니 진짜 누락은 0건이었다 — STEP 1.5 를 문자 그대로 따르면 매 퍼블리시가
+  무조건 막히고, 그러면 사람이 이 게이트를 건너뛰기 시작한다(= 게이트가 없는 것과 같다).
+  오탐이 게이트를 죽인다. 분류와 조치:
+    A. `$WORK/…` 77건 — 런 중 생성되는 작업 산출물   → RUNTIME_VAR_ROOTS 에 $WORK 추가
+    B. `{W}/…`     7건 — 워크플로 JS 템플릿의 같은 것 → 동上
+    C. `…/team/tc_config.json` 2건 — gitignore 대상 + `.example` 동봉 → .gitignore 반영 + .example 인정
+    D. `{WORK_ROOT}\…` 3건 — 레포 **밖** 사용자 환경 경로 → FAIL 아닌 WARN 으로 분리
+    F. CHANGELOG 3건 — **역사 기록**(그 버전 시점엔 실재) → CHANGELOG 는 경로 검사 면제
+       + `구 v2 체인 …` 주석 1건 → DEPRECATION_RE 에 레거시 표현 추가
+  ⚠ 추가로 `refs[:5]` + "+N more" 의 **silent cap 을 제거**했다(`--all` 없이도 기본 20건까지,
+    잘릴 때는 몇 건이 안 보이는지 명시). 스킬 자신의 "No silent caps" 원칙과 어긋나 있었다.
+
 사용법:
-    python dep_check.py [staging_root]   # 기본값 = 현재 디렉토리
+    python dep_check.py [staging_root] [--all]   # 기본값 = 현재 디렉토리
+      --all : 누락 목록을 자르지 않고 전건 출력
 """
 import re
 import sys
@@ -29,7 +44,10 @@ try:
 except (AttributeError, ValueError):
     pass
 
-STAGING = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+_ARGS = [a for a in sys.argv[1:] if not a.startswith('--')]
+SHOW_ALL = '--all' in sys.argv[1:]
+STAGING = Path(_ARGS[0] if _ARGS else ".").resolve()
+CAP = 10**9 if SHOW_ALL else 20
 
 # 참조를 스캔할 소스 파일 확장자
 SCAN_EXTENSIONS = ('.md', '.js', '.py', '.sh', '.ps1', '.gs')
@@ -72,16 +90,52 @@ def looks_like_agent(name):
 COMPANION_PATTERN = re.compile(r"""['"]([\w\-./가-힣]+\.(?:gs|json|js))['"]""", re.IGNORECASE)
 
 # 런타임 생성·gitignore 대상이라 배포물이 아닌 참조(오탐) — 검사 제외
+# ⚠ $WORK / {W} 는 v3 에서 추가. 파이프라인의 **작업 폴더**(런 중 생성되는 중간 산출물:
+#   slices.json·s3_ranges.json·dup_report.json·item_cite_report.json …)를 가리키는데
+#   빠져 있어서 **오탐 97건 중 84건(87%)이 여기서 나왔다.** 배포물이 아니라 런 산출물이다.
 RUNTIME_VAR_ROOTS = ('$SPEC', '${SPEC}', '$TEAM', '${TEAM}', '$STATE', '${STATE}',
                      '$STATUS', '${STATUS}', '$SNAP', '${SNAP}',
+                     '$WORK', '${WORK}', '{W}', '${W}',
                      '$FEATURE_NAME', '${FEATURE_NAME}', '$FEAT', '${FEAT}', '$TAB', '${TAB}')
 RUNTIME_PATH_SUBSTR = ('team/state', 'team/status', 'team/specs', 'team/batch_config',
                        'team/history', '/specs/', '_snapshot', 'tc_after_fix',
                        'confluence_raw', 'sheet_info', 'learned_patterns')
 
+# 레포 **밖**(사용자 작업 루트) 참조 — 클론한 사람에겐 없는 게 정상이라 FAIL 이 아니다.
+# 다만 공개 문서가 따라갈 수 없는 링크를 들고 있다는 뜻이므로 **WARN 으로 보고**한다(묵살 아님).
+OUTSIDE_REPO_ROOTS = ('{WORK_ROOT}', '$WORK_ROOT', '${WORK_ROOT}')
 
-# 같은 줄에서 "이 파일은 폐기/삭제됨"을 명시하면 누락 참조로 보지 않는다(죽은 포인터 안내문)
-DEPRECATION_RE = re.compile(r'폐기|deprecated|참조\s*금지|죽은\s*포인터|삭제됨|removed|더 이상 사용', re.IGNORECASE)
+# 역사 기록물 — 그 버전 시점엔 실재했던 파일을 언급하는 게 정상이다. 경로 참조 검사 면제.
+HISTORY_SOURCES = ('CHANGELOG.md',)
+
+# 같은 줄에서 "이 파일은 폐기/삭제/구버전"임을 명시하면 누락 참조로 보지 않는다(죽은 포인터 안내문)
+# ⚠ `구 v2 체인 …` 처럼 **어느 버전의 것인지 밝힌 회고 주석**도 여기 포함(v3) — 사고 원인을 적어 둔
+#   주석까지 누락으로 잡으면 "주석을 지우는" 잘못된 방향으로 사람을 민다.
+DEPRECATION_RE = re.compile(
+    r'폐기|deprecated|참조\s*금지|죽은\s*포인터|삭제됨|removed|더 이상 사용'
+    r'|구\s*v\d|레거시|legacy|이전\s*버전|구버전',
+    re.IGNORECASE)
+
+
+def load_gitignore_names():
+    """staging 의 .gitignore 가 이름으로 지목한 항목 집합.
+
+    `jira_config.json` · `slack_config.json` · `team/tc_config.json` 처럼 **일부러 안 올리는**
+    설정 파일을 참조하는 건 정상이다(코드가 "없으면 이렇게 만들라"고 안내한다).
+    목록을 스크립트에 박으면 새 설정이 생길 때마다 오탐이 되살아나므로 .gitignore 를 정본으로 읽는다.
+    """
+    names = set()
+    gi = STAGING / '.gitignore'
+    if not gi.exists():
+        return names
+    for line in gi.read_text(encoding='utf-8', errors='ignore').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or line.startswith('!'):
+            continue
+        line = line.rstrip('/')
+        names.add(line)
+        names.add(Path(line).name)
+    return names
 
 
 def line_of(text, pos):
@@ -132,9 +186,11 @@ def main():
         sys.exit(1)
 
     existing = build_existing_index()
+    ignored = load_gitignore_names()      # .gitignore 가 일부러 뺀 설정 파일 — 참조해도 정상
     # agents/ 에 실제 존재하는 에이전트 stem 집합 (basename 없는 이름)
     agent_files = {p.stem for p in STAGING.rglob('agents/*.md')}
 
+    outside_refs = defaultdict(list)      # 레포 밖(사용자 환경) 참조 — WARN
     missing_refs = defaultdict(list)      # 경로형 참조 누락
     missing_agents = defaultdict(set)     # --agent <name> 인데 agents/<name>.md 없음
     missing_companions = defaultdict(set)  # node 동반 파일(.gs 등) 누락
@@ -150,19 +206,28 @@ def main():
             src_rel = source.relative_to(STAGING).as_posix()
 
             # 1) 경로형 참조
-            for pattern in PATH_PATTERNS:
-                for m in pattern.finditer(text):
-                    ref = m.group(0)
-                    if is_runtime_ref(ref):       # specs/state 등 런타임 산출물(gitignore) 오탐 제외
-                        continue
-                    if DEPRECATION_RE.search(line_of(text, m.start())):  # "폐기됨" 안내문 내 죽은 포인터
-                        continue
-                    basename, stripped = normalize_ref(ref)
-                    # 셋업이 .template 에서 생성하는 설정 파일(pipeline_config.json 등)은 .template 존재로 충족
-                    if (basename in existing or stripped in existing
-                            or f'{basename}.template' in existing):
-                        continue
-                    missing_refs[src_rel].append(ref)
+            #    CHANGELOG 등 역사 기록물은 면제 — 그 버전 시점엔 실재했던 파일이다.
+            if src_rel not in HISTORY_SOURCES:
+                for pattern in PATH_PATTERNS:
+                    for m in pattern.finditer(text):
+                        ref = m.group(0)
+                        if is_runtime_ref(ref):   # specs/state/work 등 런타임 산출물 오탐 제외
+                            continue
+                        if DEPRECATION_RE.search(line_of(text, m.start())):  # "폐기됨" 안내문 내 죽은 포인터
+                            continue
+                        basename, stripped = normalize_ref(ref)
+                        # 셋업이 .template/.example 에서 생성하는 설정 파일은 원본 존재로 충족
+                        if (basename in existing or stripped in existing
+                                or f'{basename}.template' in existing
+                                or f'{basename}.example' in existing):
+                            continue
+                        # .gitignore 가 일부러 뺀 설정 파일 참조는 정상(코드가 생성법을 안내한다)
+                        if basename in ignored or stripped in ignored:
+                            continue
+                        if ref.startswith(OUTSIDE_REPO_ROOTS):   # 레포 밖 = WARN
+                            outside_refs[src_rel].append(ref)
+                            continue
+                        missing_refs[src_rel].append(ref)
 
             # 2) [CRITICAL] --agent <name> 매핑
             for m in AGENT_FLAG_PATTERN.finditer(text):
@@ -187,11 +252,26 @@ def main():
     total = (sum(len(v) for v in missing_refs.values())
              + sum(len(v) for v in missing_agents.values())
              + sum(len(v) for v in missing_companions.values()))
+    n_outside = sum(len(v) for v in outside_refs.values())
+
+    def emit_outside():
+        """레포 밖 참조 — 클론한 사람이 따라갈 수 없는 링크. 차단하지 않되 반드시 보인다."""
+        if not n_outside:
+            return
+        print(f"\n  ⚠ WARN — 레포 밖(사용자 작업 루트) 참조 {n_outside}건. "
+              f"클론한 사람은 따라갈 수 없다 — 문서 링크면 정리 검토.")
+        for src, refs in sorted(outside_refs.items()):
+            print(f"    {src}")
+            for ref in refs[:CAP]:
+                print(f"      ↳ {ref}")
+            if len(refs) > CAP:
+                print(f"      ↳ … {len(refs) - CAP}건 더 (전건은 --all)")
 
     if total == 0:
         print("[PASS] No missing references found.")
         print(f"       scanned root: {STAGING}")
         print(f"       agents present: {sorted(agent_files)}")
+        emit_outside()
         sys.exit(0)
 
     print(f"[FAIL] {total} missing references:\n")
@@ -211,11 +291,12 @@ def main():
         print("  ■ 누락된 경로 참조")
         for src, refs in sorted(missing_refs.items()):
             print(f"    {src}")
-            for ref in refs[:5]:
+            for ref in refs[:CAP]:
                 print(f"      ↳ {ref}")
-            if len(refs) > 5:
-                print(f"      ↳ ... +{len(refs) - 5} more")
+            if len(refs) > CAP:
+                print(f"      ↳ … {len(refs) - CAP}건 더 (전건은 --all)")
 
+    emit_outside()
     print("\n⛔ STOP. 누락 파일을 staging 에 추가하거나 참조를 제거/수정 후 재검증.")
     sys.exit(1)
 
