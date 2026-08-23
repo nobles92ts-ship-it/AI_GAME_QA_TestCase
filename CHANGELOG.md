@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 ---
 
-## [v4.2.0] — 2026-08-21
+## [v4.2.0] — 2026-08-23
 
 **Two silent failures made loud, one bottleneck cut by 60%, and a name for every item a tester has to pick up.**
 
