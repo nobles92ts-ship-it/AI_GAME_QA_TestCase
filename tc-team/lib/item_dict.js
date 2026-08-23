@@ -44,6 +44,16 @@ let SYSTEMS = [];
 /** 주입된 바인딩으로 교체. CLI 와 테스트가 쓴다. */
 function setSystems(list) { SYSTEMS = Array.isArray(list) ? list : []; }
 
+// 아이템 테이블의 컬럼 바인딩 — **코드는 역할 키(idx·nameCode·inv…)만 안다.**
+// 실제 컬럼명은 게임 스키마라 config 가 소유한다(SYSTEMS 와 같은 이유).
+// 기본값은 역할명 그대로 = 스키마를 모르는 상태. 주입이 없으면 컬럼을 못 찾아 사전이 비고,
+// 그 사실이 skipped/warn 에 남는다(조용히 틀린 사전을 만들지 않는다).
+const COL_ROLES = ['idx', 'desc', 'nameCode', 'type', 'inv', 'grade', 'live'];
+let ITEM_COLS = Object.fromEntries(COL_ROLES.map(r => [r, r]));
+function setItemColumns(map) {
+  ITEM_COLS = Object.fromEntries(COL_ROLES.map(r => [r, (map && map[r]) || r]));
+}
+
 const DATA_ROW = 4;      // 데이터 시작 행 (0-based)
 const MAX_EXAMPLES = 3;  // 유형·시스템당 대표 예시 개수
 
@@ -57,32 +67,31 @@ function colIndexes(rows, name) {
 }
 
 /**
- * @param itemRows  Item.xlsx / ItemInfo 를 header:1 로 읽은 2차원 배열
+ * @param itemRows  아이템 테이블 시트를 header:1 로 읽은 2차원 배열
  * @param systemRows { [systemKey]: rows|null } — 없으면 그 시스템 스킵
- * @param loc        Map(NameCode → 표시명)
+ * @param loc        Map(이름코드 → 표시명)
  */
 function buildDict(itemRows, systemRows, loc, meta) {
+  // 역할 → 실제 컬럼 인덱스. 컬럼명은 ITEM_COLS(config 주입)가 정한다.
   const ih = {};
-  for (const n of ['Index', 'Description', 'NameCode', 'ItemType', 'InventoryCategory', 'Grade', 'UseInLive']) {
-    ih[n] = colIndexes(itemRows, n)[0];
-  }
+  for (const role of COL_ROLES) ih[role] = colIndexes(itemRows, ITEM_COLS[role])[0];
   const items = new Map();
   const nameUsers = new Map();   // 표시명 → 사용 아이템 수 (표시명 공유 검출)
   const cell = (row, k) => (ih[k] == null || row[ih[k]] == null ? '' : String(row[ih[k]]));
   for (let r = DATA_ROW; r < itemRows.length; r++) {
     const row = itemRows[r];
     if (!row) continue;
-    const idx = Number(row[ih.Index]);
+    const idx = Number(row[ih.idx]);
     if (!Number.isInteger(idx) || idx <= 0) continue;
-    const nameCode = cell(row, 'NameCode');
+    const nameCode = cell(row, 'nameCode');
     const name = loc.get(nameCode) || '';
     items.set(idx, {
       name, nameCode,
-      desc: cell(row, 'Description'),
-      type: cell(row, 'ItemType'),
-      inv: cell(row, 'InventoryCategory'),
-      grade: cell(row, 'Grade'),
-      live: row[ih.UseInLive] === true || cell(row, 'UseInLive').toLowerCase() === 'true',
+      desc: cell(row, 'desc'),
+      type: cell(row, 'type'),
+      inv: cell(row, 'inv'),
+      grade: cell(row, 'grade'),
+      live: row[ih.live] === true || cell(row, 'live').toLowerCase() === 'true',
     });
     if (name) nameUsers.set(name, (nameUsers.get(name) || 0) + 1);
   }
@@ -152,7 +161,7 @@ function buildDict(itemRows, systemRows, loc, meta) {
     });
   }
 
-  // 유형별 (InventoryCategory × ItemType)
+  // 유형별 (분류 × 유형 — 컬럼 바인딩은 ITEM_COLS)
   const byType = new Map();
   for (const [idx, it] of items) {
     const k = `${it.inv}\u0000${it.type}`;
@@ -227,7 +236,7 @@ function parseCsvLine(line) {
   return out;
 }
 
-module.exports = { buildDict, parseCsvLine, setSystems, get SYSTEMS() { return SYSTEMS; }, DATA_ROW };
+module.exports = { buildDict, parseCsvLine, setSystems, setItemColumns, get SYSTEMS() { return SYSTEMS; }, DATA_ROW };
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 if (require.main === module) {
@@ -259,6 +268,7 @@ if (require.main === module) {
     process.exit(4);
   }
   setSystems(SYSCFG.systems);
+  setItemColumns(SYSCFG.item_columns);   // 역할 → 실제 컬럼명 (없으면 역할명 그대로 = 스키마 미지정)
   // 원본이 없는 머신(CI·다른 PC)에서는 조용히 스킵 — 파이프라인을 막지 않는다.
   if (!fs.existsSync(path.join(TABLES, ITEM_FILE))) {
     console.error(`[item_dict] 원본 테이블 없음 — 스킵: ${TABLES}/${ITEM_FILE}`);

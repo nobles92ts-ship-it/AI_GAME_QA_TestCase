@@ -6,8 +6,26 @@
     "systems[] 는 아이템을 '쓰는' 곳만 담는다 — 보상·퀘스트·우편은 '얻는' 경로라 대상이 아니다.",
     "시트나 컬럼이 없으면 그 시스템만 스킵되고 산출물 skipped[] 에 사유가 남는다."
   ],
-  "item_file": "Item.xlsx",
-  "item_sheet": "ItemInfo",
+  "item_file": "ItemTable.xlsx",
+  "item_sheet": "SheetName",
+
+  "_item_columns": [
+    "아이템 시트의 컬럼 바인딩. 왼쪽 역할 키는 코드가 아는 이름이라 고정,",
+    "오른쪽만 실제 컬럼명으로 바꾼다. 빠뜨리면 역할명 그대로 찾으므로 컬럼을 못 찾고,",
+    "그 시스템이 skipped[] 에 사유와 함께 남는다(조용히 틀린 사전을 만들지 않는다).",
+    "  idx=아이템 인덱스 · desc=기획용 설명 · nameCode=표시명 문자열 키",
+    "  type=아이템 유형 · inv=인벤토리 분류 · grade=등급 · live=라이브 사용 여부"
+  ],
+  "item_columns": {
+    "idx": "Index",
+    "desc": "Description",
+    "nameCode": "NameCode",
+    "type": "TypeColumn",
+    "inv": "CategoryColumn",
+    "grade": "Grade",
+    "live": "LiveFlagColumn"
+  },
+
   "systems": [
     { "key": "제작", "file": "SystemA.xlsx", "sheet": "TableA", "col": "ColA", "cond": "SystemA.TableA.ColA 등재" },
     { "key": "강화", "file": "SystemB.xlsx", "sheet": "TableB", "col": "ColB", "cond": "SystemB.TableB.ColB 등재" },

@@ -1,9 +1,13 @@
 'use strict';
 const assert = require('assert');
-const { buildDict, parseCsvLine, setSystems } = require('../lib/item_dict.js');
+const { buildDict, parseCsvLine, setSystems, setItemColumns } = require('../lib/item_dict.js');
 
 // 바인딩은 config 소유(하드코딩 기본값 없음) — 테스트도 주입해서 쓴다.
 // 형식·의미는 lib/item_dict.systems.json.template 과 동일.
+setItemColumns({
+  idx: 'Index', desc: 'Description', nameCode: 'NameCode',
+  type: 'TypeColumn', inv: 'CategoryColumn', grade: 'Grade', live: 'LiveFlagColumn',
+});
 setSystems([
   { key: '제작', file: 'SystemA.xlsx', sheet: 'TableA', col: 'ColA', cond: 'SystemA.TableA.ColA 등재' },
   { key: '강화', file: 'SystemB.xlsx', sheet: 'TableB', col: 'ColB', cond: 'SystemB.TableB.ColB 등재' },
@@ -14,13 +18,13 @@ setSystems([
 let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  PASS ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + ' — ' + e.message); } }
 
-// ItemInfo 형태: 헤더행(0) + 한글설명(1) + DevFlag(2) + 타입(3) + 데이터(4~)
-const IH = ['Index', 'Description', 'NameCode', 'ItemType', 'InventoryCategory', 'Grade', 'UseInLive'];
+// 아이템 시트 형태: 헤더행(0) + 한글설명(1) + DevFlag(2) + 타입(3) + 데이터(4~)
+const IH = ['Index', 'Description', 'NameCode', 'TypeColumn', 'CategoryColumn', 'Grade', 'LiveFlagColumn'];
 const filler = ['', '', ''];
 function itemSheet(rows) {
-  return [IH, ['(DB)인덱스', '기획 참고', '표시 이름', 'ItemType', 'InventoryCategory', 'Grade', '라이브'], filler, filler, ...rows];
+  return [IH, ['(DB)인덱스', '기획 참고', '표시 이름', 'TypeColumn', 'CategoryColumn', 'Grade', '라이브'], filler, filler, ...rows];
 }
-// [Index, Description, NameCode, ItemType, InventoryCategory, Grade, UseInLive]
+// [Index, Description, NameCode, TypeColumn, CategoryColumn, Grade, LiveFlagColumn]
 const I = (idx, code, type, inv = '재료', live = true) => [idx, '', code, type, inv, '일반', live];
 
 function sysSheet(colName, values) {

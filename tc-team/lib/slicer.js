@@ -57,7 +57,7 @@ function classifyTableLines(lines) {
 /**
  * 표 데이터 행 1줄 → 규칙 문자열 배열 (배제 대상이면 빈 배열).
  * 스키마/데이터 표(enum 값·컬럼명·스트링 키 목록)는 셀이 규칙문이 아니라 '값'이라 분모를 오염시킨다
- * (훈장 실측: 필터 없이 463건 중 상당수가 Common/NameCode/Medal\_UI\_… 류). 아래 3개로 걸러낸다.
+ * (실측: 필터 없이 463건 중 상당수가 Common/NameCode/&lt;테이블명&gt;\_UI\_… 류). 아래 3개로 걸러낸다.
  */
 function tableRowRules(line, minChars) {
   const cells = line.split('|').slice(1, -1).map((c) => c.trim()).filter(Boolean);

@@ -136,7 +136,7 @@ t('용어 토큰화 — 한글 언더스코어는 쪼개고 영문 식별자는 
   assert.deepStrictEqual(tokenize('전투_처치_판정_시스템'), ['전투', '처치', '판정']); // 시스템=스톱워드
   assert.deepStrictEqual(tokenize('기대결과_UI문구_토스트'), ['기대결과', 'UI문구', '토스트']);
   // 반대로 실제 식별자는 통째로 — 쪼개면 조각난 'UI'가 Sample_UI_Title 에 오매칭된다(과거 함정).
-  ['WBP_BossEncounterIntro', 'MonsterNameUI_Open', 'Sample_UI_Title', 'Monster_Boss.xlsx']
+  ['WBP_BossEncounterIntro', 'MonsterNameUI_Open', 'Sample_UI_Title', 'Sample_Boss.xlsx']
     .forEach((w) => assert.deepStrictEqual(tokenize(w), [w], w));
 });
 
