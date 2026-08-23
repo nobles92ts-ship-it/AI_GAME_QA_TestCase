@@ -35,6 +35,7 @@ v3 (2026-08-23, 오탐 97건 전수 분류 후 수정):
 import re
 import sys
 from pathlib import Path
+from fnmatch import fnmatch
 from collections import defaultdict
 
 # Windows 콘솔(cp949)에서도 한글/유니코드 출력이 깨지지 않게 stdout을 UTF-8로 강제
@@ -117,25 +118,40 @@ DEPRECATION_RE = re.compile(
     re.IGNORECASE)
 
 
-def load_gitignore_names():
-    """staging 의 .gitignore 가 이름으로 지목한 항목 집합.
+def load_gitignore_rules():
+    """staging 의 .gitignore 규칙 → (정확이름 집합, 글로브 목록).
 
-    `jira_config.json` · `slack_config.json` · `team/tc_config.json` 처럼 **일부러 안 올리는**
-    설정 파일을 참조하는 건 정상이다(코드가 "없으면 이렇게 만들라"고 안내한다).
+    `jira_config.json` · `team/tc_config.json` 처럼 **일부러 안 올리는** 설정 파일을
+    참조하는 건 정상이다(코드가 "없으면 이렇게 만들라"고 안내한다).
     목록을 스크립트에 박으면 새 설정이 생길 때마다 오탐이 되살아나므로 .gitignore 를 정본으로 읽는다.
+
+    ⚠ 글로브를 반드시 함께 본다 (2026-08-23). 처음엔 이름만 비교했는데, .gitignore 가
+      개별 이름 나열(`jira_config.json`)에서 글로브(`*_config.json`)로 바뀌자 같은 참조가
+      곧바로 누락으로 뒤집혔다 — 방어는 더 넓어졌는데 검사기는 더 좁게 본 것이다.
     """
-    names = set()
+    names, globs = set(), []
     gi = STAGING / '.gitignore'
     if not gi.exists():
-        return names
+        return names, globs
     for line in gi.read_text(encoding='utf-8', errors='ignore').splitlines():
         line = line.strip()
         if not line or line.startswith('#') or line.startswith('!'):
             continue
         line = line.rstrip('/')
-        names.add(line)
-        names.add(Path(line).name)
-    return names
+        if any(ch in line for ch in '*?['):
+            globs.append(line)
+            globs.append(Path(line).name)
+        else:
+            names.add(line)
+            names.add(Path(line).name)
+    return names, globs
+
+
+def is_ignored(basename, stripped, names, globs):
+    """참조가 .gitignore 로 일부러 빠진 파일인가 (이름 일치 또는 글로브 일치)."""
+    if basename in names or stripped in names:
+        return True
+    return any(fnmatch(basename, g) or fnmatch(stripped, g) for g in globs)
 
 
 def line_of(text, pos):
@@ -186,7 +202,7 @@ def main():
         sys.exit(1)
 
     existing = build_existing_index()
-    ignored = load_gitignore_names()      # .gitignore 가 일부러 뺀 설정 파일 — 참조해도 정상
+    ig_names, ig_globs = load_gitignore_rules()   # .gitignore 가 일부러 뺀 설정 파일 — 참조해도 정상
     # agents/ 에 실제 존재하는 에이전트 stem 집합 (basename 없는 이름)
     agent_files = {p.stem for p in STAGING.rglob('agents/*.md')}
 
@@ -222,7 +238,7 @@ def main():
                                 or f'{basename}.example' in existing):
                             continue
                         # .gitignore 가 일부러 뺀 설정 파일 참조는 정상(코드가 생성법을 안내한다)
-                        if basename in ignored or stripped in ignored:
+                        if is_ignored(basename, stripped, ig_names, ig_globs):
                             continue
                         if ref.startswith(OUTSIDE_REPO_ROOTS):   # 레포 밖 = WARN
                             outside_refs[src_rel].append(ref)

@@ -187,7 +187,7 @@ async function main() {
   const token = getToken();
   if (!token || cfg.channel.startsWith('YOUR_')) {
     console.error('Slack 착수 공지 미설정 — 켜려면 scripts/util/slack_config.json 생성 (slack_config.json.example 참고):');
-    console.error('  {"token": "xoxb-...", "channel": "C0XXXXXXXXX"}');
+    console.error('  {"token": "<슬랙 봇 토큰 xoxb-…>", "channel": "<채널 ID>"}');
     console.error('  (또는 환경변수 SLACK_BOT_TOKEN + SLACK_CHANNEL_ID)');
     process.exit(1);
   }
