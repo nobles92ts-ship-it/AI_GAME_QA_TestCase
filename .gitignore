@@ -3,9 +3,11 @@
 .env.local
 .env.*.local
 credentials/client_secret.json
-jira_config.json
-slack_config.json
-pipeline_config.json
+# ⚠ 이름 나열이 아니라 글로브다. 개별 이름만 적어 두면 **새로 생긴 설정 파일이 무방비**가 된다 —
+#   실측(2026-08-23): jira_config.json·slack_config.json 은 막혔는데 나중에 추가된
+#   slack_dm_config.json 은 같은 종류의 실 토큰을 담고도 어디에도 안 걸려 있었다.
+#   `.template`·`.example` 접미형은 이 글로브에 안 걸리므로 동봉본은 그대로 추적된다.
+*_config.json
 pipeline_config.local.json
 *.token.json
 *.credentials.json
