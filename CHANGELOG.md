@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.2.1] — 2026-08-23
+
+**Two publishing gates were quietly not working. Both had been reporting success.**
+
+### Fixed
+
+- **`dep_check.py` was failing on trees that were perfectly fine.** It reported `97 missing references` and `⛔ STOP` against v4.1.1 and v4.2.0 — both already published, both correct. Classifying all 97 found **zero real misses**: 87% were `$WORK/…` paths, which are files the pipeline *writes during a run*, not files it ships. The rest were gitignored config with a `.example` alongside, CHANGELOG entries naming files that existed at that version, and paths outside the repo.
+
+  A gate that always fails is a gate people learn to skip, which is the same as having no gate. Runtime work-directory roots are now recognised as such; `.gitignore` is read rather than duplicated in a hardcoded list, so a new config file does not resurrect the problem; `.example` counts like `.template`; the CHANGELOG is exempt from path checking; and references outside the repo are reported as a warning instead of a failure — they cannot be resolved by someone who cloned this, but they are worth seeing rather than suppressing.
+
+  97 → 0. Sensitivity was re-checked by deleting a shipped file: the gate names it correctly and exits non-zero. The old `+N more` truncation is gone too — it capped output at five and said nothing useful about the rest.
+
+- **The domain-term scan matched one shape and missed three.** It looked for `<TableName>_<Word>` — asset and localisation keys. It did not look for table *file* references, sheet names, or column names, so `Crafting.xlsx`, `RecipeInfo`, and `NeedMaterialId` all passed at zero hits, even though every one of those tables was listed in the reference map it was already reading.
+
+  Now three shapes: the key form, `<TableName>.xlsx`, and sheet/column names. Sheet and column names are only checked inside files that also reference a table file — without that condition the scan returns 96 hits on a clean tree, because names like `GlobalDefine` and `ItemType` are also this project's own vocabulary. With it, a clean tree returns 4 and an unsanitised one returns 31. The structural-name dictionary keeps entries of at least 8 characters with two or more capitals appearing in at most two tables; measured against the known cases, that passes all six real ones and rejects `Index`, `Type`, `Name`, `Description`, `Grade`, `ItemType`, `GroupID`, `SubType`, and `UseInLive`.
+
+  The scan runs at both the pre-push and post-push checkpoints. Having it at only one meant the moment of deciding to publish was the unguarded one.
+
+- **Three things the fixed scan caught that the manual pass had not**: the item table's own column names, still hardcoded in `item_dict.js`; one `GlobalDefine` key in the labelling rules; and two asset-key examples in comments.
+
+### Changed
+
+- **`item_dict.js` no longer knows any column names.** The code works in roles — index, name code, category, type, grade, live flag — and the actual column names come from `item_columns` in the systems binding, same as the table bindings in v4.2.0. Omitting a role falls back to the role name, which will not match a real sheet, and the miss is recorded in `skipped[]` rather than silently producing a wrong dictionary.
+
+  > **Upgrading from v4.2.0**: add an `item_columns` block to your systems JSON. See `lib/item_dict.systems.json.template`. Without it the dictionary comes out empty and the pipeline skips item citation (non-blocking), rather than failing.
+
+---
+
 ## [v4.2.0] — 2026-08-23
 
 **Two silent failures made loud, one bottleneck cut by 60%, and a name for every item a tester has to pick up.**
