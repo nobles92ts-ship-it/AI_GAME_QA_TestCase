@@ -3,8 +3,8 @@
  * doc_reality_lint.js — tc-team-v2 문서 죽은 참조 린터 (doc-vs-reality)
  *
  * 목적: 스킬/에이전트/명령 .md가 참조하는 파일·스크립트가 실제로 존재하는지 검사.
- *   "문서엔 있는데 실물이 없는" 죽은 참조를 자동 적발 (예: verify_coverage.js,
- *   haiku_tc_writer.py, agents/tc-updater.md — 2026-06-10 Fable 패스에서 수동 적발됐던 부류).
+ *   "문서엔 있는데 실물이 없는" 죽은 참조를 자동 적발 (2026-06-10 Fable 패스에서 수동
+ *   적발됐던 부류 — 폐기된 예시: verify_coverage.js, haiku_tc_writer.py, agents/tc-updater.md).
  *
  * 실행 시점 (운영 규칙):
  *   - tc-team-v2 스킬/에이전트/명령 .md를 수정한 세션의 마감 단계 (필수)
