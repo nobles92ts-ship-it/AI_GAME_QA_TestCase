@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.2.2] — 2026-08-23
+
+**`.gitignore` listed credential files by name, so every new one arrived unprotected.**
+
+### Fixed
+
+- **Config files were ignored individually rather than by shape.** `jira_config.json` and `slack_config.json` each had their own line. A third file of exactly the same kind, added later, matched none of them and was protected only by never having been staged. Replaced with `*_config.json`; the `.template` and `.example` forms do not match the glob, so the bundled samples stay tracked. No currently tracked file changes status.
+
+  This is the same defect as the hardcoded exemption list fixed in v4.2.1, in a different file: enumerating names means the next thing you add is outside the rule.
+
+- **`dep_check.py` did not understand globs in `.gitignore`.** It compared literal names, so the moment the ignore rule got *broader*, the checker got *narrower* and reported two references as missing. It now matches globs too. The same regression check as before — remove a shipped file, confirm it is named and the exit code is non-zero — still passes.
+
+- The Slack setup hint printed a token-shaped example, which the credential scan then had to be told to ignore on every run. It now prints a bracketed placeholder like the rest of the repo.
+
+### Notes
+
+The tooling that found this — a corpus of planted, format-valid fake credentials used to measure what the scan actually misses rather than reasoning about it — lives with the publishing skill and is not part of this repository. It took the miss rate from 17 of 26 classes down to 2, both of which are prefix-less bare tokens that no pattern can distinguish from ordinary text. Two of the new checks cover classes this project had no rule for at all, including credentials embedded in connection strings.
+
+---
+
 ## [v4.2.1] — 2026-08-23
 
 **Two publishing gates were quietly not working. Both had been reporting success.**
