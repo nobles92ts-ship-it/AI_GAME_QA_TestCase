@@ -261,7 +261,7 @@ Confluence 이미지는 `confluence_image_downloader.py`로 다운로드 후, **
 | 기획서 해시 | [sha256(confluence_raw.md) 앞 12자] |
 | 기능명 | [기능명] |
 | 분석일시 | [YYYY-MM-DD HH:MM] |
-| 분석자 | Opus (effort: medium) |
+| 분석자 | Opus (effort: max) |
 | 파이프라인 버전 | tc-팀-v2 |
 | 이미지 개수 | N장 (분석 완료: M장) |
 | 원문 파일 | team/specs/[기능명]/confluence_raw.md |

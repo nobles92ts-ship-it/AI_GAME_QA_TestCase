@@ -215,15 +215,17 @@ AI_GAME_QA_TestCase/
 │   └── haiku/
 │
 ├── tc-team/                      # The deterministic engine
-│   ├── lib/                      # 14 modules — gates, slicer, ledger, sheet I/O
+│   ├── lib/                      # 19 modules — gates, slicer, ledger, sheet I/O
 │   ├── scripts/                  # Chain drivers + confidence scoring
-│   ├── test/                     # 14 suites
+│   ├── test/                     # 16 suites
 │   └── docs/                     # Driver reference, EVAL digest, guides
 │
-├── scripts/util/                 # Shared Node utilities + the 2 linters
-│   └── expander/                 # Design expansion & schema validation
+├── scripts/
+│   ├── handoff_gate.py           # Between-step markdown integrity gate
+│   └── util/                     # Shared Node utilities + the 2 linters
+│       └── expander/             # Design expansion & schema validation
 │
-├── appscript/                    # Google Apps Script (tab colour/sort, Slack)
+├── appscript/                    # Google Apps Script (tabs, dashboard, nav sidebar, Slack)
 ├── docs/                         # Setup, prerequisites, architecture
 ├── commands/                     # Slash commands
 └── credentials/                  # OAuth files (gitignored, .gitkeep only)

@@ -6,7 +6,7 @@
  *  - 요청 객체/수식/서식/색상은 update_dashboard.js와 동일하게 유지 (SSoT 동기화 대상)
  *  - 숨김(hidden) 탭 자동 제외 → "현재 노출 탭만" 대시보드에 반영
  *  - 숫자는 COUNTIF 라이브 수식 → 데이터 변경 시 자동 갱신
- *  - A:L 열만 수정. M열(M3 버튼)·Q열 이후(AI 메트릭)는 건드리지 않음
+ *  - A:V 열만 수정(10칸 블록). M1:M7(M3·M6 버튼 패널)과 W열 이후는 건드리지 않음
  *
  * ⚠ 전역 충돌 방지를 위해 상수·헬퍼를 전부 함수 내부에 둠.
  *   유일한 전역 심볼은 rebuildDashboard 하나.
@@ -23,10 +23,17 @@ function rebuildDashboard(ss) {
   // 대시보드에서 제외할 시트 (추가 제외가 필요하면 여기에. 숨김 탭은 아래에서 자동 제외)
   const EXCLUDED_SHEETS = [];
 
-  const MAX_TC_PER_BLOCK = 5;   // 블록당 최대 TC 시트 수
+  const MAX_TC_PER_BLOCK = 10;  // 블록당 최대 TC 시트 수 — 5→10 (2026-09-03)
   const BLOCK_HEIGHT = 8;       // 섹션헤더(1) + 플랫폼(1) + 데이터(6)
   const BLOCK_GAP = 2;          // 블록 사이 빈 행 수
   const TITLE_ROWS = 2;         // 타이틀(1) + 빈 행(1)
+
+  // ⚠ 10칸 블록은 C~V열을 쓴다. M2:N7은 버튼 패널(탭 색상 정렬 M2~M4 / BVT Slack M5~M7)이라
+  //   초기화에서 제외한다. 패널은 M·N 두 열을 쓴다(_copy_panel_M2N7_*.js 기준).
+  //   TC 데이터는 13행부터라 값 기록은 애초에 겹치지 않는다.
+  const PANEL_COL_IDX = 12;     // M열 (0-indexed)
+  const PANEL_COL_END = 14;     // N열 다음 (end exclusive) → M:N
+  const PANEL_KEEP_ROWS = 7;    // M1:N7 보존
 
   const PLAT_COLS = { PC: 'H', '모바일': 'I' };
   const PLATFORMS = ['PC', '모바일'];
@@ -36,7 +43,6 @@ function rebuildDashboard(ss) {
   // ─── 색상 ──────────────────────────────────────────────────────────────
   const C = {
     TITLE_BG:    { red:0.102, green:0.137, blue:0.494 },
-    HDR_BG:      { red:0.173, green:0.243, blue:0.694 },
     TOTAL_HDR:   { red:0.200, green:0.380, blue:0.600 },
     PLAT_BG:     { red:0.384, green:0.467, blue:0.824 },
     TOTAL_BG:    { red:0.992, green:0.945, blue:0.800 },
@@ -55,6 +61,8 @@ function rebuildDashboard(ss) {
     SUM_CELL:    { red:0.867, green:0.937, blue:0.984 },
     SUM_LABEL:   { red:0.635, green:0.831, blue:0.953 },
   };
+  // 탭 색상이 없는(=미진행) TC 헤더 배경. 데이터 행의 미진행 회색과 같은 계열.
+  const NO_TAB_HDR = { red:0.851, green:0.851, blue:0.851 };
   const ROW_STYLES = [
     { label: C.PASS_LABEL,  cell: C.PASS_CELL  },
     { label: C.FAIL_LABEL,  cell: C.FAIL_CELL  },
@@ -78,6 +86,8 @@ function rebuildDashboard(ss) {
 
   // ─── 헬퍼 ──────────────────────────────────────────────────────────────
   const mix = (a, b) => ({ red:(a.red+b.red)/2, green:(a.green+b.green)/2, blue:(a.blue+b.blue)/2 });
+  // 배경이 밝으면 검정 글씨, 어두우면 흰 글씨 (탭 색상 노랑 #FBBC04에 흰 글씨가 안 읽히는 문제)
+  const textOn = bg => (0.299*(bg.red||0) + 0.587*(bg.green||0) + 0.114*(bg.blue||0)) > 0.6 ? C.BLACK : C.WHITE;
   function colLetter(c) {
     let result = '', n = c + 1;
     while (n > 0) { const rem = (n - 1) % 26; result = String.fromCharCode(65 + rem) + result; n = Math.floor((n - 1) / 26); }
@@ -113,9 +123,18 @@ function rebuildDashboard(ss) {
   const sheetGidMap = {};
   meta.sheets.forEach(s => { sheetGidMap[s.properties.title] = s.properties.sheetId; });
 
+  // 시트명 → 탭 색상 맵 (섹션헤더 배경용). 색이 없는 탭 = 미진행 → NO_TAB_HDR
+  // 탭 색상 규칙 SSoT: tab_manager.gs getTabColor (노랑=진행중, 빨강=완료(FAIL), 파랑=완료(PASS))
+  const tabColorMap = {};
+  meta.sheets.forEach(s => {
+    const p = s.properties;
+    const rgb = (p.tabColorStyle && p.tabColorStyle.rgbColor) || p.tabColor || null;
+    if (rgb) tabColorMap[p.title] = { red:rgb.red||0, green:rgb.green||0, blue:rgb.blue||0 };
+  });
+
   console.log(`TC 시트(${tcSheets.length}개): ${tcSheets.join(', ')}`);
 
-  // 블록 분할: 첫 블록=[통합만], 이후=[TC시트 5개씩]
+  // 블록 분할: 첫 블록=[통합만], 이후=[TC시트 MAX_TC_PER_BLOCK개씩]
   const chunks = [['통합']];
   for (let i = 0; i < tcSheets.length; i += MAX_TC_PER_BLOCK) {
     chunks.push(tcSheets.slice(i, i + MAX_TC_PER_BLOCK));
@@ -125,28 +144,59 @@ function rebuildDashboard(ss) {
   const totalCols = 2 + maxSections * 2;
   const totalRows = blockStartRow(chunks.length) + 5;
   const panelCol = 5; // 진행률 패널 시작 열 F
+  // 이 빌더가 소유하는 최대 가로 폭(= 10칸 블록일 때 C~V). TC 수가 줄어도 이 폭 전체를 매번
+  // 초기화해야 이전 런의 잔재가 남지 않는다. M1:M7(버튼 패널)만 예외로 보존.
+  const OWNED_COLS = 2 + MAX_TC_PER_BLOCK * 2;
+  const ownedLast = colLetter(OWNED_COLS - 1);
 
   // 2. 그리드 크기 확보
   const gp = dashSheet.properties.gridProperties;
-  if (gp.columnCount < panelCol + 3 || gp.rowCount < totalRows) {
+  if (gp.columnCount < OWNED_COLS || gp.rowCount < totalRows) {
     Sheets.Spreadsheets.batchUpdate({ requests: [{ updateSheetProperties: {
       properties: { sheetId: SID, gridProperties: {
-        columnCount: Math.max(gp.columnCount, panelCol + 4),
+        columnCount: Math.max(gp.columnCount, OWNED_COLS + 2),
         rowCount:    Math.max(gp.rowCount, totalRows + 10),
       }},
       fields: 'gridProperties.columnCount,gridProperties.rowCount'
     }}] }, SPREADSHEET_ID);
   }
 
-  // 3. 초기화 (A:L 한정 — M열 이후 AI 메트릭 영역은 보존)
-  Sheets.Spreadsheets.Values.clear({}, SPREADSHEET_ID, `${DASHBOARD_NAME}!A:L`);
+  // 2-b. 충돌 검사 (fail-closed) — 소유 범위 안에 AI 메트릭(update_metrics.js, 기본 Q:R)이 있으면 중단.
+  {
+    const guard = Sheets.Spreadsheets.Values.get(
+      SPREADSHEET_ID, `${DASHBOARD_NAME}!${colLetter(PANEL_COL_IDX)}1:${ownedLast}80`);
+    const rows = guard.values || [];
+    for (const row of rows) {
+      for (const v of row) {
+        if (String(v).trim() === 'AI 메트릭') {
+          throw new Error(
+            `AI 메트릭 영역이 대시보드 소유 범위(A~${ownedLast}열)와 겹칩니다. ` +
+            `update_metrics.js의 METRIC_COL_START를 ${colLetter(OWNED_COLS)}열 이후로 옮기고 기존 Q:R을 비운 뒤 다시 실행하세요.`);
+        }
+      }
+    }
+  }
+
+  // 3. 초기화 (A:V 한정 — M1:N7 버튼 패널과 W열 이후는 보존)
+  Sheets.Spreadsheets.Values.batchClear({ ranges: [
+    `${DASHBOARD_NAME}!A:${colLetter(PANEL_COL_IDX - 1)}`,                                                    // A~L
+    `${DASHBOARD_NAME}!${colLetter(PANEL_COL_IDX)}${PANEL_KEEP_ROWS + 1}:${colLetter(PANEL_COL_END - 1)}200`, // M8~N200
+    `${DASHBOARD_NAME}!${colLetter(PANEL_COL_END)}:${ownedLast}`,                                             // O~V
+  ]}, SPREADSHEET_ID);
   Sheets.Spreadsheets.batchUpdate({ requests: [
-    { unmergeCells: { range: R(SID, 0, 0, 200, 12) } },
-    { repeatCell: { range: R(SID, 0, 0, 200, 12), cell: {}, fields: 'userEnteredFormat' } },
+    // 병합 해제도 패널(M2:N7)을 피해서 — 패널에 병합이 있으면 깨진다.
+    { unmergeCells: { range: R(SID, 0, 0, 1, OWNED_COLS) } },                            // 1행(타이틀)
+    { unmergeCells: { range: R(SID, 1, 0, PANEL_KEEP_ROWS, PANEL_COL_IDX) } },           // 2~7행 A~L
+    { unmergeCells: { range: R(SID, 1, PANEL_COL_END, PANEL_KEEP_ROWS, OWNED_COLS) } },  // 2~7행 O~V
+    { unmergeCells: { range: R(SID, PANEL_KEEP_ROWS, 0, 200, OWNED_COLS) } },            // 8행~
+    { repeatCell: { range: R(SID, 0, 0, 200, PANEL_COL_IDX), cell: {}, fields: 'userEnteredFormat' } },
+    { repeatCell: { range: R(SID, PANEL_KEEP_ROWS, PANEL_COL_IDX, 200, PANEL_COL_END), cell: {}, fields: 'userEnteredFormat' } },
+    { repeatCell: { range: R(SID, 0, PANEL_COL_END, 200, OWNED_COLS), cell: {}, fields: 'userEnteredFormat' } },
   ]}, SPREADSHEET_ID);
 
   // 4. 값 + 수식 입력
   const updates = [];
+  const headerUpdates = [];   // 서식 적용 후 다시 써야 하는 섹션헤더(하이퍼링크) 셀
   updates.push({ range:`${DASHBOARD_NAME}!A1`, values:[['DX 전체 TC 현황 대시보드']] });
 
   for (let k = 0; k < chunks.length; k++) {
@@ -156,12 +206,16 @@ function rebuildDashboard(ss) {
 
     updates.push({ range:`${DASHBOARD_NAME}!A${r}`, values:[['구분']] });
 
+    // ⚠ 서식 적용(repeatCell 의 userEnteredFormat.textFormat)이 HYPERLINK 의 링크를 죽인다(2026-09-03 실측).
+    //   그래서 여기서 한 번 쓰고, 서식이 다 끝난 뒤 headerUpdates 로 한 번 더 덮어쓴다.
     sections.forEach((sec, si) => {
       const gid = sheetGidMap[sec];
       const val = (sec === '통합')
         ? sec
         : `=HYPERLINK("https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit#gid=${gid}","${sec.replace(/"/g, '""')}")`;
-      updates.push({ range:`${DASHBOARD_NAME}!${colLetter(sCol(si))}${r}`, values:[[val]] });
+      const cell = { range:`${DASHBOARD_NAME}!${colLetter(sCol(si))}${r}`, values:[[val]] };
+      updates.push(cell);
+      if (sec !== '통합') headerUpdates.push(cell);
     });
 
     updates.push({
@@ -227,11 +281,13 @@ function rebuildDashboard(ss) {
     });
 
     reqs.push(repeat(R(SID, base, 0, base+1, 1), cellFmt(C.TOTAL_HDR, C.WHITE, true, 'CENTER', 'MIDDLE', 'CLIP', 11)));
-    sections.forEach((_, si) => {
+    // TC 이름 칸 배경 = 그 시트의 탭 색상 (색 없는 탭 = 미진행 → 회색). 글자색은 명도로 자동 결정.
+    sections.forEach((sec, si) => {
       const isTotal = si === 0 && hasTotal;
+      const bg = isTotal ? C.TOTAL_HDR : (tabColorMap[sec] || NO_TAB_HDR);
       reqs.push(repeat(
         R(SID, base, sCol(si), base+1, sCol(si)+2),
-        cellFmt(isTotal ? C.TOTAL_HDR : C.HDR_BG, C.WHITE, true, 'CENTER', 'MIDDLE', 'WRAP', isTotal ? 11 : 10)
+        cellFmt(bg, textOn(bg), true, 'CENTER', 'MIDDLE', 'WRAP', isTotal ? 11 : 10)
       ));
     });
 
@@ -310,6 +366,12 @@ function rebuildDashboard(ss) {
 
   for (let i = 0; i < reqs.length; i += 30) {
     Sheets.Spreadsheets.batchUpdate({ requests: reqs.slice(i, i+30) }, SPREADSHEET_ID);
+  }
+
+  // 6. 섹션헤더 하이퍼링크 재기입 (서식 적용이 링크를 죽이므로 반드시 서식 뒤에 온다)
+  if (headerUpdates.length) {
+    Sheets.Spreadsheets.Values.batchUpdate(
+      { valueInputOption:'USER_ENTERED', data:headerUpdates }, SPREADSHEET_ID);
   }
 
   console.log(`✅ 대시보드 재구성 완료 — TC 시트 ${tcSheets.length}개, 블록 ${chunks.length}개`);

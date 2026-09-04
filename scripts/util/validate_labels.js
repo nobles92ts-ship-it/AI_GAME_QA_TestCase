@@ -23,6 +23,8 @@ const fs = require('fs');
 
 // 라벨링_기준.md §1 "기획 확인 요청 — 태그 4종"
 const TAGS = ['[값 미정]', '[규칙 모호]', '[규칙 없음]', '[참조 공백]'];
+// 질문줄 괄호 밖 영문 키 — 식별자=밑줄 포함 또는 CamelCase 2혹 이상 (Max·UI·On 같은 일반어는 제외)
+const BARE_KEY_RE = /[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]*[A-Za-z0-9]|[A-Z][a-z]+[A-Z][A-Za-z]*/;
 
 /**
  * 라벨링_기준.md §1 "문장 형식" — 2줄차에서 금지한 QA 내부 어휘.
@@ -79,6 +81,7 @@ function checkSpec(items) {
   const badTag = [];
   const badForm = [];
   const banned = [];
+  const bareKey = [];
   items.forEach((it, i) => {
     const s = String(it);
     // `[참조 공백·BLOCK]`은 라벨링_기준.md §6 예시에 나오는 같은 태그의 표기 변형 — 위반 아님
@@ -91,11 +94,15 @@ function checkSpec(items) {
     // (센티넬_소환_시스템 실측). 늑대소년이 된 검증기는 08-07 사고를 못 막는다.
     const [question, ...rest] = s.split('\n');
     if (!/\?\s*$/.test(question) || !rest.join('\n').trim()) badForm.push(i + 1);
+    // 2026-09-03 오너 지시 — 질문줄에 영문 키를 박지 않는다(기본기능 체크리스트와 같은 기준).
+    // 기획자는 `DungeonResetTime`을 모르지만 "던전이 몇 시에 초기화되는지"는 안다.
+    // 괄호 안은 각주라 허용 — 괄호를 걷어낸 뒤 남은 곳에 식별자가 있으면 위반.
+    if (BARE_KEY_RE.test(question.replace(/^\[[^\]]+\]\s*/, '').replace(/[(（][^)）]*[)）]/g, ' '))) bareKey.push(i + 1);
     // 금지 어휘는 선두 태그를 떼고 본문만 본다 — `[참조 공백]` 태그 자체를 잡으면 안 된다
     const body = s.replace(/^\[[^\]]+\]\s*/, '');
     BANNED_WORDS.forEach((w) => { if (w.re.test(body)) banned.push({ idx: i + 1, word: w.name }); });
   });
-  return { badTag, badForm, banned };
+  return { badTag, badForm, banned, bareKey };
 }
 
 const p = process.argv[2];
@@ -139,9 +146,9 @@ if (!data || !Array.isArray(data['기획확인'])) {
 }
 
 const items = data['기획확인'];
-const { badTag, badForm, banned } = checkSpec(items);
+const { badTag, badForm, banned, bareKey } = checkSpec(items);
 const brief = (arr) => arr.slice(0, 5).join('·') + (arr.length > 5 ? ` 외 ${arr.length - 5}` : '');
-console.log(`검증 통과 — 기획확인 ${items.length}건 (태그 위반 ${badTag.length} · 문장형식 위반 ${badForm.length} · 금지 어휘 ${banned.length})`);
+console.log(`검증 통과 — 기획확인 ${items.length}건 (태그 위반 ${badTag.length} · 문장형식 위반 ${badForm.length} · 금지 어휘 ${banned.length} · 질문줄 영문키 ${bareKey.length})`);
 if (badTag.length) console.log(`  └ 태그 4종 아님: ${brief(badTag)}번째 항목`);
 if (badForm.length) console.log(`  └ 문장형식 위반(1줄차 물음표 없음 또는 2줄차 사유 없음): ${brief(badForm)}번째 항목 — 라벨링_기준.md §문장 형식`);
 if (banned.length) {
@@ -151,4 +158,10 @@ if (banned.length) {
     console.log(`  └ 금지 어휘 "${word}": ${brief(idxs)}번째 항목 — 라벨링_기준.md §문장 형식(2줄차는 사람 말로)`);
   });
 }
+if (bareKey.length) console.log(`  └ 질문줄에 영문 키 노출: ${brief(bareKey)}번째 항목 — 한국어로 묻고 키는 괄호 각주로 (라벨링_기준.md §문장 형식)`);
+// 2026-09-03 오너 지시 — 질문줄 영문 키는 차단 등급.
+//   exit 5 = "내용은 쓸 수 있으나 규칙 위반" → finalize.sh가 교정 라운드 1회를 돌리고,
+//   그래도 남으면 기재는 하되 런을 실패로 보고한다(라벨 유실 방지 + 초록불 금지).
+//   exit 2(파싱·구조 불량)와 구분해야 한다 — 2는 기재 자체가 불가한 상태다.
+if (bareKey.length) process.exit(5);
 process.exit(0);

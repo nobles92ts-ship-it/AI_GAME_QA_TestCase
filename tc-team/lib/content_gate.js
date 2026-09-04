@@ -69,6 +69,17 @@ if (require.main === module) {
   try { snap = JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { process.stderr.write('[content_gate] 파싱 실패: ' + e.message + '\n'); process.exit(1); }
   const rows = Array.isArray(snap) ? snap : snap.rows;
   const res = checkContent(rows);
-  process.stdout.write(JSON.stringify({ ok: res.pass, total: res.total, violations: res.violations.length, byType: res.byType, warnings: res.warnings.length, warnByType: res.warnByType, detail: res.violations.slice(0, 30) }) + '\n');
+  // detail 은 교정 에이전트의 **유일한 입력**이다(run_pipeline_full.sh s3_fix_agent).
+  // 여기서 자르면 잘린 만큼은 에이전트에게 전달조차 안 돼 영원히 안 고쳐진다.
+  // 실사고(2026-08-25 무기_강화_단계에_따른_이펙트): 위반 49건 중 앞 30건만 실려
+  //   에이전트가 본 30건은 30/30 교정, 못 본 19건은 0/19 → 재위반 → stop_integrity 로 런 사망.
+  //   위반 30건 초과 런은 이 절단 때문에 구조적으로 100% 정지했다.
+  // 기본값 = 전량. 상한이 필요하면 TCTEAM_GATE_DETAIL_MAX 로 준다(0/미설정=무제한).
+  const detailMax = Number(process.env.TCTEAM_GATE_DETAIL_MAX || 0);
+  const detail = detailMax > 0 ? res.violations.slice(0, detailMax) : res.violations;
+  if (detail.length < res.violations.length) {
+    process.stderr.write(`[content_gate][경고] detail 절단 ${res.violations.length}건 → ${detail.length}건 — 잘린 위반은 교정되지 않는다\n`);
+  }
+  process.stdout.write(JSON.stringify({ ok: res.pass, total: res.total, violations: res.violations.length, byType: res.byType, warnings: res.warnings.length, warnByType: res.warnByType, detail }) + '\n');
   process.exit(res.pass ? 0 : 7);
 }

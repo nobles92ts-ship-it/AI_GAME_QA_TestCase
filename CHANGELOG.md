@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.2.3] — 2026-09-04
+
+**A gate truncated its own report, so every large run failed the same way and no one could see why.**
+
+### Fixed
+
+- **The content gate handed the correction agent only the first 30 violations.** That detail list is the agent's *only* input. Everything past the cap was never shown to it, so it could not be corrected, so the re-check failed and the run stopped on an integrity halt. A run with 49 violations corrected 30 of 30 seen and 0 of 19 unseen — which means any run above the cap failed structurally, not occasionally. The list is now complete by default; a cap is available through `TCTEAM_GATE_DETAIL_MAX` for anyone who wants one, and taking it prints a warning naming how many violations are being dropped.
+
+- **`.env.example` named two Drive folder variables that nothing reads.** The uploader reads a single root folder id and creates per-feature subfolders itself. Someone filling in the documented names got no upload and no error. The example and the setup table now use the variable the code actually reads, and say plainly that leaving it unset keeps output local.
+
+### Added
+
+- **A handoff gate between steps.** Each step consumes the previous step's markdown, and a file that was written but cut short — zero bytes, under size, an odd number of code fences, a table row left open — reads as valid input and produces quiet nonsense downstream. `scripts/handoff_gate.py` checks those deterministically before the next step starts; a missing gate logs a warning rather than silently passing.
+
+- **A source gate for the cross-reference step.** The knowledge base is keyed by project directory. The chain runs its cross-reference agent from one directory while the corpus had only ever been indexed under another, so every query returned no results — and *that* output is indistinguishable from the legitimate path where a query runs and legitimately finds nothing. The gate separates the two: "searched, nothing there" passes, "nowhere to search" reports a distinct exit code. A companion helper indexes the corpus into the directory the chain actually uses, so the split cannot silently reappear.
+
+- **A navigation sidebar for the sheet.** Links in cells need two clicks, and switching sheets from a simple trigger changes server state without moving the user's view. A sidebar click is a user-initiated execution and does move it. The list is read from the dashboard's existing link formulas, so regenerating the dashboard updates the sidebar with no separate mapping to maintain.
+
+### Changed
+
+- **Label finalisation no longer discards work to report a failure.** The agent run is factored so the first pass and the correction round take the same path, and a blocking finding gets one correction round instead of ending the run. If it survives that round the labels are still written and the step reports failure — recording the result and refusing the green light are not the same decision, and conflating them threw away everything for one bad line.
+
+- **The TC authoring, design, review and inspection rules were revised together.** Identifier keys in parentheses are now confined to toast and notice messages; several negative-and-exception constructions were replaced with a single positive rule; one inspection check was retired after measurement showed it introduced defects rather than catching them.
+
+---
+
 ## [v4.2.2] — 2026-08-23
 
 **`.gitignore` listed credential files by name, so every new one arrived unprotected.**

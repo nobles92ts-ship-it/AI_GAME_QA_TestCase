@@ -69,6 +69,34 @@ const COMPOUND_RESULT_RE = /되고[^.\n]{0,40}되는지|되며[^.\n]{0,40}되는
 // "1. " 시작 = 다단계 번호 서술 (소수점 "1.5초"는 점 뒤 공백이 없어 미매칭 — 오탐 안전)
 const NUMBERED_STEP_RE = /^\s*\d+\.\s/;
 const TAG_SPLIT_RE = /\[(사전\s*조건|사전\s*상태|행동|기대\s*결과)\]/;
+// 기본기능 F열 — "영문 식별자를 쓸 거면 괄호 안에" (2026-09-03 오너 지시)
+//   ⚠ 2026-09-03 정정: 첫 구현은 "괄호 병기 전 행 필수"였는데 과했다.
+//     세공시스템개선_v2 실측 — 정상 17행 중 11행은 인용할 식별자가 아예 없다
+//     (`확인 버튼 입력 시 세공이 진행되는지`). 전 행 강제는 65%를 헛되이 막고,
+//     통과시키려고 가짜 식별자를 붙이게 만든다. 규칙은 존재 강제가 아니라 **위치 강제**다.
+//   식별자 = 밑줄 포함(StatRoll_UI_StatMax) 또는 CamelCase 2혹 이상(CompoundProbTable).
+//     Max·Lock·UI·On·Tab·PC 같은 일반 영단어는 식별자가 아니다 (오탐 방지).
+const BASIC_ID_RE = /[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]*[A-Za-z0-9]|[A-Z][a-z]+[A-Z][A-Za-z]*/;
+// 합법 위치를 도려낸 뒤 남은 곳에 식별자가 있으면 위반.
+//   합법 = ① 괄호 안(각주) ② 따옴표 안(기획서 원문 인용 — 원문에 식별자가 있으면 고칠 수 없다)
+//   ②를 빼면 `부리 찍기(Attack_01)…확인 "원거리 시 Attack_01 선택"` 같은 **정상 문장**이 걸린다
+//   (실측: 2753행 중 435행 검출 → ② 추가 후 실오탐 소거).
+const stripParens = (t) => String(t)
+  .replace(/[(（][^)）]*[)）]/g, ' ')
+  .replace(/"[^"]*"|[“][^”]*[”]|'[^']*'/g, ' ');
+// 기본기능 F열 — 문구·메시지 확인 행 판별. 이 행에서만 큰따옴표 인용이 필수다
+//   (애니메이션·테이블·UI 상태 확인 행은 인용할 기획서 문구가 없으므로 면제)
+const BASIC_TEXT_CHECK_RE = /토스트|문구|메시지|안내문/;
+// 기본기능 F열 — 괄호 키를 허용하는 유일한 조건 = 따옴표 안이 '문장'인 안내 메시지 행
+//   2026-09-03 2차 축소(오너 지시): 애니메이션 리소스명·데이터 테이블명·UI 키는 쓰지 않는다.
+//   기획자는 키를 모르고, 키가 붙으면 체크리스트가 읽히지 않는다. 수치는 키 대신 기대값을 직접 쓴다.
+const BASIC_MSG_QUOTE_RE = /["“][^"”]*(?:니다|세요|십시오)[^"”]*["”]/;
+const PAREN_GROUP_RE = /[(（][^)）]*[)）]/g;
+/** 안내 메시지 행이 아닌데 괄호 안에 영문 키가 있으면 그 괄호 그룹을 돌려준다 */
+function basicStrayKey(f) {
+  if (!f || BASIC_MSG_QUOTE_RE.test(f)) return null;
+  return (String(f).match(PAREN_GROUP_RE) || []).find((g) => BASIC_ID_RE.test(g)) || null;
+}
 // 플랫폼 분리쌍 정규화 — 조작 단어 치환(클릭↔탭)만 다른 동일 문장 검출용 (v8 사고: 90쌍)
 function normFForPlatform(t) {
   return s(t).replace(/PC|모바일|마우스|터치|클릭|탭/g, '').replace(/\s+/g, '');
@@ -123,6 +151,13 @@ function checkSkeletonCols({ b, c, d, e, g }, locate, violations, opts = {}) {
   }
   if (g && !PLATFORM_ENUM.includes(g)) {
     violations.push({ ...locate, col: 'G', sev: 'HIGH', msg: `플랫폼 "${g.slice(0, 30)}" — 허용값(PC/모바일/PC/모바일) 외 (idx4↔5 스왑 의심)` });
+  }
+
+  // ①-3 기본기능 검증단계 정상 전용 — 2026-09-03 틀 개편(오너 지시)
+  //   기본기능 = 기획자가 훑는 정상 체크리스트. 실패·차단 경로는 QA 상세 섹션이 전담한다.
+  //   convert(설계→골격) 시점에 잡아야 STEP 3 재진입을 막는다.
+  if (b === '기본기능' && e && e !== '정상') {
+    violations.push({ ...locate, col: 'E', sev: 'CRITICAL', msg: `기본기능 행 검증단계 "${e}" — 정상만 허용 (부정·예외는 QA 상세 섹션으로 이관)` });
   }
 
   // ② B/C/D 빈 값 (옵션)
@@ -216,6 +251,26 @@ function validatePreWrite(rows, opts = {}) {
     // ⑤ 그룹 분산: 동일 (B,C,D) 튜플이 비인접 위치에 재등장 — V-17/EVAL-06
     //    (구버전 "같은 D면 C 동일" 규칙은 폐기 — 다른 중분류 아래 같은 소분류 재사용은 합법, L4-06)
     if (b || fb) { fb = b || fb; fc = c || fc; fd = d || fd; }
+
+    // ⑤-2 기본기능 F열 계약 — 2026-09-03 틀 개편(오너 지시). 체크리스트 문형:
+    //   "무엇을 보는가"는 한국어로, 근거 식별자는 괄호 각주로.
+    //   괄호 병기 = 전 행 필수 / 큰따옴표 인용 = 문구 확인 행만 (애니메이션·테이블·UI 상태는 면제)
+    //   col:'F'로 보고 → merge 단계에서 해당 행만 재문장화 루프로 회수된다 (exit 5).
+    if (fb === '기본기능' && f) {
+      const bare = stripParens(f).match(BASIC_ID_RE);
+      if (bare) {
+        violations.push({ row: lineNo, col: 'F', sev: 'HIGH', msg: `기본기능 행 F에 괄호 밖 식별자 "${bare[0]}" — 한국어 동작 서술로 바꾸고 식별자는 괄호 안으로 (V-16)` });
+      }
+      if (BASIC_TEXT_CHECK_RE.test(f) && !/["“”]/.test(f)) {
+        violations.push({ row: lineNo, col: 'F', sev: 'HIGH', msg: '기본기능 문구 확인 행에 큰따옴표 인용 없음 — 기획서 문구를 그대로 인용 (V-16)' });
+      }
+      // ④ 괄호 키는 토스트·안내 메시지 행에만 (2026-09-03 2차 축소)
+      const stray = basicStrayKey(f);
+      if (stray) {
+        violations.push({ row: lineNo, col: 'F', sev: 'HIGH', msg: `기본기능 행 F에 안내 메시지가 아닌 괄호 키 ${stray} — 삭제한다 (수치는 키 대신 기대값을 직접 기재) (V-16)` });
+      }
+    }
+
     const key = `${fb}|${fc}|${fd}`;
     if (fd) {
       if (lastSeen.has(key) && lastSeen.get(key) !== idx - 1) {
@@ -546,11 +601,16 @@ function validateFull(filePath, opts = {}) {
     }
 
     if (isBasic) {
-      // V-16 기본기능 5조건 (기계부 ①②③ + ④⑤ 존재성)
+      // V-16 기본기능 5조건 (기계부 ①②③④ + ⑤ 조건부) — 2026-09-03 틀 개편(오너 지시)
+      //   ① 검증단계=정상 전용(부정 폐지) ② G=PC ③ I=N/A ④ 괄호 병기 참조 ⑤ 문구 확인 행만 인용
+      if (r.E && r.E !== '정상') violations.push({ sev: 'CRITICAL', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 검증단계 "${r.E}" — 정상만 허용 (부정·예외는 QA 상세 섹션 담당)` });
       if (r.G !== 'PC') violations.push({ sev: 'CRITICAL', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 G="${r.G}" ≠ "PC"` });
       if (caps.hasHI && r.I !== 'N/A') violations.push({ sev: 'CRITICAL', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 I="${r.I}" ≠ "N/A"` });
-      if (r.F && !/[A-Za-z_][A-Za-z0-9_]{2,}/.test(r.F)) violations.push({ sev: 'HIGH', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 F에 GlobalDefine 키 미포함` });
-      if (r.F && !/["“”]/.test(r.F)) violations.push({ sev: 'HIGH', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 F에 큰따옴표 안내 문구 인용 없음` });
+      const bareId = r.F && stripParens(r.F).match(BASIC_ID_RE);
+      if (bareId) violations.push({ sev: 'HIGH', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 F에 괄호 밖 식별자 "${bareId[0]}" — 식별자는 괄호 안으로` });
+      if (r.F && BASIC_TEXT_CHECK_RE.test(r.F) && !/["“”]/.test(r.F)) violations.push({ sev: 'HIGH', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 문구 확인 행에 큰따옴표 인용 없음` });
+      const strayKey = basicStrayKey(r.F);
+      if (strayKey) violations.push({ sev: 'HIGH', rule: 'V-16', row: r.sheetRow, msg: `${loc} 기본기능 행 F에 안내 메시지가 아닌 괄호 키 ${strayKey} — 삭제 (수치는 기대값 직접 기재)` });
       return; // 기본기능 행은 일반 품질 룰 제외
     }
 

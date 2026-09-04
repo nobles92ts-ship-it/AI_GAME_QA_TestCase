@@ -63,8 +63,11 @@ TAB="$FEAT"
 CHAIN_LOG="$SPEC/chain.log"
 [[ -f "$SPEC/confluence_raw.md" ]] || { echo "[CHAIN] confluence_raw.md 없음 — 셋업 먼저" >&2; exit 1; }
 RAW_SIZE=$(wc -c < "$SPEC/confluence_raw.md" 2>/dev/null | tr -d '[:space:]')
-echo "[CHAIN] confluence_raw.md 크기: ${RAW_SIZE:-0}B" >&2
-[[ "${RAW_SIZE:-0}" -lt 500 ]] && { echo "[CHAIN] confluence_raw.md 크기 이상(<500B) — fetch 재확인" >&2; exit 1; }
+# 수치 확인 먼저 — `[[ -lt ]]` 는 비수치·빈 값을 조용히 0 으로 본다(에러도 rc 도 없다).
+# 그대로 두면 wc 실패가 "크기 500B 미만"으로 둔갑해 진짜 원인을 감춘다(측정 실패 ≠ 파일이 작음).
+[[ "$RAW_SIZE" =~ ^[0-9]+$ ]] || { echo "[CHAIN] confluence_raw.md 크기 측정 실패(wc 출력='$RAW_SIZE') — 파일 접근 권한·경로 확인" >&2; exit 1; }
+echo "[CHAIN] confluence_raw.md 크기: ${RAW_SIZE}B" >&2
+[[ "$RAW_SIZE" -lt 500 ]] && { echo "[CHAIN] confluence_raw.md 크기 이상(<500B) — fetch 재확인" >&2; exit 1; }
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$CHAIN_LOG"; }
 stop_auth()      { log "[STOP:인증] $1 — 재인증 후 재실행"; exit 10; }
@@ -96,6 +99,29 @@ try{
   console.log('ok');
 }catch(e){console.log('silent');}
 "
+}
+
+# ── 인수 게이트 — 자식의 자기신고가 아니라 산출물 실물을 부모가 직접 본다 ──────
+# [왜] check_step 은 자식이 쓴 step_result.json 의 status 한 줄만 본다. 실측(2026-08-23):
+#      step_result.json 122건이 전부 status=success 인데, 같은 시점 team/state.json 은
+#      11/97 이 done 이 아니었다 — 자기신고는 실패를 보고한 적이 한 번도 없다.
+#      출력 상한 소진으로 산출물이 절단돼도(88.3분 손실 사고) rc=0 · success 로 끝난다.
+# [무엇] handoff_gate.py 가 0바이트·크기미달·코드펜스 홀수·표 행 미완결을 결정론으로 잡는다.
+# [임계] 실측으로 정했다 — analysis.md 최소 2,494B / tc_design.md 최소 5,775B (n=165).
+#        기존 산출물 165/165 가 아래 값으로 통과함을 확인한 뒤 배선했다(오탐 0).
+CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+HGATE="${TCTEAM_HANDOFF_GATE:-$CLAUDE_HOME/scripts/handoff_gate.py}"
+HPY="${TCTEAM_PYTHON:-python}"
+handoff_md() { # $1=파일 $2=최소바이트 $3..=필수마커
+  local f="$1" mb="$2"; shift 2
+  if [[ ! -f "$HGATE" ]]; then
+    log "[인수게이트][경고] 게이트 없음 — 건너뜀: $HGATE"
+    return 0
+  fi
+  local args=("$HPY" "$HGATE" md "$f" --min-bytes "$mb")
+  local m
+  for m in "$@"; do args+=(--require "$m"); done
+  "${args[@]}" >>"$CHAIN_LOG" 2>&1
 }
 
 do_transition() { # state round prev attempts_file attempts_max(optional)
@@ -158,9 +184,6 @@ ITEMDICT=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFI
 # 원본 경로도 config 에서 읽는다 — 머신마다 트렁크 위치가 다르다(하드코딩 금지).
 IDT=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict_tables||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
 IDG=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict_gamestring||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
-# 테이블·시트·컬럼 바인딩도 config 소유 — 게임마다 다르므로 코드에 박지 않는다.
-# 형식은 tc-team/lib/item_dict.systems.json.template 참조. 미지정이면 생성기가 exit 4 로 스킵(비차단).
-IDS=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.item_dict_systems||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
 # ⚠ 삭제·재생성은 반드시 START 가드 **안**에서 한다. 밖에 두면 --resume-from step4 재개 때
 #   기존 사전을 지우고 재생성하지 않아, S4 quality 렌즈가 파일을 못 찾고 조용히 넘어간다.
 #   (crossref 쪽 rmSync 가 STEP 2 블록 안에 있는 것과 같은 이유)
@@ -169,7 +192,6 @@ if [[ "$ITEMDICT" == "on" && $START -le 1 ]]; then
   IDARGS=(--out "$SPEC/item_dict.json")
   [[ -n "$IDT" ]] && IDARGS+=(--tables "$IDT")
   [[ -n "$IDG" ]] && IDARGS+=(--gamestring "$IDG")
-  [[ -n "$IDS" ]] && IDARGS+=(--systems "$IDS")
   "$NODE" "$PROJECT_ROOT/tc-team/lib/item_dict.js" "${IDARGS[@]}" >>"$CHAIN_LOG" 2>&1
   idrc=$?
   case $idrc in
@@ -202,12 +224,14 @@ tc-학습.md 활성 설계 패턴 반영 필수 — 특히 P-18(상태이상·�
 Confluence MCP 재호출 금지."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
 RUNAGENT_DEBUG_FILE='$SPEC/step1_debug.log' bash '$RETRY' '$SPEC/step1_stderr.log' -- \
-bash '$RUNAGENT' $CLI_BASE --model opus --effort medium --agent tc-team-designer \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1
+bash '$RUNAGENT' $CLI_BASE --model opus --effort max --agent tc-team-designer \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1
 rc=$?
 [[ $rc -eq 10 ]] && stop_auth "STEP 1"
 [[ $rc -eq 11 ]] && stop_quota "STEP 1"
 [[ $rc -eq 12 ]] && stop_attempts "STEP 1 silent exit 3회 (GUARD)"
 [[ "$(check_step 1)" == "ok" ]] || { log "[STEP 1] 실패: $(check_step 1)"; exit 1; }
+handoff_md "$SPEC/analysis.md"  1024        || stop_integrity "STEP 1 인수게이트 — analysis.md (절단/미달)"
+handoff_md "$SPEC/tc_design.md" 2048 "## "  || stop_integrity "STEP 1 인수게이트 — tc_design.md (절단/미달)"
 log "[STEP 1] 완료"
 fi
 
@@ -226,6 +250,46 @@ XSRC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','
 "$NODE" -e "require('fs').rmSync('$SPEC/dxr_crossref.json',{force:true})" 2>/dev/null || true
 if [[ "$CROSSREF" == "on" ]]; then
   log "[STEP 2-대조] DXR 뇌 대조 시작 (crossref_brain=on)"
+
+  # ── 사전 색인 게이트 (C) + 자동 복구 (A) — 2026-08-23 신설 ─────────────────────────
+  # 배경: context-mode KB 는 프로젝트 디렉터리마다 갈린다(sha256(projectDir)[:16]).
+  #   체인은 대조 에이전트를 $PROJECT_ROOT 에서 돌리는데 뇌는 {WORK_ROOT} KB 에만 색인돼 있어
+  #   질의가 아무리 정확해도 전량 "No results found" 였다. 그 출력이 §1.6 정상 경로인
+  #   '무적중 → 전 항목 keep' 과 구분되지 않아 오래 안 보였다(2026-08-23 진단 문서 참조).
+  # 이 게이트는 "찾아봤는데 없다"(정상) 와 "찾아볼 곳이 없었다"(결함) 를 갈라놓는다.
+  # KB 는 아래에서 CLAUDE_PROJECT_DIR 로 못박으므로 게이트와 에이전트가 같은 KB 를 본다.
+  XPROJ="$PROJECT_ROOT"
+  XBUNDLE=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_bundle||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+  XGATE="$PROJECT_ROOT/tc-team/lib/crossref_source_gate.py"
+  XSYNC="$PROJECT_ROOT/tc-team/lib/brain_index_sync.py"
+  XPY="${TCTEAM_PYTHON:-python}"
+  XSKIP=""
+  if [[ -f "$XGATE" ]]; then
+    "$XPY" "$XGATE" --project-dir "$XPROJ" --source "$XSRC" --bundle "$XBUNDLE" \
+      --json "$SPEC/crossref_gate.json" >/dev/null 2>&1
+    XG=$?
+    if [[ $XG -ne 0 ]]; then
+      log "[STEP 2-대조][게이트] 색인 이상(code=$XG · MISSING=3 STALE=4 NO_KB=5) — 자동 복구 시도: $XSRC → $XPROJ"
+      if [[ -f "$XSYNC" && -n "$XBUNDLE" ]]; then
+        "$XPY" "$XSYNC" --project-dir "$XPROJ" --source "$XSRC" --bundle "$XBUNDLE" \
+          --node "$NODE" >>"$CHAIN_LOG" 2>&1 || true
+        "$XPY" "$XGATE" --project-dir "$XPROJ" --source "$XSRC" --bundle "$XBUNDLE" \
+          --json "$SPEC/crossref_gate.json" >/dev/null 2>&1
+        XG=$?
+      fi
+      if [[ $XG -eq 0 ]]; then
+        log "[STEP 2-대조][게이트] 자동 복구 성공 — 대조 진행"
+      else
+        XSKIP="색인 부재/복구 실패(code=$XG)"
+        log "[STEP 2-대조][게이트][차단] $XSKIP — 대조 스킵. 이것은 '무적중'이 아니라 '찾아볼 색인이 없었다'이다."
+      fi
+    fi
+  fi
+  # 게이트 실패 = 에이전트를 부르지 않는다. 부르면 그 결과가 '무적중 keep' 으로 위장된다.
+  if [[ -n "$XSKIP" ]]; then
+    "$NODE" -e "require('fs').writeFileSync('$SPEC/dxr_crossref.json',JSON.stringify({source_run:'$FEAT',items:[],discovered:[],counts:{in:0,apply:0,locate:0,discover:0,keep:0},skipped:true,skip_reason:'$XSKIP',_note:'대조 미실행 — 색인 게이트 차단. 무적중이 아니다(crossref_gate.json 참조).'},null,2))" 2>/dev/null || true
+  else
+
   XHANDOFF="## HANDOFF
 - 기능명: $FEAT
 - specs 경로: $SPEC
@@ -236,8 +300,13 @@ if [[ "$CROSSREF" == "on" ]]; then
 tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC\")에 대조 → dxr_crossref.json 생성.
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep) + 스코프경계(로컬 데이터테이블 실제값은 가져오지 말고 locate=위치만).
 §1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."
+  # CLAUDE_PROJECT_DIR 못박기 — context-mode 가 KB 를 고르는 최우선 변수다(cli.bundle.mjs 실측).
+  # 이걸 고정해야 위 게이트가 검사한 KB 와 에이전트가 실제로 뒤지는 KB 가 같아진다.
+  # 안 박으면 체인을 어느 폴더에서 띄웠느냐에 따라 KB 가 조용히 갈린다(2026-08-23 결함의 발생 경로).
+  CLAUDE_PROJECT_DIR="$XPROJ" CONTEXT_MODE_PROJECT_DIR="$XPROJ" \
   RUNAGENT_DEBUG_FILE="$SPEC/crossref_debug.log" bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-team-대조 "$XHANDOFF" >>"$CHAIN_LOG" 2>&1 \
     || log "[STEP 2-대조][경고] 대조 에이전트 비정상 종료 — fail-safe 스킵(비차단)"
+  fi   # XSKIP 분기 종료
   if [[ -f "$SPEC/dxr_crossref.json" ]]; then
     XC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const lo=it.filter(x=>x.branch==='locate').length+it.filter(x=>x.branch==='apply'&&x.approved!==true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;const ke=it.filter(x=>x.branch==='keep').length;process.stdout.write('apply='+ap+' locate='+lo+' discover='+di+' keep='+ke)}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)
     log "[STEP 2-대조] 완료 — $XC"
@@ -245,7 +314,9 @@ tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2�
     # 무인 런에서는 이 한 줄이 "뇌가 헛돌았다"는 유일한 단서다. 임계 20%·최소 5건은 실측 기준
     # (07-31 재료_아이템 런: 해소 2/15 = 13% 인데 아무 경고 없이 완주 → 확신도 항목 18건 불필요 감점).
     XW=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const n=it.length;const r=it.filter(x=>x.branch!=='keep').length;process.stdout.write(n>=5&&r*5<n?(r+'/'+n):'')}catch(e){process.stdout.write('')}" 2>/dev/null)
-    [[ -n "$XW" ]] && log "[STEP 2-대조][경고] 해소 $XW — 20% 미만. 색인 이름 오류·뇌 미탑재·질의 헛돔(제목형 질의가 메타데이터 헤더 청크만 물어오는 경우) 의심. tc-대조.md §1.5 ⓑ 내용어 질의 확인"
+    # 2026-08-23: 사전 게이트가 '색인 부재/이름 오류/STALE' 를 이미 걸러내므로, 여기까지 온 저해소는
+    # 색인 문제가 아니라 질의·문서 쪽이다. 원인 후보에서 색인을 뺀다(오진 유도 방지).
+    [[ -n "$XW" ]] && log "[STEP 2-대조][경고] 해소 $XW — 20% 미만. 색인은 게이트 통과했으므로 질의 헛돔(제목형 질의가 메타데이터 헤더 청크만 물어옴) 또는 원문 미수록 의심. tc-대조.md §1.5 ⓑ 내용어 질의 확인"
   else
     log "[STEP 2-대조] 산출 없음 — 뇌 미적중/미탑재로 간주(비차단, 현행 동작)"
   fi
@@ -280,6 +351,7 @@ rc=$?
 [[ "$(check_step 2)" == "ok" ]] || { log "[STEP 2] 실패"; exit 1; }
 NEEDS_FIX=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8'));const nf=(r.needs_fix??(r.review&&r.review.needs_fix)??(r.step2_review&&r.step2_review.needs_fix));console.log(nf===true?'1':'0')")
 GAP=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8'));const g=(r.analysis_gap??(r.review&&r.review.analysis_gap)??(r.step2_review&&r.step2_review.analysis_gap));console.log(Number(g)||0)")
+[[ "$GAP" =~ ^[0-9]+$ ]] || { log "[STEP 2][경고] analysis_gap 추출 실패(GAP='$GAP') — 0 으로 간주(모델 강등)"; GAP=0; }
 # 대조 결정론 OR: apply(approved:true) 또는 discover ≥1 → needs_fix 강제 (검수 LLM 누락 방지). locate/keep은 트리거 아님.
 if [[ -f "$SPEC/dxr_crossref.json" ]]; then
   XFIX=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;process.stdout.write((ap+di)>0?'1':'0')}catch(e){process.stdout.write('0')}" 2>/dev/null)
@@ -296,7 +368,7 @@ run_step3() { # $1=모드 라벨 (review|blocker)
   local prev=2; [[ "$mode" == "blocker" ]] && prev=""
   do_transition design_fixing 0 "$prev"
   local model_args=(--model sonnet)
-  [[ "$GAP" -gt 0 ]] && model_args=(--model opus --effort medium)
+  [[ "$GAP" -gt 0 ]] && model_args=(--model opus --effort max)
   log "[STEP 3] 설계수정 시작 (mode=$mode, model=${model_args[1]})"
   HANDOFF="## HANDOFF
 - 기능명: $FEAT
@@ -320,6 +392,7 @@ bash '$RUNAGENT' $CLI_BASE ${model_args[*]} --agent tc-team-designer \"\$0\"" "$
   [[ $rc -eq 11 ]] && stop_quota "STEP 3"
   [[ $rc -eq 12 ]] && stop_attempts "STEP 3 silent exit 3회"
   [[ "$(check_step 3)" == "ok" ]] || { log "[STEP 3] 실패"; exit 1; }
+  handoff_md "$SPEC/tc_design.md" 2048 "## " || stop_integrity "STEP 3 인수게이트 — tc_design.md (수정 중 절단)"
   log "[STEP 3] 완료"
 }
 PREV_FOR_4=2

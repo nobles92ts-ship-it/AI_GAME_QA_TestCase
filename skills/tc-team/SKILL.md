@@ -103,7 +103,7 @@ mkdir -p "$WORK"
 ```
 ③ **Workflow 팬아웃** — 메인이 Workflow 도구 호출:
 `Workflow({ scriptPath: "<TCTEAM>/workflows/tcteam-s3-fmap.js", args: { workdir: "<WORK>", ranges: <s3_ranges.ranges> } })`
-   - **청크 병렬(2026-08-19)**: 청크는 서로 독립이라 동시 실행한다. 풀체인(`run_pipeline_full.sh`)은 **동시 `TCTEAM_S3_PAR`개(기본 4)** 웨이브 배치 — S4 커버리지 원장(`TCTEAM_COV_PAR`)과 같은 형태. 실측 300TC 환산 순차 40분46초 → 동시 4에서 13분08초 `[estimated]`(근거 `docs/s3_병렬화_실측_20260816.md`). **K=6 이상은 실측 표본 없음** — 올리려면 먼저 잴 것. `TCTEAM_S3_PAR=1`이면 구 직렬 동작. 하네스 `tests/s3_parallel_qa/`.
+   - **청크 병렬(2026-08-19)**: 청크는 서로 독립이라 동시 실행한다. 풀체인(`run_pipeline_full.sh`)은 **동시 `TCTEAM_S3_PAR`개(기본 4)** 웨이브 배치 — S4 커버리지 원장(`TCTEAM_COV_PAR`)과 같은 형태. 실측 300TC 환산 순차 40분46초 → 동시 4에서 13분08초 `[estimated]`(근거 `docs/s3_병렬화_실측_20260816.md`). **K=6 이상은 실측 표본 없음** — 올리려면 먼저 잴 것. `TCTEAM_S3_PAR=1`이면 구 직렬 동작. 하네스 `tc-team/tests/s3_parallel_qa/`.
 > ⚠ **Workflow 도구가 세션에 없으면 여기서 진행 불가** — S3·S4는 Workflow 전용이다(동봉 대체 경로 없음). 계속 진행하는 척하지 말고 즉시 중단·보고: "Workflow(멀티에이전트 오케스트레이션) 도구가 필요합니다 — docs/PREREQUISITES.md §5". S0~S2 산출물은 보존되므로 도구 확보 후 S3부터 재개하면 된다.
 ④ 완료 통지 후 **journal에서 fmap 조립**(각 청크 result.rows 합치기 → `$WORK/tc_f_map.json`), 그 다음:
 ```bash

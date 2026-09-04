@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: Roboto, "Malgun Gothic", sans-serif; font-size: 13px; margin: 0; padding: 8px; color: #202124; }
+  #q { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px;
+       border: 1px solid #dadce0; border-radius: 4px; margin-bottom: 6px; }
+  #home { width: 100%; box-sizing: border-box; padding: 6px; margin-bottom: 8px; cursor: pointer;
+          border: 1px solid #dadce0; border-radius: 4px; background: #f1f3f4; font-size: 12px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 6px 8px; border-radius: 4px; cursor: pointer; word-break: break-all; }
+  li:hover { background: #e8f0fe; }
+  li.on { background: #d2e3fc; font-weight: 600; }
+  #n { color: #5f6368; font-size: 11px; margin: 4px 2px 6px; }
+  #err { color: #c5221f; font-size: 12px; padding: 4px 2px; }
+</style>
+</head>
+<body>
+  <input id="q" type="text" placeholder="TC 이름 검색" autocomplete="off">
+  <button id="home">← 대시보드</button>
+  <div id="n">불러오는 중…</div>
+  <div id="err"></div>
+  <ul id="list"></ul>
+
+<script>
+var ALL = [];
+
+function render(filter) {
+  var f = (filter || '').toLowerCase();
+  var items = ALL.filter(function (x) { return !f || x.name.toLowerCase().indexOf(f) >= 0; });
+  var ul = document.getElementById('list');
+  ul.innerHTML = '';
+  items.forEach(function (x) {
+    var li = document.createElement('li');
+    li.textContent = x.name;
+    li.onclick = function () {
+      Array.prototype.forEach.call(ul.children, function (n) { n.className = ''; });
+      li.className = 'on';
+      google.script.run
+        .withFailureHandler(function (e) { document.getElementById('err').textContent = e.message; })
+        .tcNavGoto(x.gid);
+    };
+    ul.appendChild(li);
+  });
+  document.getElementById('n').textContent = items.length + ' / ' + ALL.length + '개';
+}
+
+document.getElementById('q').addEventListener('input', function (e) { render(e.target.value); });
+document.getElementById('home').onclick = function () { google.script.run.tcNavHome(); };
+
+google.script.run
+  .withSuccessHandler(function (list) { ALL = list || []; render(''); })
+  .withFailureHandler(function (e) { document.getElementById('err').textContent = e.message; })
+  .tcNavList();
+</script>
+</body>
+</html>

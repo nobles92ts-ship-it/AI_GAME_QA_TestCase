@@ -67,6 +67,26 @@ stop_auth()      { log "[STOP:인증] $1 — 재인증 후 재실행"; exit 10; 
 stop_quota()     { log "[STOP:쿼터] $1 — 쿼터 실패, 재실행 대기"; exit 15; }
 stop_integrity() { log "[STOP:무결성] $1 — 사람 확인 필요"; exit 14; }
 fail()           { log "[CHAIN-FULL][실패] $1"; exit 1; }
+logw()           { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$CHAIN_LOG" >&2; }  # 명령치환 안에서 쓰는 log — stdout 오염 금지
+
+# 노브 검증 (2026-08-22 실측 재현) — bash `[[ ... -lt ... ]]` 는 피연산자를 **산술식으로 평가**한다.
+#   비수치 문자열·빈 값은 조용히 0 이 되고 에러도 rc 도 내지 않는다. 동시성 노브가 0 이 되면
+#   안쪽 배치 루프가 한 번도 안 돌고 → 인덱스가 안 늘고 → 바깥 while 이 **무한 공회전**한다.
+#   로그도 안 남고 런도 안 죽으므로 타임아웃·감시에도 걸리지 않는다.
+# 정책: 죽이지 않고 기본값 복귀 + 경고. 무인 경로(Loki `!tc-team`)에서 오타 한 글자로
+#   40분짜리 런 전체를 잃지 않게 하되, 잘못된 값이 조용히 통과하지는 못하게 한다.
+knob_int() { # $1=노브명 $2=원값 $3=기본값 [$4=상한] → 검증된 정수를 stdout 으로
+  local name="$1" raw="$2" def="$3" max="${4:-}"
+  if [[ ! "$raw" =~ ^[1-9][0-9]*$ ]]; then
+    logw "[CHAIN-FULL][경고] $name='$raw' 가 1 이상의 정수가 아니다 — 기본값 $def 로 되돌린다"
+    raw="$def"
+  fi
+  if [[ -n "$max" ]] && (( raw > max )); then
+    logw "[CHAIN-FULL][경고] $name=$raw 가 상한 $max 초과 — $max 로 클램프(무제한 팬아웃 = 순간 레이트 폭주)"
+    raw="$max"
+  fi
+  printf '%s' "$raw"
+}
 
 # 실행락 (SKILL.md S0-0 A정책 준용): 차단 없음 — 신선 락이면 경고만 남기고 인수.
 if [[ -f "$TEAMLOCK" ]]; then
@@ -126,7 +146,15 @@ fi
 
 # ══ S3 — 문장화 (결정론 골격 + LLM 청크 + 결정론 merge) ═══════════════════════
 s3_fix_agent() { # $1=위반 힌트 파일 (f_violations.json 또는 content_gate 출력 텍스트)
-  local hint; hint=$(head -c 6000 "$1")
+  # 힌트 상한 — content_gate.js 의 detail 절단(2026-08-25 제거)과 **한 쌍**이다.
+  # 둘 중 하나만 풀면 여기서 JSON 중간이 잘려 프롬프트에 깨진 JSON 이 들어간다.
+  # 절단이 나면 조용히 넘어가지 않고 경고한다 — 잘린 위반은 교정되지 않기 때문.
+  local maxb; maxb="$(knob_int TCTEAM_FIX_HINT_BYTES "${TCTEAM_FIX_HINT_BYTES:-200000}" 200000)"
+  local fsize; fsize=$(wc -c < "$1" 2>/dev/null || echo 0)
+  local hint; hint=$(head -c "$maxb" "$1")
+  if [[ "$fsize" =~ ^[0-9]+$ ]] && (( fsize > maxb )); then
+    log "[S3][경고] 교정 힌트 절단 — ${fsize}B → ${maxb}B. 잘린 위반은 교정되지 않는다(TCTEAM_FIX_HINT_BYTES 상향 필요)"
+  fi
   local p
   read -r -d '' p <<'PEOF' || true
 너는 TC F열 문장 교정 담당이다. 아래 위반 보고의 해당 idx 행만 고친다.
@@ -167,8 +195,13 @@ if [[ $ST -le 3 ]]; then
   #   - 자식 안 stop_auth/stop_quota의 exit 10/15는 서브셸만 종료 → 부모가 wait 코드로 회수해 전파.
   #   - 청크 재시도(2회)는 서브셸 안에 지역화 — 한 청크 재시도가 웨이브의 다른 청크를 막지 않는다.
   #   - 웨이브 전원 wait 완료 전에는 assemble-fmap 진입 불가 — 부분 완료가 merge로 새는 경로 없음.
-  S3PAR="${TCTEAM_S3_PAR:-4}"
-  N_CHUNK=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).ranges.length)" "$WORK/s3_ranges.json")
+  # 상한 8 — 실측 표본은 K=1~4 뿐이고 K=6 이상은 미측정(위 주석). 8 은 "재보려면 여기까지"의 경계이지 권장치가 아니다.
+  S3PAR="$(knob_int TCTEAM_S3_PAR "${TCTEAM_S3_PAR:-4}" 4 8)"
+  N_CHUNK=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).ranges.length)" "$WORK/s3_ranges.json") \
+    || fail "S3 청크 개수 계산 실패 — s3_ranges.json 확인"
+  # 수치 확인이 없으면 계산 실패(빈 값)가 `-lt` 에서 0 이 되어 웨이브 전체가 조용히 통째로 건너뛰어진다.
+  [[ "$N_CHUNK" =~ ^[0-9]+$ ]] || fail "S3 청크 개수가 수치가 아니다: '$N_CHUNK' — s3_ranges.json 확인"
+  (( N_CHUNK > 0 )) || fail "S3 청크 0개 — tc_skeleton.json 에 행이 없다(설계 산출물 확인)"
   log "[S3] 문장화 — 청크 ${N_CHUNK}개(25행/청크) · 동시 ${S3PAR}"
   S3_AUTH="" ; S3_QUOTA="" ; S3_FAIL=""
   CI=0
@@ -177,6 +210,7 @@ if [[ $ST -le 3 ]]; then
     # 구 직렬판이 그 자리에서 fail 하던 fail-fast 보존. S4 렌즈·커버리지와 달리 S3는 재진입 시
     # fmap_chunk_*.json 을 전부 지우고 다시 만들므로, 계속 띄운 청크의 산출물은 재개에 쓰이지 않는다(순수 낭비).
     [[ -n "$S3_AUTH$S3_QUOTA$S3_FAIL" ]] && break
+    CI_WAVE_START=$CI
     declare -A S3_PID=()
     B=0
     while [[ $B -lt $S3PAR && $CI -lt $N_CHUNK ]]; do
@@ -213,6 +247,9 @@ PEOF
       S3_PID[$S]=$!
       CI=$((CI+1)); B=$((B+1))
     done
+    # 진행 없음 감지 — 한 웨이브가 청크를 하나도 못 띄웠으면 다음 회전도 같은 결과다(무한 공회전).
+    # 노브 말고 다른 원인(범위 파일 손상 등)으로도 같은 정지가 나므로 노브 검증과 별도로 루프 쪽에 둔다.
+    (( CI > CI_WAVE_START )) || fail "S3 웨이브가 청크를 하나도 띄우지 못했다 (CI=$CI/$N_CHUNK · S3PAR=$S3PAR) — 무한 공회전 차단"
     for K in "${!S3_PID[@]}"; do
       wait "${S3_PID[$K]}"; rc=$?
       case $rc in
@@ -244,18 +281,37 @@ PEOF
     fi
   done
 
-  "$NODE" "$LIB/snapshot_local.js" "$WORK/tc_data.json" "$WORK/tcteam_snapshot.json" "$TAB" >>"$CHAIN_LOG" 2>&1 || fail "S3 snapshot_local 실패"
-  "$NODE" "$LIB/content_gate.js" "$WORK/tcteam_snapshot.json" > "$WORK/.content_gate_out.txt" 2>&1
-  rc=$?; cat "$WORK/.content_gate_out.txt" >>"$CHAIN_LOG"
-  if [[ $rc -eq 7 ]]; then
-    log "[S3] content_gate 위반 — 교정 1라운드"
+  # content_gate 교정 — 위 merge 교정(MROUND)과 같은 N라운드 구조로 통일(2026-08-25).
+  # [왜] 종전엔 **단발**이었다. 1회 교정 후 위반이 하나라도 남으면 곧바로 stop_integrity.
+  #   content_gate.js 의 detail 30건 절단과 겹쳐, 위반 30건을 넘는 런은 구조적으로 100% 정지했다
+  #   (실사고 2026-08-25 무기_강화: 49건 중 30건만 전달 → 19건 미교정 → 런 사망).
+  #   절단은 제거했고, 여기서는 남은 위반을 수렴시킬 라운드를 준다.
+  # [정체 감지] 위반이 안 줄면 라운드를 더 태워도 소용없다 — 규칙 충돌이므로 즉시 세우고 사람에게 넘긴다.
+  CMAX="$(knob_int TCTEAM_CGATE_ROUNDS "${TCTEAM_CGATE_ROUNDS:-3}" 3 5)"
+  CROUND=0; CPREV=-1
+  while :; do
+    "$NODE" "$LIB/snapshot_local.js" "$WORK/tc_data.json" "$WORK/tcteam_snapshot.json" "$TAB" >>"$CHAIN_LOG" 2>&1 || fail "S3 snapshot_local 실패"
+    "$NODE" "$LIB/content_gate.js" "$WORK/tcteam_snapshot.json" > "$WORK/.content_gate_out.txt" 2>&1
+    rc=$?; cat "$WORK/.content_gate_out.txt" >>"$CHAIN_LOG"
+    [[ $rc -eq 0 ]] && break
+    [[ $rc -ne 7 ]] && fail "S3 content_gate 오류 rc=$rc"
+    CNOW=$("$NODE" -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).violations))}catch(e){process.stdout.write("-1")}' "$WORK/.content_gate_out.txt" 2>/dev/null)
+    # 파싱 실패를 조용히 넘기지 않는다 — 넘기면 아래 정체 감지가 경고 없이 꺼진다(조용한 게이트).
+    if [[ ! "$CNOW" =~ ^[0-9]+$ ]]; then
+      CNOW=-1
+      log "[S3][경고] content_gate 출력에서 위반 수를 못 읽었다(값='$CNOW') — 정체 감지 비활성, 라운드 상한만으로 진행"
+    fi
+    if (( CROUND > 0 && CNOW >= 0 && CPREV >= 0 && CNOW >= CPREV )); then
+      stop_integrity "S3 content_gate 교정 정체 — 라운드 $CROUND 에서 위반이 안 줄었다(${CPREV}→${CNOW}). 규칙 충돌 의심: $WORK/.content_gate_out.txt"
+    fi
+    if (( CROUND >= CMAX )); then
+      stop_integrity "S3 content_gate 위반 교정 ${CMAX}회 실패(잔여 ${CNOW}건) — $WORK/.content_gate_out.txt 확인"
+    fi
+    CPREV=$CNOW; CROUND=$((CROUND+1))
+    log "[S3] content_gate 위반 ${CNOW}건 — 교정 라운드 ${CROUND}/${CMAX}"
     s3_fix_agent "$WORK/.content_gate_out.txt"
     "$NODE" "$UTIL/direct_convert.js" merge "$WORK" >>"$CHAIN_LOG" 2>&1 || stop_integrity "S3 교정 후 merge 재실패"
-    "$NODE" "$LIB/snapshot_local.js" "$WORK/tc_data.json" "$WORK/tcteam_snapshot.json" "$TAB" >>"$CHAIN_LOG" 2>&1 || fail "S3 snapshot 재생성 실패"
-    "$NODE" "$LIB/content_gate.js" "$WORK/tcteam_snapshot.json" >>"$CHAIN_LOG" 2>&1 || stop_integrity "S3 content_gate 재위반 — 사람 확인"
-  elif [[ $rc -ne 0 ]]; then
-    fail "S3 content_gate 오류 rc=$rc"
-  fi
+  done
   log "[S3] 완료 — 스냅샷 생성"
   mark s3
 fi
@@ -366,12 +422,18 @@ PEOF
   #   출력만 못 하고 죽어 시간이 100% 날아가고, 재시도까지 겹쳐 실측 88.3분(LLM 3회분)이 됐다.
   #   → S3 문장화와 같은 방식으로 rules를 끊고 결정론 조립. 청크는 서로 독립이라 병렬 실행하되
   #     동시 인스턴스는 COVPAR로 묶는다(무제한 팬아웃 = 순간 레이트 폭주).
-  COVSIZE="${TCTEAM_COV_CHUNK:-50}"
-  COVPAR="${TCTEAM_COV_PAR:-3}"
+  # COVSIZE 는 상한을 걸지 않는다 — 32k 출력 상한까지의 안전 최대치가 미실측이라 근거 있는 숫자를 못 쓴다.
+  #   (위 사고 3건이 "전량 한 번에"였다는 것만 알 뿐, 몇 개까지 안전한지는 재본 적이 없다.)
+  COVSIZE="$(knob_int TCTEAM_COV_CHUNK "${TCTEAM_COV_CHUNK:-50}" 50)"
+  COVPAR="$(knob_int TCTEAM_COV_PAR "${TCTEAM_COV_PAR:-3}" 3 8)"
   "$NODE" "$HELPERS" cov-ranges "$WORK/slices.json" "$WORK/s4_cov_ranges.json" "$COVSIZE" >>"$CHAIN_LOG" 2>&1 \
     || fail "S4 커버리지 청크 범위 계산 실패"
   rm -f "$WORK"/cov_chunk_*.json
-  N_COV=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).chunks.length)" "$WORK/s4_cov_ranges.json")
+  N_COV=$("$NODE" -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).chunks.length)" "$WORK/s4_cov_ranges.json") \
+    || fail "S4 커버리지 청크 개수 계산 실패 — s4_cov_ranges.json 확인"
+  # 수치 확인이 없으면 계산 실패(빈 값)가 `-eq 0` 에서 **참**이 되어 아래 단락으로 빠지고,
+  # 빈 coverage.json 이 "규칙 0개" 정상 산출로 위장된다. 0 은 반드시 진짜 0 이어야 한다.
+  [[ "$N_COV" =~ ^[0-9]+$ ]] || fail "S4 커버리지 청크 개수가 수치가 아니다: '$N_COV' — s4_cov_ranges.json 확인"
   if [[ "$N_COV" -eq 0 ]]; then
     # 규칙 0개(슬라이서가 아무것도 못 뽑은 기획서) — LLM 호출 없이 빈 원장. traceability가 이어서 판정한다.
     log "[S4][경고] slices.json 규칙 0개 — 커버리지 원장 빈 배열로 단락"
@@ -382,6 +444,7 @@ PEOF
   CI=0
   while [[ $CI -lt $N_COV ]]; do
     [[ -n "$COV_AUTH$COV_QUOTA" ]] && break   # 인증·한도는 남은 배치를 띄워봐야 같이 죽는다
+    CI_WAVE_START=$CI
     declare -A COV_PID=()
     B=0
     while [[ $B -lt $COVPAR && $CI -lt $N_COV ]]; do
@@ -418,6 +481,8 @@ PEOF
       COV_PID[$CI]=$!
       CI=$((CI+1)); B=$((B+1))
     done
+    # 진행 없음 감지 — S3 와 같은 이유(위 주석).
+    (( CI > CI_WAVE_START )) || fail "S4 커버리지 웨이브가 청크를 하나도 띄우지 못했다 (CI=$CI/$N_COV · COVPAR=$COVPAR) — 무한 공회전 차단"
     for K in "${!COV_PID[@]}"; do
       wait "${COV_PID[$K]}"; rc=$?
       case $rc in
@@ -486,6 +551,28 @@ PEOF
   mark s5
 fi
 
+# ── 골든 회귀 비교 (advisory · 비차단) — 2026-08-25 신설 ────────────────────────
+# [왜] lib/golden_diff.js 가 2026-07 부터 있었는데 체인 어디서도 호출하지 않았다(grep 0건).
+#      그래서 모델·effort 를 바꿔도 "좋아졌는지 나빠졌는지"를 볼 계기가 파이프라인에 0개였다.
+#      노브(TCTEAM_SONNET_MODEL·S1 effort)를 도입한 이상 관측 없이는 어떤 조정도 판정 불가다.
+# [비차단] 기준선이 없거나 도구가 죽어도 런은 계속된다 — 절대 stop_integrity/fail 로 올리지 않는다.
+#      회귀(exit 9)도 로그 경고까지만. 차단 게이트로 승격하려면 오탐률을 먼저 실측할 것.
+GOLDEN="${TCTEAM_GOLDEN_DIR:-$TCTEAM/golden}/$FEAT.json"
+if [[ -f "$GOLDEN" && -f "$WORK/tcteam_tc_final.json" ]]; then
+  "$NODE" "$LIB/golden_diff.js" "$GOLDEN" "$WORK/tcteam_tc_final.json" \
+    >"$WORK/golden_diff.json" 2>>"$CHAIN_LOG"
+  grc=$?
+  if [[ $grc -eq 9 ]]; then
+    log "[골든][회귀] 기준선과 구조가 다르다 — $WORK/golden_diff.json 확인 (advisory: 런은 계속)"
+  elif [[ $grc -eq 0 ]]; then
+    log "[골든] 기준선 대비 회귀 없음"
+  else
+    log "[골든][경고] 비교 실패 rc=$grc — 판정 없음(기준선 유무·JSON 형식 확인)"
+  fi
+else
+  log "[골든] 기준선 없음 — 비교 생략 ($GOLDEN)"
+fi
+
 # ══ S6 — 라이브 기록 + read-back (시트 1회 접촉) ══════════════════════════════
 if [[ $ST -le 6 ]]; then
   log "[S6] 시트 기록 (sheet_write)"
@@ -520,7 +607,10 @@ if [[ $ST -le 7 ]]; then
 fi
 
 # Evidence Pack 공통 봉투 (정본: {WORK_ROOT}/tool/_registry/evidence_pack.schema.json) — 실패해도 체인에 영향 없음
-"$NODE" "$LIB/evidence_pack.js" --feature "$FEAT" --work "$WORK" --spec "$SPEC" --sheet "$SHEET_ID" --tab "$(resolved_tab)" >>"$CHAIN_LOG" 2>&1 || log "[EVIDENCE][경고] evidence pack 기록 실패 (체인 영향 없음)"
+# frc(S7 완료처리 종료코드)를 반드시 넘긴다. 안 넘기면 봉투가 verdict:PASS 를 찍는데,
+# finalize.sh 는 try/continue 라 일부 FINAL 단계가 실패해도 rc=20 으로 끝난다 → 실패 런이 PASS 로 봉인됐다.
+# S7 을 건너뛴 실행에서는 frc 가 unbound 이므로 ${frc:-} (set -u 방어) — 미전달 = PARTIAL 로 떨어진다.
+"$NODE" "$LIB/evidence_pack.js" --feature "$FEAT" --work "$WORK" --spec "$SPEC" --sheet "$SHEET_ID" --tab "$(resolved_tab)" --frc "${frc:-}" >>"$CHAIN_LOG" 2>&1 || log "[EVIDENCE][경고] evidence pack 기록 실패 (체인 영향 없음)"
 
 log "[CHAIN-FULL] 전 구간 완료 — $FEAT"
 exit 0
