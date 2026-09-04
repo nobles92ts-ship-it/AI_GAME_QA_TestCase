@@ -35,18 +35,33 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 모델 alias 변환 정책 (2026-05-26 갱신):
-# - sonnet → claude-sonnet-4-6 강제 변환 (1M variant 없는 full ID, 부모 세션과 무관하게 200K 강제)
-# - opus / haiku 등 다른 alias는 그대로 전달 (CLI 표준 라우팅)
+# 모델 alias 변환 정책 (2026-08-27 갱신 — opus 도 노브화 + sonnet 기본값 승급):
+# - sonnet → $TCTEAM_SONNET_MODEL  (기본값 claude-sonnet-5)
+# - opus   → $TCTEAM_OPUS_MODEL    (기본값 claude-opus-5)
+#   전환·시험은 env 로만 한다:  TCTEAM_SONNET_MODEL=claude-sonnet-4-6 bash <파이프라인>
+#   롤백 = env 를 주는 것(무비용). 이 저장소는 git 이 아니라 롤백 경로를 코드 밖에 둔다.
+# - ⚠ 별칭(sonnet/opus)을 그대로 CLI 에 흘리지 않는 이유 2가지:
+#   (a) 재현성 — 별칭이 가리키는 모델은 CLI 업데이트마다 로그 한 줄 없이 바뀐다. S3PAR=4·
+#       COVSIZE=50·재시도 상한 2회·handoff 임계(n=165)가 전부 '그때 그 모델' 기준이라,
+#       회귀가 나도 '언제부터'를 못 짚는다. 전환 시점은 사람이 정한다.
+#   (b) 1M 누출 — 'sonnet[1m]'·'opus[1m]' 도 이 case 를 타야 200K 로 접힌다.
+#       ⚠ settings.json 의 "model": "opus[1m]" 이 실사용 중이라 이 분기가 실제 방어다.
+# - sonnet 기본값 승급 근거(2026-08-27 A/B 실측, 108행·190행 2런):
+#   s4 −35~54% · 같은 8청크 웨이브 208→81초 · 재시도 0 유지 · 구조 지표 전부 Δ0 ·
+#   1NF(복합 기대결과 금지) 준수는 4-6보다 개선. 257행급은 미검증.
+# - haiku 등 다른 alias는 그대로 전달 (CLI 표준 라우팅)
 # - 1M 차단 추가 안전망: 위쪽 env unset (ANTHROPIC_BETAS 등)
-SONNET_FIXED_ARGS=()
+SONNET_PIN="${TCTEAM_SONNET_MODEL:-claude-sonnet-5}"
+OPUS_PIN="${TCTEAM_OPUS_MODEL:-claude-opus-5}"
+MODEL_FIXED_ARGS=()
 for arg in "${NEW_ARGS[@]}"; do
   case "$arg" in
-    sonnet|"sonnet[1m]") SONNET_FIXED_ARGS+=("claude-sonnet-4-6") ;;
-    *)                   SONNET_FIXED_ARGS+=("$arg") ;;
+    sonnet|"sonnet[1m]") MODEL_FIXED_ARGS+=("$SONNET_PIN") ;;
+    opus|"opus[1m]")     MODEL_FIXED_ARGS+=("$OPUS_PIN") ;;
+    *)                   MODEL_FIXED_ARGS+=("$arg") ;;
   esac
 done
-NEW_ARGS=("${SONNET_FIXED_ARGS[@]}")
+NEW_ARGS=("${MODEL_FIXED_ARGS[@]}")
 
 # 디버그 관측 (L4-F10 사인 확정용, 2026-06-12): env RUNAGENT_DEBUG_FILE 지정 시 CLI 내부 로그를 전용 파일로 — stdout/stderr 무오염
 if [[ -n "$RUNAGENT_DEBUG_FILE" ]]; then

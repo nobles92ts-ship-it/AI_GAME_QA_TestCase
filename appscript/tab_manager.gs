@@ -1,5 +1,8 @@
 // ─── 상수 설정 ─────────────────────────────────────────────────────────────
 const FIXED_TABS_ORDER = ['대시보드', 'BVT(Trunk)'];
+// 이름에 이 문자열이 들어간 탭은 정렬 대상에서 빼고 현재 자리를 그대로 유지한다.
+// (색상 규칙은 기존과 동일하게 적용 — 순서만 고정)
+const PINNED_NAME_KEYWORD = 'BVT';
 const SPREADSHEET_ID   = '__SPREADSHEET_ID__'; // deploy_appscript.js가 배포 시 자동 치환
 const PC_COL           = 8;   // H열 (1-based)
 const DATA_START_ROW   = 2;
@@ -81,12 +84,17 @@ function colorAndSortTabs(ss) {
   let colorChanged = 0;
 
   // ─ 색상 판정 + 변경 필요 시에만 적용
+  const pinnedNames = {};   // 정렬 제외 탭 (현재 자리 유지)
   for (const sheet of allSheets) {
     const name = sheet.getName();
-    if (FIXED_TABS_ORDER.includes(name)) continue;
     // 숨김 탭은 색상/정렬/이동 대상에서 제외 → 숨김 유지.
     // (setActiveSheet/moveActiveSheet가 숨김 시트를 활성화하면 숨김이 풀려 대시보드 필터를 통과해버림)
     if (sheet.isSheetHidden()) continue;
+
+    const isPinned = name.indexOf(PINNED_NAME_KEYWORD) !== -1 || FIXED_TABS_ORDER.includes(name);
+    if (isPinned) pinnedNames[name] = true;
+
+    if (FIXED_TABS_ORDER.includes(name)) continue;
 
     const colorKey = getTabColor(sheet);
     const targetColor = colorKey === 'DEFAULT' ? null : COLORS[colorKey];
@@ -108,6 +116,8 @@ function colorAndSortTabs(ss) {
       colorChanged++;
     }
 
+    if (isPinned) continue;   // 색상만 칠하고 정렬 버킷에는 넣지 않음
+
     switch (colorKey) {
       case 'RED':    redSheets.push(sheet);    break;
       case 'BLUE':   blueSheets.push(sheet);   break;
@@ -117,12 +127,26 @@ function colorAndSortTabs(ss) {
   }
 
   // ─ 목표 순서 (1-based index)
+  //   대시보드 = 항상 1번. 고정 탭(BVT 포함)은 지금 자리를 그대로 지키고,
+  //   나머지 탭만 기본 → 노랑 → 빨강 → 파랑 순으로 남은 자리에 채운다.
+  const dashSheet = ss.getSheetByName(DASHBOARD_TAB);
+  const slotSheets = allSheets.filter(function (s) {
+    return !s.isSheetHidden() && s.getName() !== DASHBOARD_TAB;
+  });
+  const sortedSheets = [].concat(noColorSheets, yellowSheets, redSheets, blueSheets);
+
+  const slots = new Array(slotSheets.length);
+  for (let i = 0; i < slotSheets.length; i++) {
+    if (pinnedNames[slotSheets[i].getName()]) slots[i] = slotSheets[i];
+  }
+  let nextSorted = 0;
+  for (let i = 0; i < slots.length; i++) {
+    if (!slots[i]) slots[i] = sortedSheets[nextSorted++];
+  }
+
   const desiredOrder = [];
-  const dashSheet = ss.getSheetByName(FIXED_TABS_ORDER[0]);
-  const bvtSheet  = ss.getSheetByName(FIXED_TABS_ORDER[1]);
   if (dashSheet) desiredOrder.push(dashSheet);
-  if (bvtSheet)  desiredOrder.push(bvtSheet);
-  desiredOrder.push(...noColorSheets, ...yellowSheets, ...redSheets, ...blueSheets);
+  desiredOrder.push(...slots);
 
   // ─ 위치가 다른 경우에만 이동 (이미 정렬된 탭은 건너뜀)
   let moved = 0;

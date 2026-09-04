@@ -143,6 +143,19 @@ alert_5() {
   say "══════════════════════════════════════════════════════════════"
 }
 
+# 5a 에이전트 1회 실행 — 최초 도출과 교정 라운드가 같은 경로를 쓰도록 분리(2026-09-03).
+# 쿼터·인증 감지는 pipeline_retry.sh가 소유(rc 10=인증, 11=쿼터) — 있으면 경유한다.
+_run_5a() {
+  if [[ -f "$UTIL/pipeline_retry.sh" ]]; then
+    bash "$UTIL/pipeline_retry.sh" "$SPEC/.final5_stderr.log" -- \
+      bash "$RUNAGENT" -p --permission-mode bypassPermissions --model sonnet "$1" >/dev/null 2>&1
+    arc=$?
+  else
+    bash "$RUNAGENT" -p --permission-mode bypassPermissions --model sonnet "$1" >/dev/null 2>&1
+    arc=$?
+  fi
+}
+
 # ── FINAL-5: 기획 확인 라벨링 (5a 도출=agent 위임 / 5b 기재=스크립트) ─────────
 final_5() {
   rm -f "$SPEC/.final5_alert.txt" "$SPEC/.final5_notice.txt"   # 지난 런의 배너를 물려받지 않는다
@@ -155,14 +168,7 @@ final_5() {
 다른 파일 금지. 저장 후 \"LABELS_DONE\"만 출력."
   # 쿼터·인증 감지는 pipeline_retry.sh가 소유(rc 10=인증, 11=쿼터) — 있으면 경유한다.
   local arc=0
-  if [[ -f "$UTIL/pipeline_retry.sh" ]]; then
-    bash "$UTIL/pipeline_retry.sh" "$SPEC/.final5_stderr.log" -- \
-      bash "$RUNAGENT" -p --permission-mode bypassPermissions --model sonnet "$p" >/dev/null 2>&1
-    arc=$?
-  else
-    bash "$RUNAGENT" -p --permission-mode bypassPermissions --model sonnet "$p" >/dev/null 2>&1
-    arc=$?
-  fi
+  _run_5a "$p"
   [[ $arc -eq 10 ]] && say "FINAL-5a 인증 만료 — 재로그인 후 라벨링만 재실행 필요"
   [[ $arc -eq 11 ]] && say "FINAL-5a 쿼터 초과 — 리셋 후 라벨링만 재실행 필요"
   # 산출물 검증 — 깨진 JSON을 apply_labeling에 넘기지 않는다.
@@ -170,7 +176,19 @@ final_5() {
   local vout vrc
   vout=$("$NODE" "$UTIL/validate_labels.js" "$SPEC/_labels.json" 2>&1); vrc=$?
   while IFS= read -r l; do [[ -n "$l" ]] && say "FINAL-5a $l"; done <<< "$vout"
-  if [[ $vrc -ne 0 ]]; then
+  # rc 5 = 질문줄 영문 키(차단 등급, 2026-09-03 오너 지시). 내용은 멀쩡하므로 버리지 않고
+  # 교정 라운드를 1회 돌린다 — S3 F열 재문장화 루프와 같은 방식(런을 죽이지 않고 그 항목만 고침).
+  if [[ $vrc -eq 5 ]]; then
+    say "FINAL-5a 질문줄 영문 키 — 교정 라운드 1"
+    _run_5a "$p
+
+⚠ 교정 라운드다. 아래 검사 결과에서 지목된 항목의 **질문줄에 영문 키가 그대로 노출**돼 있다.
+한국어로 묻고 키는 문장 끝 괄호 각주로 내려라 (라벨링_기준.md §문장 형식). 지목되지 않은 항목은 건드리지 마라.
+$vout"
+    vout=$("$NODE" "$UTIL/validate_labels.js" "$SPEC/_labels.json" 2>&1); vrc=$?
+    while IFS= read -r l; do [[ -n "$l" ]] && say "FINAL-5a(교정후) $l"; done <<< "$vout"
+  fi
+  if [[ $vrc -eq 2 ]]; then
     alert_5 "_labels.json 검증 실패 (위 FINAL-5a 라인 참조) — 기획 확인 요청이 한 건도 기재되지 않았습니다"
     RESULT[5]="✗"; return
   fi
@@ -181,6 +199,12 @@ final_5() {
   say "FINAL-5b 라벨 기재"
   if "$NODE" "$UTIL/apply_labeling.js" "$SHEET_ID" "$TAB" "$SPEC/_labels.json"; then
     RESULT[5]="✓"
+    # 교정 라운드 뒤에도 질문줄 영문 키가 남았으면 — 기재는 했으되 초록불로 끝내지 않는다.
+    # 라벨을 버리면 30건이 통째로 사라지므로 '기재 + 실패 보고'가 손실 없는 차단이다.
+    if [[ $vrc -eq 5 ]]; then
+      alert_5 "질문줄 영문 키가 교정 라운드 뒤에도 남았습니다 — 기재는 완료됐으나 라벨링_기준.md §문장 형식 위반입니다 (항목 번호는 위 FINAL-5a(교정후) 라인)"
+      RESULT[5]="✗"
+    fi
     # 기재는 됐고 문구만 손볼 건 → alert_5(실패)와 통을 나눈다.
     # 같은 통에 넣으면 chain_helpers.js가 헤더를 ⚠(일부 실패)로 뒤집어 성공한 런이 실패로 보고된다.
     if [[ "$LABEL_BANNED" -gt 0 ]]; then

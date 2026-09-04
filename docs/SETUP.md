@@ -48,7 +48,7 @@ Setup created `.env` from the template. Edit it and provide real values for:
 | `CLAUDE_HOME` | Absolute path to your Claude Code user directory (`~/.claude`). |
 | `GOOGLE_OAUTH_CLIENT_SECRET_PATH` | Leave as default (`./credentials/client_secret.json`) and place the file there in Step 4. |
 | `MASTER_SPREADSHEET_ID` | Google Sheets ID of your master sheet (from the sheet URL). |
-| `TC_DRIVE_FOLDER_ID`, `SPEC_DRIVE_FOLDER_ID` | Google Drive folder IDs for output sync (optional). |
+| `DRIVE_FOLDER_ID` | Google Drive root folder ID for output sync (optional). Per-feature subfolders are created automatically. Leave it unset to keep outputs local only. |
 | `MASTER_DASHBOARD_ID` | Dashboard sheet ID (optional — leave the placeholder if you don't use the dashboard). |
 | `INTEGRATION_TC_ID`, `GAME_QA_ID` | Other dashboard targets (optional). |
 | `CONFLUENCE_SITE` | Your Atlassian site, e.g. `https://acme.atlassian.net`. |

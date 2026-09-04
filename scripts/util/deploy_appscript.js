@@ -32,6 +32,11 @@ const GS_FILES = [
     { name: 'tab_manager',      path: path.join(__dirname, '../../appscript/tab_manager.gs') },
     { name: 'bvt_slack',        path: path.join(__dirname, '../../appscript/bvt_slack.gs') },
     { name: 'dashboard_builder', path: path.join(__dirname, '../../appscript/dashboard_builder.gs') },
+    { name: 'tc_nav',           path: path.join(__dirname, '../../appscript/tc_nav.gs') },
+];
+// 사이드바/다이얼로그용 HTML — .gs와 마찬가지로 PUT 전체 교체 대상이므로 여기에 전부 포함할 것
+const HTML_FILES = [
+    { name: 'TcNavSidebar', path: path.join(__dirname, '../../appscript/TcNavSidebar.html') },
 ];
 const SLACK_CONFIG_PATH = path.join(__dirname, 'slack_config.json'); // __SLACK_TOKEN__ 치환용
 
@@ -43,6 +48,10 @@ const SCOPES = [
     // 원격 함수 실행(run_appscript_function.js)용 — scripts.run + 배포 관리 + 외부요청 매니페스트 스코프
     'https://www.googleapis.com/auth/script.deployments',
     'https://www.googleapis.com/auth/script.external_request',
+    // 매니페스트(appsscript.json)가 요구하는 스코프는 전부 여기 있어야 한다 —
+    // 하나라도 빠지면 scripts.run이 "NOT_FOUND reading from storage"로 거부한다.
+    // tc_nav.gs 사이드바 때문에 추가된 스코프가 빠져 run_appscript_function.js가 죽어 있었다(2026-09-03).
+    'https://www.googleapis.com/auth/script.container.ui',
 ];
 
 async function getAuthClient() {
@@ -144,12 +153,20 @@ async function uploadCode(auth, scriptId) {
             .replace(/__SLACK_TOKEN__/g, slackToken)
     }));
 
+    const htmlFiles = HTML_FILES.map(({ name, path: filePath }) => ({
+        name,
+        type: 'HTML',
+        source: fs.readFileSync(filePath, 'utf-8')
+            .replace(/__SPREADSHEET_ID__/g, SPREADSHEET_ID)
+    }));
+
     await auth.request({
         method: 'PUT',
         url: `https://script.googleapis.com/v1/projects/${scriptId}/content`,
         data: {
             files: [
                 ...gsFiles,
+                ...htmlFiles,
                 {
                     name: 'appsscript',
                     type: 'JSON',
@@ -166,7 +183,9 @@ async function uploadCode(auth, scriptId) {
                         oauthScopes: [
                             'https://www.googleapis.com/auth/spreadsheets',
                             'https://www.googleapis.com/auth/script.scriptapp',
-                            'https://www.googleapis.com/auth/script.external_request'
+                            'https://www.googleapis.com/auth/script.external_request',
+                            // tc_nav.gs 사이드바(getUi/showSidebar)용
+                            'https://www.googleapis.com/auth/script.container.ui'
                         ]
                     }, null, 2)
                 }
