@@ -9,7 +9,7 @@
 
 > **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. Stages S3·S4 require the **Workflow (multi-agent orchestration) tool** in that session — without it the pipeline halts at S3 ([PREREQUISITES §5](docs/PREREQUISITES.md)). A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
 
-[![Landing — Interactive overview](https://img.shields.io/badge/Landing-Interactive%20overview-10B981?style=flat)](https://tc-team-v2-landing.vercel.app/docs.html#agents)
+[![Write-up — how it was built](https://img.shields.io/badge/write--up-how%20it%20was%20built-10B981?style=flat)](https://nobles92ts-ship-it.github.io/en/built/tc-team/)
 [![Docs — Architecture](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue?style=flat)](docs/ARCHITECTURE.md)
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
@@ -83,7 +83,7 @@ The 7 fabrications are the important number. In the prior run the same failure m
 | **S6** | Live write | code | **One** sheet touch, then read-back 0-diff verification |
 | **S7** | Completion | code | Confidence scoring, labelling, dashboard, Drive sync |
 
-Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · visual walkthrough: [landing page](https://tc-team-v2-landing.vercel.app/docs.html#agents)
+Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · why it is shaped this way: [write-up](https://nobles92ts-ship-it.github.io/en/built/tc-team/) ([한국어](https://nobles92ts-ship-it.github.io/ko/built/tc-team/))
 
 ### The gates
 
