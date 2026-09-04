@@ -3,13 +3,18 @@
 <a href="https://claude.ai/code">
   <img src="https://img.shields.io/badge/Built%20with-Claude%20Code-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" height="40">
 </a>
+<a href="https://nobles92ts-ship-it.github.io/en/built/tc-team/">
+  <img src="https://img.shields.io/badge/Read%20the%20write--up-how%20%26%20why-10B981?style=for-the-badge" height="40">
+</a>
 
 > **Deterministic game-QA test-case pipeline.**
 > Hand it a spec and a sheet — get back a reviewed test-case tab whose structure, gates, and coverage ledger are owned by code, not by a model.
 
 > **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. Stages S3·S4 require the **Workflow (multi-agent orchestration) tool** in that session — without it the pipeline halts at S3 ([PREREQUISITES §5](docs/PREREQUISITES.md)). A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
 
-[![Write-up — how it was built](https://img.shields.io/badge/write--up-how%20it%20was%20built-10B981?style=flat)](https://nobles92ts-ship-it.github.io/en/built/tc-team/)
+> 📖 **Before the setup steps, read why it is shaped this way** — the eight stages, why review is adversarial, why the sheet is written exactly once, and the two lessons that cost something:
+> **[The tc-team write-up](https://nobles92ts-ship-it.github.io/en/built/tc-team/)** · **[한국어](https://nobles92ts-ship-it.github.io/ko/built/tc-team/)**
+
 [![Docs — Architecture](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue?style=flat)](docs/ARCHITECTURE.md)
 [![Docs — Setup](https://img.shields.io/badge/docs-SETUP.md-blue?style=flat)](docs/SETUP.md)
 [![Docs — Prerequisites](https://img.shields.io/badge/docs-PREREQUISITES.md-blue?style=flat)](docs/PREREQUISITES.md)
