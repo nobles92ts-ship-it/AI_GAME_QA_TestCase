@@ -220,7 +220,7 @@ AI_GAME_QA_TestCase/
 │   └── haiku/
 │
 ├── tc-team/                      # The deterministic engine
-│   ├── lib/                      # 19 modules — gates, slicer, ledger, sheet I/O
+│   ├── lib/                      # 22 modules — gates, slicer, ledger, impact scope, sheet I/O
 │   ├── scripts/                  # Chain drivers + confidence scoring
 │   ├── test/                     # 16 suites
 │   └── docs/                     # Driver reference, EVAL digest, guides
@@ -230,6 +230,7 @@ AI_GAME_QA_TestCase/
 │   └── util/                     # Shared Node utilities + the 2 linters
 │       └── expander/             # Design expansion & schema validation
 │
+├── team/                         # Pipeline board + config originals (.example / .template)
 ├── appscript/                    # Google Apps Script (tabs, dashboard, nav sidebar, Slack)
 ├── docs/                         # Setup, prerequisites, architecture
 ├── commands/                     # Slash commands

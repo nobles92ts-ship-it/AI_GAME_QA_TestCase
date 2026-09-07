@@ -22,6 +22,15 @@ const spec = arg('spec', '');
 const sheet = arg('sheet', '');
 const tab = arg('tab', '');
 
+// 완료처리(S7) 종료코드. 전달 안 되면 "S7 을 못 봤다"는 뜻이므로 PASS 를 주장하지 않는다.
+// [왜] 이 봉투는 오래 verdict:'PASS' 하드코딩이었고 호출측(run_pipeline_full.sh)이 frc 를
+//      버렸다. finalize.sh 는 try/continue 정책이라 일부 FINAL 단계가 실패해도 exit 20 으로
+//      끝나고 체인은 "전 구간 완료"로 exit 0 한다 — 그 런의 봉투도 PASS 를 찍고 있었다.
+//      실물: 자동_사냥_기능_v3_20260816_034645.json (FINAL-0 ✗ 인데 verdict PASS)
+const frcRaw = arg('frc', '');
+const frc = frcRaw === '' ? null : Number(frcRaw);
+const verdict = frc === 0 ? 'PASS' : 'PARTIAL';   // 스키마 허용값: PASS | WARN | FAIL | PARTIAL
+
 let tcCount = null;
 for (const name of ['tc_final.json', 'tcteam_tc_final.json', 'v3_tc_final.json']) {
   try {
@@ -50,8 +59,11 @@ const pack = {
   schema: 'evidence-pack/v1',
   pipeline: 'tc-team',
   run_id: runId,
-  verdict: 'PASS', // 체인 성공 종점에서만 호출됨 — 실패 런은 종점에 도달하지 않는다
-  summary: `tc-team 전 구간 완료 — ${feature}` + (tcCount != null ? ` (TC ${tcCount}행)` : ''),
+  verdict,
+  summary: (verdict === 'PASS'
+    ? `tc-team 전 구간 완료 — ${feature}`
+    : `tc-team 완주하되 완료처리 일부 미확인 — ${feature} (S7 rc=${frc === null ? '미전달' : frc})`)
+    + (tcCount != null ? ` (TC ${tcCount}행)` : ''),
   counts: { tc_rows: tcCount },
   env: { node: os.hostname(), target: `시트 ${sheet} · 탭 ${tab}` },
   source: { type: 'confluence', ref: confUrl, revision: '' },

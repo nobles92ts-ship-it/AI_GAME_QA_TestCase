@@ -201,7 +201,14 @@ if (cmd === 'extract-s3-rules') {
 
 } else if (cmd === 'readback-diff') {
   // final.json rows: 10열 [A..J] (인덱스 0..9). dump: read_gsheet_data.js 출력 {rows:[[...]]}.
-  // tc_id(A열, 숫자 3자리) 조인으로 A~G(0..6)+J(9) 비교 — 헤더/패널 행 오프셋에 강건.
+  // tc_id(A열, 숫자 3자리) 조인으로 A~G + 비고 비교 — 헤더/패널 행 오프셋에 강건.
+  // ⚠ final과 시트는 열 수가 다르다: 시트는 11열(… I=모바일결과, J=링크, K=비고)이고
+  //   final의 10번째(인덱스 9)는 sheet_write PICK7=[1,2,3,4,5,6,9]가 비고로 보내는 값이다.
+  //   → 비고는 final 9 ↔ 시트 10 으로 대응시켜야 한다. 같은 인덱스(9)끼리 비교하면 시트의 J(링크,
+  //   항상 공백)와 대조하게 되어, 비고가 채워진 스펙에서 전량 오탐한다.
+  //   [경위] 생성 양식이 개선되며 시트에 '링크' 열(J)이 추가돼 11열이 됐고, 비교기가 따라가지 못했다.
+  //   비고가 전부 공백이던 스펙에서는 양쪽 다 공백이라 드러나지 않다가, 추후구현이 많은 스펙에서
+  //   표면화됐다 (2026-09-04 아바타_탈것_뽑기_연출: 104행 전량 오탐으로 S6 정지).
   const fin = readJ(a[0]);
   const dump = readJ(a[1]);
   const finRows = fin.rows || fin;
@@ -224,15 +231,16 @@ if (cmd === 'extract-s3-rules') {
     }
   }
   if (errCells) { console.log(`시트 평가 오류 셀 ${errCells}건 (#ERROR!/#REF!)`); process.exit(1); }
-  const COLS = [0, 1, 2, 3, 4, 5, 6, 9];
+  // [final 인덱스, dump(시트) 인덱스]
+  const COLS = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [9, 10]];
   let diffs = 0;
   for (const fr of finRows) {
     const id = String(fr[0]).trim();
     const dr = dumpById.get(id);
     if (!dr) { console.log('시트에 없는 tc_id: ' + id); diffs++; continue; }
-    for (const ci of COLS) {
-      if (norm(fr[ci]) !== norm(dr[ci])) {
-        if (diffs < 5) console.log(`diff tc_id=${id} col=${'ABCDEFGHIJ'[ci]}: [${norm(fr[ci]).slice(0, 40)}] ≠ [${norm(dr[ci]).slice(0, 40)}]`);
+    for (const [fi, di] of COLS) {
+      if (norm(fr[fi]) !== norm(dr[di])) {
+        if (diffs < 5) console.log(`diff tc_id=${id} col=${'ABCDEFGHIJK'[di]}: [${norm(fr[fi]).slice(0, 40)}] ≠ [${norm(dr[di]).slice(0, 40)}]`);
         diffs++;
       }
     }

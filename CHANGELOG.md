@@ -4,6 +4,36 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.0] — 2026-09-07
+
+**Given two specification documents, the run covered one of them, passed every gate, and reported success.**
+
+### Fixed
+
+- **A second specification document was filed as a link, not as source.** When the user supplies more than one spec, the second was being written to `linked/` — the folder for documents the body merely references. Two rules then combine badly: the coverage ledger slices `confluence_raw.md` and only that file, and the analysis rules forbid promoting a linked document into scope. So the second document contributed nothing, the ledger never knew it existed, uncovered-item count stayed at zero, and the read-back check passed. Every signal was green. Merging the two into one raw file produced 70 test cases that came from the second document alone. Multiple specs are now merged into a single `confluence_raw.md` with a provenance header naming each source and its precedence; `sheet_info.txt` records the additional URL so later comparisons do not diff against the primary document only. The one-hop prefetch into `linked/` is unchanged — the test is whether the user asked for test cases from that document.
+
+- **Resuming a run silently reverted column F.** The patch ledger is keyed by `['edit', tc_id, column, after]`. A ledger left over from the previous attempt matches everything, so `edit_cell` skips the entire batch — and because resume restarts from the original snapshot, the column reverts to its pre-correction state. Row counts and exit codes both look normal; the only signal is a skip count. `{"ok":true,"applied":3,"skipped":94,"conflicts":0}` is not a success. The ledger is now cleared before a resume, and the pass/fail test is stated in the runbook: applied equals the patch count, skipped is zero.
+
+- **The duplicate gate deleted rows that the quality pass had made identical.** Two rows are not duplicates because they read the same now; they are duplicates if they read the same in the pre-correction snapshot. The quality lens, removing abstract phrasing, was also stripping the interruption-point and prior-state prefix that distinguished exception cases — and merging the result destroyed per-interval recovery coverage (five rows collapsed into two pairs). The gate now compares against the snapshot first: differing originals mean restore the prefix, matching originals mean a genuine design duplicate.
+
+- **Update scoping read a stale local snapshot.** The snapshot is written once, at creation. Judging impact from it against a sheet that has since moved gave 100 rows and 7 groups where the live sheet had 143 and 2, and raised 30 alarms for 19 real changes. Scope and completeness are now decided by re-reading the live sheet.
+
+### Added
+
+- **Impact-scope extraction** (`tc-team/lib/impact_scope.js`). Graph neighbours at one and two hops are promoted into scope only when the concept actually appears in the specification body, filtered by document frequency so that domain-common words do not carry everything through. A human-approved alias table covers the case where the concept is present but the node's title uses a different token; `team/impact_aliases.json.template` documents the format and the criteria for adding an entry. Absent the table the tool runs unchanged, with alias rescue disabled.
+
+- **Cross-reference stub audit and count normalisation** (`crossref_stub_audit.js`, `crossref_counts_normalize.js`), plus `scripts/confidence/sync_jtags.js` for finalisation.
+
+### Changed
+
+- **Adding to an existing tab is now a distinct input branch.** "Add this improvement spec to the existing X test cases" means merging into that tab under its own classification and identifier range — not creating an `_vN` tab beside it. Improvements that contradict existing cases are an update, not an append, and are surfaced before anything is written.
+
+- **Pipeline steps are no longer invoked in the background individually.** The standard is one synchronous process. Dispatching each segment separately buried the completion signal until the next session became active, once for thirteen hours.
+
+- **References to internal operational documents are marked as excluded.** The public distribution does not ship the backlog, the pre-run checklist, or the incident history, and the rules now say so where they used to link to them.
+
+---
+
 ## [v4.2.3] — 2026-09-04
 
 **A gate truncated its own report, so every large run failed the same way and no one could see why.**

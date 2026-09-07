@@ -61,23 +61,23 @@ try{
   const md=fs.readFileSync(process.argv[1],'utf8');
   const m=md.match(/^-\s*순서:\s*\*\*(.+?)\*\*/m);
   if(!m) throw new Error('순서 라인 없음');
-  const nums=(m[1].match(/\d+/g)||[]).filter(n=>['0','1','2','3','5'].includes(n));
+  const nums=(m[1].match(/\d+/g)||[]).filter(n=>['0','1','2','3','5','7'].includes(n));
   if(!nums.length) throw new Error('단계 번호 없음');
   process.stdout.write([...new Set(nums)].join(' '));
-}catch(e){ process.stderr.write('[경고] 순서 파싱 실패('+e.message+') — 기본값 0 1 2 5 3 사용\n'); process.stdout.write('0 1 2 5 3'); }
+}catch(e){ process.stderr.write('[경고] 순서 파싱 실패('+e.message+') — 기본값 0 1 2 5 3 7 사용\n'); process.stdout.write('0 1 2 5 3 7'); }
 " "$RULES_MD")   # stderr(경고)은 캡처하지 않고 그대로 흘려보낸다
-[[ -z "$ORDER" ]] && ORDER="0 1 2 5 3"
+[[ -z "$ORDER" ]] && ORDER="0 1 2 5 3 7"
 if [[ -n "$ONLY" ]]; then
-  # 단발 재실행: 지정 단계만. 규칙서 순서는 무시하되 지원 단계(0·1·2·3·5)로 필터.
-  ORDER=$(echo "$ONLY" | tr ',' ' ' | tr -s ' ' | xargs -n1 2>/dev/null | grep -E '^[01235]$' | tr '\n' ' ')
+  # 단발 재실행: 지정 단계만. 규칙서 순서는 무시하되 지원 단계(0·1·2·3·5·7)로 필터.
+  ORDER=$(echo "$ONLY" | tr ',' ' ' | tr -s ' ' | xargs -n1 2>/dev/null | grep -E '^[012357]$' | tr '\n' ' ')
   ORDER="${ORDER% }"
-  [[ -z "$ORDER" ]] && { echo "--only 값에 유효한 단계(0·1·2·3·5)가 없음: $ONLY" >&2; exit 1; }
+  [[ -z "$ORDER" ]] && { echo "--only 값에 유효한 단계(0·1·2·3·5·7)가 없음: $ONLY" >&2; exit 1; }
   say "단발 재실행(--only): FINAL-${ORDER// / · }"
 else
   say "실행 순서(규칙서): FINAL-${ORDER// / → }"
 fi
 
-declare -A RESULT=( [0]="—" [1]="—" [2]="—" [3]="—" [5]="—" )
+declare -A RESULT=( [0]="—" [1]="—" [2]="—" [3]="—" [5]="—" [7]="—" )
 
 # FINAL-5a validate_labels.js가 센 금지 어휘(라벨링_기준.md §문장 형식) 건수.
 # 기재를 막지 않는 경고라 RESULT[5]는 ✓로 남는다 — 요약 줄에 안 실으면 chain.log에 묻힌다.
@@ -93,6 +93,11 @@ LABEL_BANNED=0
 final_0() {
   rm -f "$SPEC/.final0_alert.txt"          # 지난 런의 배너를 물려받지 않는다
   say "FINAL-0 확신도 스탬핑"
+  # 시트 J열 → 설계서 [J:] 동기화 (2026-09-04). R1(임의 판단 −45)은 설계서 태그로만 발화하는데
+  # 시트 J열은 S1 이후 writer·fixer·사람이 붙인다 — 정예_던전_v2 실측 12행이 감점 누락이었다.
+  # 보정이지 전제가 아니므로 실패해도 확신도는 계속 진행한다.
+  "$NODE" "$CONFDIR/sync_jtags.js" --spec "$SPEC" --sheet-id "$SHEET_ID" --tab "$TAB" \
+    || say "⚠ J열 동기화 건너뜀 — 설계서 태그 기준으로 채점합니다"
   if "$NODE" "$CONFDIR/confidence_apply.js" --spec "$SPEC" --sheet-id "$SHEET_ID" --tab "$TAB" \
      && "$NODE" "$CONFDIR/confidence_report.js" --spec "$SPEC"; then
     RESULT[0]="✓"
@@ -127,7 +132,7 @@ final_2() {
 }
 
 # ── FINAL-5 실패 배너 — 경고 한 줄로 흘려보내지 않는다 ───────────────────────
-# 2026-08-07 실사고(기능B_v3): 5a가 인용부호를 이스케이프하지 않아 _labels.json이
+# 2026-08-07 실사고(스탯_리스트_정리_v3): 5a가 인용부호를 이스케이프하지 않아 _labels.json이
 #   무효 JSON이 됐고, try/continue 정책 탓에 "기재 스킵" 한 줄만 남기고 런이 완주했다.
 #   L/M 패널(기획 확인 요청 9건)이 통째로 빠진 걸 사흘 뒤 사람이 시트를 열어보고서야 발견.
 # → 사유를 $SPEC/.final5_alert.txt 에 남긴다. chain_helpers.js final-report가 이 파일을 읽어
@@ -236,6 +241,24 @@ final_3() {
   fi
 }
 
+# ── FINAL-7: 볼트 임베드 (DXR_Vault 노트에 이 기능의 분석본 임베드 삽입) ──────
+# 사본을 만들지 않는다 — Obsidian transclusion 으로 specs 원본을 끌어온다.
+# 조인 키는 이름이 아니라 Confluence page_id. 대응 노트/앵커가 없으면 스킵(fail-closed).
+final_7() {
+  local ROLLOUT="{WORK_ROOT}/<프로젝트>_관리/_rollout_tc_embed.py"
+  if [[ ! -f "$ROLLOUT" ]]; then
+    say "FINAL-7 스킵 — 롤아웃 스크립트 없음"; RESULT[7]="—"; return
+  fi
+  say "FINAL-7 볼트 임베드"
+  if PYTHONIOENCODING=utf-8 python "$ROLLOUT" --apply --only "$FEAT"; then
+    # 편집분을 마커 무결성 스냅샷에 반영. 빠뜨리면 다음 weekly 가 🔴 DRIFT 로 오탐한다.
+    PYTHONIOENCODING=utf-8 python "{WORK_ROOT}/<프로젝트>_관리/_verify_manual_sections.py" --snapshot --quiet \
+      && RESULT[7]="✓" || RESULT[7]="✓(스냅샷✗)"
+  else
+    RESULT[7]="✗"
+  fi
+}
+
 for step in $ORDER; do
   case "$step" in
     0) final_0 ;;
@@ -243,6 +266,7 @@ for step in $ORDER; do
     2) final_2 ;;
     3) final_3 ;;
     5) final_5 ;;
+    7) final_7 ;;
     *) say "알 수 없는 단계 $step — 스킵" ;;
   esac
 done

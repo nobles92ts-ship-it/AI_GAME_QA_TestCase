@@ -69,6 +69,15 @@ RAW_SIZE=$(wc -c < "$SPEC/confluence_raw.md" 2>/dev/null | tr -d '[:space:]')
 echo "[CHAIN] confluence_raw.md 크기: ${RAW_SIZE}B" >&2
 [[ "$RAW_SIZE" -lt 500 ]] && { echo "[CHAIN] confluence_raw.md 크기 이상(<500B) — fetch 재확인" >&2; exit 1; }
 
+# 접점 축 추출 보장 (SKILL.md S0-3 / rules/tc-분석.md §3.11) — 멱등·비차단.
+# S0 는 .sh 밖(호출자 소관, run_pipeline_full.sh:18)이라 LLM 이 건너뛰면 조용히 안 돈다.
+# 대조가 self-gate 로 미발화하던 것과 정확히 같은 자리 → 결정론 호출로 한 번 더 보장한다.
+# 이미 있으면 재생성하지 않고(멱등), 실패해도 런을 막지 않는다(|| true).
+if [[ ! -f "$SPEC/impact_scope.json" ]]; then
+  "$NODE" "$PROJECT_ROOT/tc-team/lib/impact_scope.js" "$SPEC" --quiet >>"$CHAIN_LOG" 2>&1 || true
+fi
+echo "[CHAIN] impact_scope: $([[ -f "$SPEC/impact_scope.json" ]] && "$NODE" -e "const c=require('$SPEC/impact_scope.json').counts;process.stdout.write(\`hop1=\${c.hop1} hop2=\${c.hop2} 승격=\${c.promoted} 참고=\${c.reference}\`)" 2>/dev/null || echo '미생성(그래프 미색인 가능 — 인박스 판정 확인)')" >&2
+
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$CHAIN_LOG"; }
 stop_auth()      { log "[STOP:인증] $1 — 재인증 후 재실행"; exit 10; }
 stop_attempts()  {
@@ -310,6 +319,17 @@ tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2�
   if [[ -f "$SPEC/dxr_crossref.json" ]]; then
     XC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const lo=it.filter(x=>x.branch==='locate').length+it.filter(x=>x.branch==='apply'&&x.approved!==true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;const ke=it.filter(x=>x.branch==='keep').length;process.stdout.write('apply='+ap+' locate='+lo+' discover='+di+' keep='+ke)}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)
     log "[STEP 2-대조] 완료 — $XC"
+    # counts 정규화 (2026-09-07) — 에이전트가 발굴을 discovered[] 에만 담고 counts.discover=0 으로 남겨
+    # 사람이 JSON 만 보면 오독한다(실측: 로그 discover=1 vs 파일 0). 판정은 안 건드리고 집계만 맞춘다.
+    "$NODE" "$PROJECT_ROOT/tc-team/lib/crossref_counts_normalize.js" "$SPEC/dxr_crossref.json" --quiet >>"$CHAIN_LOG" 2>&1 || true
+    # 스텁 가드 오판 검사 (2026-09-07, 비차단) — tc-대조.md §1.4·§1.5 는 "스텁 판정 전 ⓑ 내용어 재질의"를
+    # 이미 규정하고 2026-07-31 사고까지 적어 두었는데 2026-09-06 에 재발했다(스텁 사유 3건 중 2건 오판).
+    # 문구로는 안 고쳐지므로 실제 Vault 파일 본문 줄 수로 기계가 반증한다. exit 3=후보 있음(신호).
+    XSTUB=$("$NODE" "$PROJECT_ROOT/tc-team/lib/crossref_stub_audit.js" "$SPEC/dxr_crossref.json" --quiet 2>/dev/null; echo "rc=$?")
+    if [[ "$XSTUB" == *"rc=3"* ]]; then
+      XSN=$("$NODE" -e "try{const a=JSON.parse(require('fs').readFileSync('$SPEC/crossref_stub_audit.json','utf8'));process.stdout.write(a.suspects.map(s=>s.id+':'+s.doc+'('+s.body_lines+'줄)').join(', '))}catch(e){process.stdout.write('')}" 2>/dev/null)
+      log "[STEP 2-대조][경고] 스텁 가드 오판 후보 — $XSN · 본문이 있는 문서를 스텁으로 보고 keep 처리했다. ⓑ 내용어 재질의 필요(비차단)"
+    fi
     # 해소율 경고 (비차단, 2026-07-31) — 전 항목 keep 이어도 파이프라인은 정상 종료하므로
     # 무인 런에서는 이 한 줄이 "뇌가 헛돌았다"는 유일한 단서다. 임계 20%·최소 5건은 실측 기준
     # (07-31 재료_아이템 런: 해소 2/15 = 13% 인데 아무 경고 없이 완주 → 확신도 항목 18건 불필요 감점).

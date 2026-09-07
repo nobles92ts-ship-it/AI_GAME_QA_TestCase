@@ -94,3 +94,26 @@ NODE="{NODE_PATH}"
 ```
 
 각 유틸은 CLI로도 실행 가능(파일 헤더 주석의 `CLI:` 참조). 전부 stdout=JSON·exit code 계약.
+
+---
+
+## 대조(crossref) 색인 게이트 — 2026-08-23 신설
+
+**KB는 프로젝트 디렉터리마다 갈린다**: `~/.claude/context-mode/content/<sha256(projectDir.replace('\','/'))[:16]>.db`.
+체인은 대조 에이전트를 `$PROJECT_ROOT`(=`{PROJECT_ROOT}`)에서 돌리는데 뇌(`brain-corpus-D`)는
+`{WORK_ROOT}` KB에만 색인돼 있었다 → 질의가 정확해도 전량 `No results found`. 그 출력이 §1.6 정상 경로인
+'무적중 → 전 항목 keep'과 **구분되지 않아** 오래 안 보였다. 진단 전문은 사내 문서(공개 배포본 미포함).
+
+| 구성 | 파일 | 역할 |
+|---|---|---|
+| 게이트(C) | `lib/crossref_source_gate.py` | 착수 전 색인 존재·신선도 확인. exit 0=OK / 3=MISSING / 4=STALE / 5=NO_KB |
+| 자동복구(A) | `lib/brain_index_sync.py` | stdio MCP로 `ctx_index` 직접 호출해 그 KB에 번들 색인(멱등) |
+| 배선 | `scripts/run_pipeline_s1only.sh` STEP 2-대조 | 게이트 → 실패 시 복구 → 재검 → 그래도 실패면 **에이전트 미호출** |
+| 경로 못박기 | 같은 블록 | `CLAUDE_PROJECT_DIR`/`CONTEXT_MODE_PROJECT_DIR`=`$PROJECT_ROOT` — 게이트가 검사한 KB와 에이전트가 뒤지는 KB를 일치시킨다 |
+| 설정 | `team/tc_config.json` `crossref_bundle` | 번들 원본 경로(머신마다 다름). 빈 값이면 STALE 판정·복구 스킵(비차단) |
+
+**핵심 계약**: 게이트 차단 시 `dxr_crossref.json`에 `skipped:true` + `skip_reason`을 적고 **대조를 아예 실행하지 않는다.**
+에이전트를 부르면 그 결과가 '무적중 keep'으로 위장되기 때문이다. 상세는 `$SPEC/crossref_gate.json`.
+
+⚠ 저해소(20% 미만) 경고 문구에서 **'뇌 미탑재'는 원인 후보에서 제거됐다** — 게이트가 먼저 걸러내므로,
+거기까지 온 저해소는 질의·원문 쪽 문제다.

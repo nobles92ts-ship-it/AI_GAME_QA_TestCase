@@ -396,4 +396,52 @@ function stampGate({ items = 0, matched = 0, drift = 0, driftMax = STAMP_DRIFT_M
   return { ok: true };
 }
 
-module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty, stampGate, STAMP_DRIFT_MAX };
+// ── 시트 행 ↔ 설계 항목 매핑 (순수함수 — test/confidence.test.js 가 잠근다) ────────────
+// 시트는 B/C/D를 그룹 첫 행에만 쓰므로 fill-down 후 (대·중·소분류) 연속 구간(span)을 만들고,
+// 구간 안에서 검증단계별 순번을 세어 설계 항목을 찾는다.
+//
+// ⚠ 키에 중분류가 들어가는 이유 (2026-09-04 정예_던전_v2 실사고 28행):
+//   교차 관심사 대분류(ESC·뒤로가기 키 입력 등)는 다른 대분류와 **같은 소분류명**(=화면)을 쓴다.
+//   구 키(소분류+단계+번호)는 구간마다 순번이 1부터 다시 세지므로 두 구간이 같은 키를 만들고,
+//   뒤 구간이 앞 구간의 설계 항목에 조용히 붙는다 — 드리프트로도 안 잡혀 오채점이 보이지 않는다.
+//   → 중분류를 포함한 키를 먼저 보고, 설계서에서 소분류명이 유일할 때만 구 키로 폴백한다(하위호환).
+function mapRowsToItems(rows, items) {
+  const byMidKey = new Map(items.map((i) => [`${i.mid}\0${i.leaf}\0${i.stage}\0${i.no}`, i]));
+  const midsOfLeaf = new Map();
+  items.forEach((i) => {
+    if (!midsOfLeaf.has(i.leaf)) midsOfLeaf.set(i.leaf, new Set());
+    midsOfLeaf.get(i.leaf).add(i.mid);
+  });
+  const byLeafKey = new Map(items
+    .filter((i) => midsOfLeaf.get(i.leaf).size === 1)
+    .map((i) => [`${i.leaf}\0${i.stage}\0${i.no}`, i]));
+
+  const spans = [];
+  let leaf = '', major = '', mid = '';
+  for (let i = 1; i < rows.length; i++) {
+    const mj = (rows[i][1] || '').trim(), md = (rows[i][2] || '').trim(), lf = (rows[i][3] || '').trim();
+    if (mj) major = mj;
+    if (md) mid = md;
+    if (lf) leaf = lf;
+    const last = spans[spans.length - 1];
+    if (last && last.leaf === leaf && last.mid === mid && last.end === i - 1) last.end = i;
+    else spans.push({ leaf, mid, major, start: i, end: i });
+  }
+
+  const perRow = [], drift = [];
+  spans.forEach((sp) => {
+    if (sp.major === '기본기능') return;
+    const ctr = {};
+    for (let i = sp.start; i <= sp.end; i++) {
+      const st = (rows[i][4] || '').trim();
+      ctr[st] = (ctr[st] || 0) + 1;
+      const it = byMidKey.get(`${sp.mid}\0${sp.leaf}\0${st}\0${ctr[st]}`)
+              || byLeafKey.get(`${sp.leaf}\0${st}\0${ctr[st]}`);
+      if (!it) { drift.push({ row: i + 1, tcid: rows[i][0], leaf: sp.leaf }); continue; }
+      perRow.push({ row: i, tcid: rows[i][0], it });
+    }
+  });
+  return { perRow, drift };
+}
+
+module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty, stampGate, STAMP_DRIFT_MAX, mapRowsToItems };

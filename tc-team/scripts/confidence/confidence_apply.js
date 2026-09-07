@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const { getAuthClient } = require(path.resolve(__dirname, '../../../scripts/util/google_auth'));
-const { computeItems, stampGate } = require('./confidence_core');
+const { computeItems, stampGate, mapRowsToItems } = require('./confidence_core');
 
 // ── 인자 ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -107,8 +107,6 @@ const gateFail = (g, extra) => {
   const { items, scored } = computeItems(SPEC);
   const g0 = stampGate({ items: items.length });
   if (!g0.ok) gateFail(g0, `설계서: ${path.join(SPEC, 'tc_design.md')} (소분류 ${scored.length}건 / 항목 ${items.length}건)`);
-  const byKey = new Map(items.map((i) => [`${i.leaf}\0${i.stage}\0${i.no}`, i]));
-
   const auth = await getAuthClient();
   const sheets = google.sheets({ version: 'v4', auth });
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
@@ -125,30 +123,8 @@ const gateFail = (g, extra) => {
   const rows = rd.map((r) => (r.values || []).map((v) => v ? (v.formattedValue || '') : ''));
   const oldNotes = rd.map((r) => ((r.values || [])[0] || {}).note || '');
 
-  // ── 행 매핑: 소분류 구간 → 검증단계별 순번 (B/C/D는 그룹 첫 행에만 값) ──
-  let leaf = '', major = '';
-  const spans = [];
-  for (let i = 1; i < rows.length; i++) {
-    const mj = (rows[i][1] || '').trim(), lf = (rows[i][3] || '').trim();
-    if (mj) major = mj;
-    if (lf) leaf = lf;
-    const last = spans[spans.length - 1];
-    if (last && last.leaf === leaf && last.end === i - 1) last.end = i;
-    else spans.push({ leaf, major, start: i, end: i });
-  }
-  const perRow = [];
-  const drift = [];
-  spans.forEach((sp) => {
-    if (sp.major === '기본기능') return;
-    const ctr = {};
-    for (let i = sp.start; i <= sp.end; i++) {
-      const st = (rows[i][4] || '').trim();
-      ctr[st] = (ctr[st] || 0) + 1;
-      const it = byKey.get(`${sp.leaf}\0${st}\0${ctr[st]}`);
-      if (!it) { drift.push({ row: i + 1, tcid: rows[i][0], leaf: sp.leaf }); continue; }
-      perRow.push({ row: i, tcid: rows[i][0], it });
-    }
-  });
+  // ── 행 매핑: 소분류 구간 → 검증단계별 순번 (판정은 confidence_core 의 순수함수) ──
+  const { perRow, drift } = mapRowsToItems(rows, items);
 
   const g1 = stampGate({ items: items.length, matched: perRow.length, drift: drift.length });
   if (!g1.ok) gateFail(g1, `예: ${drift.slice(0, 3).map((d) => `${d.tcid}(${d.leaf})`).join(' · ')}`);
