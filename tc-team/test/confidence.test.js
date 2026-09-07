@@ -4,7 +4,7 @@
 // (= 점수가 바뀌는 변경은 반드시 눈에 보인다).
 const assert = require('assert');
 const path = require('path');
-const { compute, computeItems, RULES, TUNING, penaltyOf, xrefPenalty, stampGate } = require('../scripts/confidence/confidence_core.js');
+const { compute, computeItems, RULES, TUNING, penaltyOf, xrefPenalty, stampGate, mapRowsToItems } = require('../scripts/confidence/confidence_core.js');
 
 const FIX = path.join(__dirname, 'fixtures', 'confidence');
 let pass = 0, fail = 0;
@@ -258,6 +258,62 @@ t('오버라이드는 원본 모델을 오염시키지 않는다 (스윕 안전�
   assert.strictEqual(alt.items.find((i) => i.leaf.startsWith('우편함') && i.stage === '정상' && i.no === 1).score, 55);
   assert.strictEqual(item('우편함 보상', '정상', 1).score, 67, '기본 산출물이 변조됨');
   assert.strictEqual(RULES.find((r) => r.id === 'R3').penalty, 25, 'RULES 상수가 변조됨');
+});
+
+// ── 행 매핑 (mapRowsToItems) — 2026-09-04 오채점 사고 고정 ──────────────
+// 시트 행: [TC ID, 대분류, 중분류, 소분류, 검증단계, …] — B/C/D는 그룹 첫 행에만 값
+const HDR = ['TC ID', '대분류', '중분류', '소분류', '검증단계'];
+const IT = (mid, leaf, stage, no) => ({ mid, leaf, stage, no });
+
+t('같은 소분류명이 다른 중분류 아래 있으면 각자의 설계 항목에 붙는다 (오채점 금지)', () => {
+  const items = [IT('던전 화면 진입', '던전 초기 화면', '정상', 1), IT('ESC 키', '던전 초기 화면', '정상', 1)];
+  const rows = [HDR,
+    ['001', '던전 메뉴 진입', '던전 화면 진입', '던전 초기 화면', '정상'],
+    ['002', '화면 종료 키 입력', 'ESC 키', '던전 초기 화면', '정상'],
+  ];
+  const { perRow, drift } = mapRowsToItems(rows, items);
+  assert.strictEqual(drift.length, 0);
+  assert.strictEqual(perRow[0].it.mid, '던전 화면 진입');
+  assert.strictEqual(perRow[1].it.mid, 'ESC 키', '뒤 구간이 앞 구간 설계 항목에 붙었다');
+});
+
+t('설계서에 없는 중분류의 행은 폴백 없이 드리프트로 잡힌다 (모호할 때 조용히 붙지 않는다)', () => {
+  const items = [IT('던전 화면 진입', '던전 초기 화면', '정상', 1), IT('ESC 키', '던전 초기 화면', '정상', 1)];
+  const rows = [HDR, ['001', '화면 종료 키 입력', '뒤로가기 키', '던전 초기 화면', '정상']];
+  const { perRow, drift } = mapRowsToItems(rows, items);
+  assert.strictEqual(perRow.length, 0);
+  assert.strictEqual(drift.length, 1);
+});
+
+t('소분류명이 유일하면 중분류가 달라도 구 키로 폴백한다 (하위호환)', () => {
+  const items = [IT('설계서 중분류명', '남은 시간 표시 영역 화면', '정상', 1)];
+  const rows = [HDR, ['001', '하단 정보 영역', '시트 중분류명', '남은 시간 표시 영역 화면', '정상']];
+  const { perRow, drift } = mapRowsToItems(rows, items);
+  assert.strictEqual(drift.length, 0, '기존 런(설계서·시트 중분류명 불일치)이 깨졌다');
+  assert.strictEqual(perRow[0].it.no, 1);
+});
+
+t('중분류가 바뀌면 구간이 끊겨 검증단계 순번이 1부터 다시 센다', () => {
+  const items = [IT('ESC 키', '팝업 화면', '정상', 1), IT('뒤로가기 키', '팝업 화면', '정상', 1)];
+  const rows = [HDR,
+    ['001', '화면 종료 키 입력', 'ESC 키', '팝업 화면', '정상'],
+    ['002', '', '뒤로가기 키', '팝업 화면', '정상'],
+  ];
+  const { perRow, drift } = mapRowsToItems(rows, items);
+  assert.strictEqual(drift.length, 0);
+  assert.deepStrictEqual(perRow.map((p) => p.it.mid), ['ESC 키', '뒤로가기 키']);
+});
+
+t('기본기능 섹션은 매핑 대상이 아니다 (드리프트로도 안 잡힌다)', () => {
+  const items = [IT('던전 메뉴 진입', '게임 메뉴 화면', '정상', 1)];
+  const rows = [HDR,
+    ['001', '기본기능', '던전 메뉴 진입', '게임 메뉴 화면', '정상'],
+    ['002', '던전 메뉴 진입', '게임 메뉴 진입', '게임 메뉴 화면', '정상'],
+  ];
+  const { perRow, drift } = mapRowsToItems(rows, items);
+  assert.strictEqual(drift.length, 0);
+  assert.strictEqual(perRow.length, 1);
+  assert.strictEqual(perRow[0].tcid, '002');
 });
 
 console.log(`결과: ${pass} PASS / ${fail} FAIL`);

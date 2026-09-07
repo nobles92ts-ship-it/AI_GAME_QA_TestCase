@@ -87,5 +87,23 @@ t('tc_ids 빈 배열은 커버로 치지 않음', () => {
   assert.ok(r.uncovered.includes('R-2.1'), '빈 tc_ids가 커버로 계산됨');
 });
 
+// ── 진공 통과 차단 (2026-08-23) ──
+// 상류(S4 후보 추출)가 빈손으로 끝나면 uncovered/badExclusion/dangling 이 전부 0이라
+// 게이트가 통과를 내주고 coverage_rate 도 100% 로 보였다. "볼 것이 없었다"는 통과가 아니다.
+t('규칙 0건은 진공 통과가 아니라 FAIL', () => {
+  const r = buildLedger([], [], []);
+  assert.strictEqual(r.summary.rules, 0);
+  assert.strictEqual(r.gate.pass, false, '규칙 0건이 통과로 나왔다 — 진공 통과 재발');
+  assert.strictEqual(r.gate.no_rules, true, '사유가 안 실리면 운영자가 전부 0인 실패를 못 읽는다');
+  assert.strictEqual(r.summary.coverage_rate, 0, '규칙 0건에 커버리지 100% 를 표시하면 안 된다');
+});
+
+t('규칙이 1건이라도 있으면 종전대로 판정한다', () => {
+  const r = buildLedger([rules[1]], [{ rule_id: 'R-2.1', tc_ids: [10] }], []);
+  assert.strictEqual(r.gate.pass, true, '진공 차단이 정상 케이스를 막으면 안 된다');
+  assert.strictEqual(r.gate.no_rules, false);
+  assert.strictEqual(r.summary.coverage_rate, 1);
+});
+
 console.log(`\n결과: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

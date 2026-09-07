@@ -64,7 +64,13 @@ function buildLedger(rules, coverage, exclusions = []) {
   const ruleIds = new Set(rules.map(r => r.rule_id));
   const danglingCoverage = Object.keys(covMap).filter(rid => !ruleIds.has(rid));
 
-  const gatePass = uncovered.length === 0 && badExclusion.length === 0 && danglingCoverage.length === 0;
+  // 규칙 0건은 "전부 커버됨"이 아니라 "볼 것이 없었다" — 진공 통과 차단 (2026-08-23).
+  // uncovered/badExclusion/dangling 이 전부 0이라 그대로 두면 gate.pass=true 이고
+  // coverage_rate 도 1(100%)이라 초록불이 된다. 상류(S4 후보 추출)가 빈손으로 끝나면
+  // run_pipeline_full.sh 가 빈 coverage.json 을 쓰고 "traceability 가 이어서 판정한다"며
+  // 넘기는데, 그 traceability 가 통과를 내주고 있었다.
+  const noRules = rules.length === 0;
+  const gatePass = !noRules && uncovered.length === 0 && badExclusion.length === 0 && danglingCoverage.length === 0;
   return {
     mapped, uncovered, badExclusion, danglingCoverage,
     summary: {
@@ -72,9 +78,9 @@ function buildLedger(rules, coverage, exclusions = []) {
       covered: mapped.filter(m => m.status === 'covered').length,
       excluded: mapped.filter(m => m.status === 'excluded').length,
       uncovered: uncovered.length,
-      coverage_rate: rules.length ? +(mapped.filter(m => m.status !== 'uncovered').length / rules.length).toFixed(3) : 1,
+      coverage_rate: rules.length ? +(mapped.filter(m => m.status !== 'uncovered').length / rules.length).toFixed(3) : 0,
     },
-    gate: { pass: gatePass, uncovered: uncovered.length, bad_exclusion: badExclusion.length, dangling: danglingCoverage.length },
+    gate: { pass: gatePass, no_rules: noRules, uncovered: uncovered.length, bad_exclusion: badExclusion.length, dangling: danglingCoverage.length },
   };
 }
 
