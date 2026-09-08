@@ -10,6 +10,8 @@
 > **Deterministic game-QA test-case pipeline.**
 > Hand it a spec and a sheet — get back a reviewed test-case tab whose structure, gates, and coverage ledger are owned by code, not by a model.
 
+> **Grounded in the ISTQB test process.** Stages **S1–S3** follow the ISTQB test development process — *test analysis → test design → test implementation* — and cases are derived with standard ISTQB test-design techniques (equivalence partitioning, boundary values, state transition), not ad-hoc prompting.
+
 > **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. Stages S3·S4 require the **Workflow (multi-agent orchestration) tool** in that session — without it the pipeline halts at S3 ([PREREQUISITES §5](docs/PREREQUISITES.md)). A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
 
 > 📖 **Before the setup steps, read why it is shaped this way** — the eight stages, why review is adversarial, why the sheet is written exactly once, and the two lessons that cost something:
