@@ -93,7 +93,7 @@ The 7 fabrications are the important number. In the prior run the same failure m
 | **S6** | Live write | code | **One** sheet touch, then read-back 0-diff verification |
 | **S7** | Completion | code | Confidence scoring, labelling, dashboard, Drive sync |
 
-Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · why it is shaped this way: [write-up](https://nobles92ts-ship-it.github.io/en/built/tc-team/) ([한국어](https://nobles92ts-ship-it.github.io/ko/built/tc-team/))
+Full stage contracts: [`skills/tc-team/SKILL.md`](skills/tc-team/SKILL.md) · internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · why it is shaped this way: [write-up — English](https://nobles92ts-ship-it.github.io/en/built/tc-team/) / [한국어](https://nobles92ts-ship-it.github.io/ko/built/tc-team/)
 
 ### The gates
 
