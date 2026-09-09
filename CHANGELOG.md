@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+Documentation only. No pipeline behaviour changed.
+
+### Changed
+
+- **The README never said where the test design comes from.** Stages S1–S3 follow the ISTQB test development process — test analysis, test design, test implementation — and cases are derived with equivalence partitioning, boundary values and state transition, which the design rules in `rules/` have required all along. None of it was stated anywhere in the repository, so a reader had no way to tell a standards-based design from whatever a model happened to produce. The grounding is now the second line of the README, above the scope statement.
+
+- **The Korean write-up was reachable only as a parenthetical.** The page exists and covers the same material, but the badge row named no language at all, and both prose references filed Korean as an aside — `([한국어])`. Korean now sits beside English as an equal option in all three places: a badge of its own, the setup callout, and the stage-table footer. Badge labels stay in ASCII deliberately: shields.io measures label text with Verdana metrics, so the same badge that renders 230px wide in English collapses to 61px in Hangul and clips. Hangul is used in the prose, where it renders correctly.
+
+- **The repository description still advertised the retired engine.** Three releases after v4.0.0 retired the v2 multi-agent orchestrator, the sidebar was still promising it — alongside a "deterministic engine (tc_v3) preview" that had since shipped as the product. The README's first line and the repository's own summary were saying opposite things to the same reader. The description now states what the pipeline does and what owns the gates. The write-up is linked as the repository homepage, and eleven topics were added.
+
+---
+
 ## [v4.3.0] — 2026-09-07
 
 **Given two specification documents, the run covered one of them, passed every gate, and reported success.**
