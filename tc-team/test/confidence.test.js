@@ -179,6 +179,46 @@ t('crossref 산출물이 없어도 채점한다 (crossref_brain=off 환경)', ()
   fsx.rmSync(d, { recursive: true, force: true });
 });
 
+// ── 2026-09-08 수리 회귀 2건 ────────────────────────────────────────────
+t('gap 은 배열 위치가 아니라 선언된 이름으로 소분류에 붙는다', () => {
+  // 구 코드: floor_by_subcat 키 순서 = 리프 순서로 보고 keys[i] → leaves[i] 로 이었다.
+  // 설계가 소분류를 병합·재배열하면 통째로 밀린다 — 전 스펙 실측 166건 중 76건 오귀속.
+  // 픽스처는 mail_reward 를 키 0번에 두었으므로, 위치 조인이면 gap 이 '우편 배너'에 붙는다.
+  assert.ok(leaf('우편함 보상').reasons.some((r) => r.id === 'R5'), 'gap 이 자기 소분류에 안 붙음');
+  assert.ok(!leaf('우편 배너').reasons.some((r) => r.id === 'R5'), '위치 조인 회귀 — gap 이 남의 소분류에 붙음');
+});
+
+t('이름·근접도 어느 쪽으로도 못 정한 gap 은 gapUnmapped 로 드러난다', () => {
+  // 붙이지 않는 것 자체는 맞지만 **조용히** 사라지면 안 된다 — 그 화면은 커버리지 구멍이
+  // 점수에 안 잡힌 상태다. confidence_apply 가 이 목록을 완료 보고 요약 라인으로 올린다.
+  const os = require('os'), fsx = require('fs');
+  const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-unmapped-'));
+  fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+  fsx.rmSync(path.join(d, 'candidates.json'));   // 이름 경로 없음 + gap 에 nearest_design 없음
+  const r = computeItems(d);
+  assert.deepStrictEqual(r.gapUnmapped, ['mail_reward'], '미부착 gap 이 보고되지 않음');
+  assert.ok(!r.items.some((i) => i.reasons.some((x) => x.id === 'R5')), '못 정했는데 R5 가 붙음');
+  assert.deepStrictEqual(computeItems(FIX).gapUnmapped, [], '정상 픽스처에서 미부착이 잡힘(오탐)');
+  fsx.rmSync(d, { recursive: true, force: true });
+});
+
+t("용어 이름에 ' / ' 가 있어도 항목 감점이 소분류 감점을 넘지 않는다", () => {
+  // 구 코드: 소분류 detail 문자열을 ' / ' 로 되쪼개 용어를 복원 → 이름에 구분자가 든 용어가
+  // 여러 건으로 불어나 건수 스케일링이 상한까지 뛴다(장비 아이템 비교 TC 037: 소분류 -33 / 항목 -45).
+  const os = require('os'), fsx = require('fs');
+  const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-slash-'));
+  fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+  fsx.writeFileSync(path.join(d, 'dxr_crossref.json'), JSON.stringify({
+    items: [{ term: '우편함 등급표 / 보상 수량 상한 / 환전 수수료', branch: 'keep' }],
+  }), 'utf8');
+  const lf = compute(d).scored.find((x) => x.name.startsWith('우편함 보상'));
+  const it = computeItems(d).items.find((x) => x.leaf.startsWith('우편함 보상') && x.stage === '정상' && x.no === 1);
+  const r3 = (o) => Math.abs((o.reasons.find((r) => r.id === 'R3') || { d: 0 }).d);
+  assert.strictEqual(r3(lf), penaltyOf(RULES, 'R3', 1), '소분류가 용어 1건으로 안 세짐');
+  assert.ok(r3(it) <= r3(lf), `항목 R3 -${r3(it)} 가 소분류 -${r3(lf)} 를 초과 — 구분자 되쪼개기 회귀`);
+  fsx.rmSync(d, { recursive: true, force: true });
+});
+
 // ── 설계서 표기 흔들림 (2026-08-16 조용한 실패 회귀) ─────────────────────
 // 실사고: 설계기가 트리를 **들여쓰기 없이** 냈는데 파서가 `^\s+`·`^\s{2,}` 를 요구해
 //   leaves=[] → 점수 0건 · 색칠 0행 · 드리프트 218행. 그런데 rc=0 으로 FINAL-0:✓ 보고.

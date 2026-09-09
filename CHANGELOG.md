@@ -6,9 +6,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-Documentation only. No pipeline behaviour changed.
+---
+
+## [v4.3.1] — 2026-09-09
+
+### Fixed
+
+- **Confidence penalties were landing on the wrong screen.** The R5 coverage penalty joins `coverage_gaps` entries — keyed by an English subcategory key — to the Korean leaves of the design tree, and it did so **by array position**, on the assumption that design preserves the order analysis emitted. Design does not: it merges and reorders subcategories freely (one equipment spec went from 19 analysis keys to 10 design leaves). Measured across every spec on disk, of 166 subcategories carrying gaps, **76 were attached to a different subcategory than the one that had the hole** — typically shifted by one, so the penalty fell on an adjacent screen while the screen that was actually uncovered kept a perfect score. The join is now by declared name from `candidates.json` using exact token matching (partial matching is refused, so `진입` cannot capture `진입점`), falling back to a majority vote over the line each gap's own `nearest_design` points at, and attaching nothing at all when neither resolves. Guessing by position is worse than letting R5 sit idle.
 
 ### Changed
+
+- **Questions reached the planner without ever having been asked of the wiki.** The DXR crossref step runs once, between S1 and S2, so it can only see the confirmation items that exist at that moment. The adversarial review at S4 creates more of them, and those reached a human unqueried — the single largest source of questions whose answers were already written down somewhere. Two delta passes now close it: one at S4→S5, the only point where an answer can still flow through the apply path into a test's expected value, and one at S6→S7, the last net before the request panel is written. The crossref input also widened from the unspecified-value checklist and the external-dependency table to the **entire** confirmation block, which had quietly been carrying analyst ambiguity notes and missing-interaction items that no lens ever queried. Each question now leaves with one of three verdicts attached — defined, located, or **no basis found**. The third is the point: it is what distinguishes a question that was researched from one that was merely asked.
+
+- **Rapid-click cases were being generated for buttons that grant nothing.** The repetition lens produced a "click twice within 500ms" candidate for every subcategory that accepts input, a worked example in the design rules demonstrated it on a button whose only effect is opening a window, and the design review gate then required the pattern at 100%. Three layers reinforcing a case that verifies nothing: a window cannot be opened twice in a way anyone can observe. The pattern is now scoped to buttons where a single click actually grants a reward. Duplicate resource spend — the real risk on purchase and upgrade buttons — stays on the concurrency axis, which already owned it.
+
 
 - **The README never said where the test design comes from.** Stages S1–S3 follow the ISTQB test development process — test analysis, test design, test implementation — and cases are derived with equivalence partitioning, boundary values and state transition, which the design rules in `rules/` have required all along. None of it was stated anywhere in the repository, so a reader had no way to tell a standards-based design from whatever a model happened to produce. The grounding is now the second line of the README, above the scope statement.
 

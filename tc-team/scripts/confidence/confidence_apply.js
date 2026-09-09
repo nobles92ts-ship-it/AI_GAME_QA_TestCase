@@ -104,7 +104,7 @@ const gateFail = (g, extra) => {
 
 (async () => {
   const t0 = Date.now();
-  const { items, scored } = computeItems(SPEC);
+  const { items, scored, gapUnmapped } = computeItems(SPEC);
   const g0 = stampGate({ items: items.length });
   if (!g0.ok) gateFail(g0, `설계서: ${path.join(SPEC, 'tc_design.md')} (소분류 ${scored.length}건 / 항목 ${items.length}건)`);
   const auth = await getAuthClient();
@@ -180,6 +180,7 @@ const gateFail = (g, extra) => {
     generated_at: new Date().toISOString(),
     summary: { dist, colored: colored.length, total: perRow.length },
     drift,
+    gap_unmapped: gapUnmapped || [],
     items: perRow.map((p) => ({
       row: p.row + 1, tcid: p.tcid, leaf: p.it.leaf, stage: p.it.stage, no: p.it.no,
       score: p.it.score, grade: p.it.grade,
@@ -195,5 +196,11 @@ const gateFail = (g, extra) => {
   if (top.length) console.log(`[확신도] 최우선 검토: ${top.map((p) => `${p.tcid} ${p.it.leaf} ${p.it.stage}-${p.it.no} (${p.it.score}점)`).join(' · ')}`);
   if (drift.length) console.log(`[확신도] 설계 외 행 ${drift.length}건(점수 없음·드리프트): ${drift.map((d) => d.tcid).join(', ')}`);
   if (protectedRows.length) console.log(`[확신도] ⚠ 사람 메모 보호로 미기재 ${protectedRows.length}행: ${protectedRows.join(', ')}`);
+  // 미부착 gap — 이름·근접도 어느 쪽으로도 소분류를 못 정한 커버리지 gap. 그 소분류엔 R5 가 안 걸린다.
+  // 예전 위치 조인 시절엔 아무 소분류에나 붙어 이 상태 자체가 보이지 않았다(2026-09-08).
+  if ((gapUnmapped || []).length) {
+    console.log(`[확신도] ⚠ 소분류 미부착 gap ${gapUnmapped.length}종(R5 미반영): ${gapUnmapped.join(', ')}`
+      + ' — candidates.json 의 소분류명이 설계 리프명과 겹치지 않는 경우다. 해당 화면은 커버리지 구멍이 점수에 안 잡힌다.');
+  }
   console.log(`[확신도] 산출물: ${path.join(SPEC, 'confidence.json')} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
 })().catch((e) => { console.error('[확신도] 실패:', e.message); process.exit(1); });

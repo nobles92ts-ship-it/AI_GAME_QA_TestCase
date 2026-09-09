@@ -316,6 +316,66 @@ PEOF
   mark s3
 fi
 
+# ══ 델타 대조 — 늦게 태어난 「기획 확인 필요」를 뇌에 먼저 물어본다 ═════════════
+# 2026-09-09 오너 지시: "최근에 생기는 것들은 dxr 검색 부터".
+# 본 대조는 S1→S2 사이 1회뿐이라 그 시점의 목록만 본다. S4 적대 리뷰가 새로 만든
+# 질의는 거기 없으므로, 뇌에 한 번도 안 물어본 채 사람에게 나갔다. 두 지점에서 막는다:
+#   crossref_delta fixplan S4  — 리뷰가 새로 단 「기획 확인 필요」 (답이 S5 적용 경로를 탄다)
+#   crossref_delta final   S7  — 사람에게 나가기 직전 전량 (_labels.json 패널 + TC 비고열)
+# ⚠ 전 구간 비차단. 대조는 선택 플러그인이라 어떤 실패도 로그만 남기고 체인은 계속한다.
+crossref_delta() {
+  local MODE="$1" ORIGIN="$2"
+  local XCFG="$PROJECT_ROOT/team/tc_config.json"
+  local XON XSRC2 XIN XOUT XRC
+
+  XON=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$XCFG','utf8'));process.stdout.write(c.crossref_brain==='on'?'on':'off')}catch(e){process.stdout.write('off')}" 2>/dev/null)
+  [[ "$XON" != "on" ]] && return 0
+
+  XIN="$WORK/crossref_delta_in_${ORIGIN}.json"
+  XOUT="$WORK/crossref_delta_out_${ORIGIN}.json"
+  "$NODE" "$LIB/crossref_delta_collect.js" --work "$WORK" --mode "$MODE" --out "$XIN" >>"$CHAIN_LOG" 2>&1
+  XRC=$?
+  if [[ $XRC -eq 4 ]]; then log "[$ORIGIN-델타대조] 신규 기획확인 0건 — 스킵"; return 0; fi
+  if [[ $XRC -ne 0 ]]; then log "[$ORIGIN-델타대조][경고] 수집 실패 — 스킵(비차단)"; return 0; fi
+
+  XSRC2=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$XCFG','utf8'));process.stdout.write(c.crossref_source||'brain-corpus')}catch(e){process.stdout.write('brain-corpus')}" 2>/dev/null)
+  log "[$ORIGIN-델타대조] 신규 기획확인 대조 시작 (source=$XSRC2)"
+
+  local XHD="## HANDOFF
+- 기능명: $FEAT
+- specs 경로: $SPEC
+- 입력: $XIN  ← **이번 런에서 새로 태어난 「기획 확인 필요」 항목만** (본 대조 이후 발생분)
+- 산출: $XOUT — {\"items\":[{id,term,branch,source,note,approved}]} (tc-대조.md §2.1 items 스키마)
+
+## 작업 지시
+$XIN 의 items 각 항목을 tc-대조.md 지침대로 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC2\")에 대조하라.
+입력 item 의 id 를 **그대로 유지**해 결과 items 에 담을 것 — 병합기가 id 로 멱등 처리한다.
+4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep) + 스코프경계(로컬 데이터테이블 실제값 금지, locate=위치만).
+§1.2 그대로 — 브레인은 발명하지 않는다. 확신 없으면 keep.
+§1.6 비파괴: 무적중·에러·뇌 미탑재 = 입력 전량을 keep 으로 채운 $XOUT 을 저장하고 정상 종료. 다른 파일은 건드리지 말 것."
+
+  # CLAUDE_PROJECT_DIR 못박기 — context-mode 가 KB 를 고르는 최우선 변수다.
+  # 안 박으면 체인을 어느 폴더에서 띄웠느냐에 따라 KB 가 조용히 갈린다(2026-08-23 무적중 결함의 경로).
+  CLAUDE_PROJECT_DIR="$PROJECT_ROOT" CONTEXT_MODE_PROJECT_DIR="$PROJECT_ROOT" \
+  RUNAGENT_DEBUG_FILE="$SPEC/crossref_delta_${ORIGIN}.log" \
+  bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-team-대조 "$XHD" >>"$CHAIN_LOG" 2>&1 \
+    || log "[$ORIGIN-델타대조][경고] 에이전트 비정상 종료 — fail-safe 스킵(비차단)"
+
+  if [[ -f "$XOUT" ]]; then
+    "$NODE" "$LIB/crossref_delta_merge.js" "$WORK/dxr_crossref.json" "$XOUT" --origin "$ORIGIN" >>"$CHAIN_LOG" 2>&1 \
+      || log "[$ORIGIN-델타대조][경고] 병합 실패 — dxr_crossref.json 미갱신(비차단)"
+  else
+    log "[$ORIGIN-델타대조][경고] 산출 없음 — 병합 스킵(비차단)"
+  fi
+
+  # 소비처 — 여기서 패널에 붙이지 않으면 대조는 아무도 안 읽는 조용한 게이트가 된다.
+  if [[ "$MODE" == "final" ]]; then
+    "$NODE" "$LIB/crossref_labels_annotate.js" "$SPEC/_labels.json" "$WORK/dxr_crossref.json" >>"$CHAIN_LOG" 2>&1 \
+      && log "[$ORIGIN-델타대조] 기획확인 패널에 대조 결과 주입 완료" \
+      || log "[$ORIGIN-델타대조][경고] 패널 주입 스킵(_labels.json 또는 대조결과 없음 — 비차단)"
+  fi
+}
+
 # ══ S4 — 적대 리뷰(3렌즈+판정) + 커버리지 원장 (LLM, 파일 계약) ═══════════════
 if [[ $ST -le 4 ]]; then
   # S3→S4 입력 계약 (2026-08-09): 재개(--start-from s4) 경로에서 S3 산출물이 없으면
@@ -502,6 +562,8 @@ PEOF
   "$NODE" "$HELPERS" validate-json "$WORK/coverage.json" coverage >/dev/null 2>&1 \
     && "$NODE" "$HELPERS" validate-json "$WORK/exclusions.json" exclusions >/dev/null 2>&1 \
     || fail "S4 커버리지 조립 결과 검증 실패"
+  # 리뷰가 새로 단 「기획 확인 필요」를 뇌에 먼저 물어본다 (S5 적용 전이라 답이 반영될 수 있는 유일한 시점)
+  crossref_delta fixplan S4
   log "[S4] 완료"
   mark s4
 fi
@@ -591,6 +653,10 @@ fi
 if [[ $ST -le 7 ]]; then
   RTAB=$(resolved_tab)
   CURL2=$(grep -m1 '^CONFLUENCE_URL=' "$SPEC/sheet_info.txt" | cut -d= -f2- | tr -d '"\r'); [[ -z "$CURL2" ]] && CURL2="$CONF_URL"
+
+  # 사람에게 나가기 직전 마지막 그물 — 출처 무관 전량(_labels.json 패널 + TC 비고열)을 뇌에 대조하고
+  # 결과를 패널에 주입한다. finalize.sh 의 FINAL-5(패널 기재) 보다 반드시 앞이어야 한다.
+  crossref_delta final S7
 
   log "[S7] 완료처리 시작 (finalize.sh — 규칙서 순서·문구 참조)"
   bash "$TCTEAM/scripts/finalize.sh" --feature "$FEAT" --sheet-id "$SHEET_ID" \

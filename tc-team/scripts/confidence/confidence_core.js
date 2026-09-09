@@ -132,6 +132,7 @@ function compute(SPEC, override) {
   const L = read('tc_design.md').split('\n');
   const gaps = readJson('coverage_gaps.json', {});
   const crossref = readJson('dxr_crossref.json', { items: [] });
+  const candidates = readJson('candidates.json', null);
   const skeleton = readJson('tc_skeleton.json', null);
 
   const sectionSlice = (title, endRe = /^##\s/) => {
@@ -144,9 +145,13 @@ function compute(SPEC, override) {
 
   // 1) 분류 그룹핑 트리 → 소분류별 마커·검증항목
   const tree = sectionSlice(DESIGN_TREE_RE.section);
+  // 트리 첫 줄의 절대 행번호(1-based). coverage_gaps 의 nearest_design.line 과 같은 좌표계라
+  // 소분류의 행 범위를 만들어 두면 gap 을 위치로 되짚을 수 있다 (§4 매핑).
+  const treeStart = L.findIndex((l) => DESIGN_TREE_RE.section.test(l.trim())) + 2;
   const leaves = [];
   let curMajor = '', curMid = '', cur = null;
-  for (const line of tree) {
+  for (let ti = 0; ti < tree.length; ti++) {
+    const line = tree[ti];
     const c = classifyDesignLine(line);
     if (c.kind === 'major') { curMajor = c.name; continue; }
     if (c.kind === 'mid') { curMid = c.name; continue; }
@@ -154,6 +159,7 @@ function compute(SPEC, override) {
       const { name, markers } = splitLeafMarkers(c.body);
       cur = {
         major: curMajor, mid: curMid, name,
+        line: treeStart + ti, endLine: treeStart + ti,
         risk: (markers.find((m) => /HIGH|MEDIUM|LOW/.test(m)) || '[MEDIUM]').replace(/[[\]]/g, ''),
         needImage: markers.some((m) => m.includes('이미지 참조 필요')),
         items: [],
@@ -162,6 +168,7 @@ function compute(SPEC, override) {
       continue;
     }
     if (c.kind === 'item' && cur) {
+      cur.endLine = treeStart + ti;
       cur.items.push({
         stage: c.stage, no: c.seq, text: c.body.replace(/\s*\[J:[^\]]+\]/g, '').trim(),
         jTag: (c.body.match(/\[J:([^\]]+)\]/) || [])[1] || null,
@@ -185,9 +192,39 @@ function compute(SPEC, override) {
     .map((l) => l.split('|').map((s) => s.trim()).filter((_, i) => i > 0))
     .map((r) => ({ item: r[1], src: r[2], point: r[3], keywords: (r[4] || '').split(',').map((s) => s.trim()).filter(Boolean), risk: r[5], promo: r[6] || '' }));
 
-  // 4) coverage_gaps subcat(영문키) ↔ 소분류(한글) — 배분표와 동일 순서
+  // 4) coverage_gaps subcat(영문키) ↔ 소분류(한글)
+  // ⚠ 2026-09-08 수리 — 예전에는 "배분표와 동일 순서"로 보고 **배열 위치**로 이었다(keys[i] → leaves[i]).
+  //   설계는 분석의 소분류를 자유롭게 병합·재배열하므로(장비 비교: 영문키 19 → 설계 리프 10) 그 전제가
+  //   성립하지 않는다. 전 스펙 실측: gap 보유 소분류 166건 중 **76건이 남의 소분류에 붙어 있었다**
+  //   (월드맵 `quest_reward` → '목표 영역', `fav_remove` → '즐겨찾기 등록'처럼 한 칸씩 밀린 형태).
+  //   R5 감점이 통째로 엉뚱한 화면에 얹히고, 정작 구멍 난 화면은 만점으로 남는다.
+  //   → ⓐ candidates.json 의 선언된 이름(key→name)으로 **정확 토큰** 매칭(부분일치 금지 —
+  //        '진입'이 '진입점'에 붙어 옆 소분류를 물어오는 것을 막는다)
+  //     ⓑ 안 잡히면 gap 자신의 nearest_design 행이 속한 소분류로 다수결(게이트가 이미 계산한 근접도)
+  //     ⓒ 둘 다 없으면 **붙이지 않는다.** 위치로 추측하느니 R5 를 쉬게 둔다.
   const keyToLeaf = {};
-  Object.keys(gaps.floor_by_subcat || {}).forEach((k, i) => { if (leaves[i]) keyToLeaf[k] = leaves[i].name; });
+  const subMeta = {};
+  ((candidates && candidates.subcats) || []).forEach((s) => { if (s && s.key) subMeta[s.key] = s; });
+  const leafByLine = (n) => (leaves.find((l) => n >= l.line && n <= l.endLine) || {}).name || null;
+  const votes = {};
+  (gaps.gaps || []).forEach((g) => {
+    const n = g.nearest_design && g.nearest_design.line ? leafByLine(g.nearest_design.line) : null;
+    if (n) (votes[g.subcat] = votes[g.subcat] || {})[n] = (votes[g.subcat][n] || 0) + 1;
+  });
+  [...new Set((gaps.gaps || []).map((g) => g.subcat))].forEach((k) => {
+    const m = subMeta[k];
+    const want = new Set(m ? tokenize(m.name).map((w) => w.toLowerCase()) : []);
+    if (want.size) {
+      const pool = leaves.filter((l) => (!m.cat2 || l.mid === m.cat2) && (!m.cat1 || l.major === m.cat1));
+      const rank = (pool.length ? pool : leaves)
+        .map((l) => ({ name: l.name, n: tokenize(l.name).filter((w) => want.has(w.toLowerCase())).length }))
+        .filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+      if (rank.length && (rank.length === 1 || rank[0].n > rank[1].n)) { keyToLeaf[k] = rank[0].name; return; }
+    }
+    const v = votes[k];
+    if (v) keyToLeaf[k] = Object.entries(v).sort((a, b) => b[1] - a[1])[0][0];
+  });
+  const gapUnmapped = [...new Set((gaps.gaps || []).map((g) => g.subcat))].filter((k) => !keyToLeaf[k]);
   const gapByLeaf = {};
   (gaps.gaps || []).forEach((g) => {
     const n = keyToLeaf[g.subcat];
@@ -226,8 +263,10 @@ function compute(SPEC, override) {
     const keeps = xr.filter((x) => x.branch === 'keep');
     const locs = xr.filter((x) => x.branch === 'locate');
     const xp = xrefPenalty(rules, keeps.length, locs.length);
-    if (xp.r3) { score -= xp.r3; reasons.push({ id: 'R3', d: -xp.r3, detail: keeps.map((k) => k.term).join(' / ') }); }
-    if (xp.r4) { score -= xp.r4; reasons.push({ id: 'R4', d: -xp.r4, detail: locs.map((k) => k.term).join(' / ') }); }
+    // terms = 기계용 원본 배열, detail = 사람이 읽는 줄. 항목 단계가 detail 을 다시 쪼개 쓰던 것을
+    // 막기 위해 배열을 그대로 넘긴다 (2026-09-08 수리 — 아래 computeItems 주석 참조).
+    if (xp.r3) { score -= xp.r3; reasons.push({ id: 'R3', d: -xp.r3, terms: keeps.map((k) => k.term), detail: keeps.map((k) => k.term).join(' / ') }); }
+    if (xp.r4) { score -= xp.r4; reasons.push({ id: 'R4', d: -xp.r4, terms: locs.map((k) => k.term), detail: locs.map((k) => k.term).join(' / ') }); }
 
     const g = gapByLeaf[lf.name] || [];
     if (g.length) {
@@ -291,7 +330,7 @@ function compute(SPEC, override) {
   };
 
   // RULES 는 리포트의 라벨 조회용 — 오버라이드가 있으면 실제 적용된 표를 넘긴다.
-  return { scored, sections, charters, skeleton, cmRows, RULES: rules, rules, tuning, pen, diag, autoStop, tokenize };
+  return { scored, sections, charters, skeleton, cmRows, RULES: rules, rules, tuning, pen, diag, autoStop, tokenize, gapUnmapped };
 }
 
 // ── TC(항목) 단위 확신도 ────────────────────────────────────────────────
@@ -328,9 +367,14 @@ function computeItems(SPEC, override) {
       // R3/R4 — 용어 단위로 항목 문장에 실제 걸리는 것만 (걸린 용어를 terms로 보존).
       // 감점은 소분류와 같은 xrefPenalty 로 계산한다 — 여기서 분기별로 따로 pen() 하면
       // keep·locate 가 각각 기준 감점을 물어 순서 역전이 항목 단위에서 되살아난다.
+      // ⚠ 2026-09-08 수리 — 예전에는 소분류의 detail 문자열을 ' / ' 로 **되쪼개** 용어를 복원했다.
+      //   대조가 내는 용어 이름 자체에 ' / ' 가 들어가면(`거래소 / 보상 UI / 정보보기 / 채팅창(툴팁 진입점)`)
+      //   용어 1건이 4건으로 불어나 건수 스케일링이 상한까지 뛴다. 실측(장비 아이템 비교 TC 037):
+      //   소분류 R3 −33(keep 2건)인데 항목 R3 −45(4건) — **항목이 자기 소분류보다 더 깎이는 역전**.
+      //   → 문자열을 되쪼개지 않고 terms 배열을 그대로 쓴다. (구 confidence.json 호환용 폴백 유지)
       const xhit = { R3: [], R4: [] };
       xrefs.forEach((r) => {
-        xhit[r.id] = String(r.detail).split(' / ').filter((t) => {
+        xhit[r.id] = (r.terms || String(r.detail).split(' / ')).filter((t) => {
           const tk = tokenize(t).filter((w) => matchTok(xhay, w));
           return tk.some(isIdent) || tk.length >= tuning.itemXrefMinTokens;
         });

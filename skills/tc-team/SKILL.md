@@ -148,6 +148,8 @@ mkdir -p "$WORK"
 ```
 
 ### S4 — 적대 리뷰 + 판정 (LLM) + 커버리지 원장
+> **후행: 델타 대조 (2026-09-09)** — 판정자가 `fix_plan.json`에 **새로 다는** `기획 확인 필요`는 본 대조(S1→S2) 이후 태어나 뇌에 한 번도 안 물어본 항목이다. `crossref_delta fixplan S4`가 S5 적용 **직전**에 그것만 뽑아 대조한다(답이 TC 기대값까지 채울 수 있는 유일한 시점). 리뷰어의 `reason`이 **그대로 질의문**이 되므로 대상 없는 사유는 무적중이 된다. 규칙 SSoT=`$RULES/tc-대조.md §1.1-a`.
+
 ```bash
 # 렌즈 입력 tc_design.md는 $WORK=$SPEC이라 이미 제자리 (07-29 경로 통합 — 구 cp 제거)
 # 결정론 후보 추출 2종 (2026-07-28 신설 — 비차단, 렌즈·판정자 입력)
@@ -192,6 +194,8 @@ rm -f "$WORK/applied_patches.json"   # ⚠재개 시 필수. 원장 키가 ['edi
 read-back QA: 재덤프로 A~G+J 0-diff + #ERROR! 시트 평가 확인.
 
 ### S7 — 완료처리 (공용 실행기 · 규칙서가 절차 소유)
+> **선행: 델타 대조 (2026-09-09)** — `crossref_delta final S7`이 finalize 앞에서 돈다. `_labels.json` 기획확인 배열 ∪ 최종 TC 비고열=`기획 확인 필요` 전량을 뇌에 대조하고 결과를 패널에 주입한다(`lib/crossref_labels_annotate.js`). **사람에게 나가기 직전 마지막 그물** — 반드시 FINAL-5(패널 기재)보다 앞. 규칙 SSoT=`$RULES/tc-대조.md §1.1-a`. 대조 off·뇌 미보유·0건이면 조용히 스킵(비차단).
+
 **절차 SSoT: `$RULES/완료처리.md`** — 순서·패널 문구·FINAL-6 안내를 규칙서가 소유하고, **아래 실행기가 그것을 런타임에 읽어 실행**한다. Loki 풀체인도 똑같이 이 스크립트를 부르므로 두 경로의 동작이 일치한다(07-28 공용화). 여기 절차 중복 기재 금지.
 ```bash
 bash "$TCTEAM/scripts/finalize.sh" --feature "$FEATURE_NAME" --sheet-id "$SHEET" --tab "<실제탭명>" --conf-url "<URL>"
