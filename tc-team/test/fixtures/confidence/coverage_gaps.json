@@ -1,9 +1,9 @@
 {
-  "_comment": "확신도 픽스처. floor_by_subcat 의 키 순서 = 분류 그룹핑 트리의 리프 순서(위치 조인).",
+  "_comment": "확신도 픽스처. floor_by_subcat 의 키 순서는 분류 그룹핑 트리의 리프 순서와 **일부러 다르다** — subcat↔소분류는 위치가 아니라 candidates.json 의 선언된 이름으로 잇는다(2026-09-08 수리). 위치 조인으로 되돌리면 gap 이 '우편 배너' 리프에 붙어 테스트가 깨진다.",
   "floor_by_subcat": {
+    "mail_reward": 3,
     "banner_spec": 2,
     "coupon_input": 3,
-    "mail_reward": 3,
     "exchange_rate": 1
   },
   "gaps": [

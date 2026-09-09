@@ -250,10 +250,17 @@ final_7() {
     say "FINAL-7 스킵 — 롤아웃 스크립트 없음"; RESULT[7]="—"; return
   fi
   say "FINAL-7 볼트 임베드"
-  if PYTHONIOENCODING=utf-8 python "$ROLLOUT" --apply --only "$FEAT"; then
+  PYTHONIOENCODING=utf-8 python "$ROLLOUT" --apply --only "$FEAT"
+  local rc=$?
+  if [[ $rc -eq 0 ]]; then
     # 편집분을 마커 무결성 스냅샷에 반영. 빠뜨리면 다음 weekly 가 🔴 DRIFT 로 오탐한다.
     PYTHONIOENCODING=utf-8 python "{WORK_ROOT}/<프로젝트>_관리/_verify_manual_sections.py" --snapshot --quiet \
       && RESULT[7]="✓" || RESULT[7]="✓(스냅샷✗)"
+  elif [[ $rc -eq 2 ]]; then
+    # 대상 없음(볼트 노트 미존재·앵커 부재 등) — TC 실패가 아니므로 ✗ 로 쓰지 않되,
+    # ✓ 로도 쓰지 않는다. "안 붙었다"가 보고에 드러나야 한다.
+    say "FINAL-7 대상 없음 — 임베드 안 됨 (사유는 위 스킵 목록)"
+    RESULT[7]="—(대상없음)"
   else
     RESULT[7]="✗"
   fi
@@ -286,7 +293,7 @@ try{
 
 LABEL_WARN=""
 [[ "${LABEL_BANNED:-0}" -gt 0 ]] && LABEL_WARN="  ⚠ 라벨 금지어 ${LABEL_BANNED}건"
-say "완료 — FINAL-0:${RESULT[0]} 1:${RESULT[1]} 2:${RESULT[2]} 5:${RESULT[5]} 3:${RESULT[3]}${LABEL_WARN}"
+say "완료 — FINAL-0:${RESULT[0]} 1:${RESULT[1]} 2:${RESULT[2]} 5:${RESULT[5]} 3:${RESULT[3]} 7:${RESULT[7]}${LABEL_WARN}"
 # 실패는 요약의 ✗ 한 글자로 묻히지 않게 마지막에 한 번 더 — 완료 보고에 그대로 옮긴다
 for a in "$SPEC/.final0_alert.txt" "$SPEC/.final5_alert.txt"; do
   [[ -s "$a" ]] && { echo "[FINALIZE] ⚠ 완료 보고에 반드시 포함할 것:"; cat "$a"; }
