@@ -100,7 +100,8 @@ async function createTcTab() {
     // ─── STEP 2: TC 데이터 변환 + 업로드 ───
     console.log('[2/3] TC 데이터 업로드 중...');
 
-    const header = ['TC ID', '대분류', '중분류', '소분류', '검증단계', '재현 스탭', '플랫폼', 'PC 결과', '모바일 결과', '비고', '담당자'];
+    // 2026-09-04: 링크 열(J) 신설 — 비고 J→K, 담당자 K→L. tc_data 7요소 계약은 그대로.
+    const header = ['TC ID', '대분류', '중분류', '소분류', '검증단계', '재현 스탭', '플랫폼', 'PC 결과', '모바일 결과', '링크', '비고', '담당자'];
     const rowsData = [header];
     let prevMajor = '', prevMinor = '', prevSub = '';
     const basicFuncRowIndices = []; // 기본기능 행의 0-based 시트 행 인덱스
@@ -121,7 +122,8 @@ async function createTcTab() {
         //   생성-검증 모순 런이 발생한다 (v7 TC45/64/81 사고의 원천).
         const hi = expectedHI(note, platform, major === '기본기능');
 
-        rowsData.push([id, dMajor, dMinor, dSub, verif, step, platform, hi.h, hi.i, note, '']);
+        //                                                              J=링크(빈칸) K=비고  L=담당자(빈칸)
+        rowsData.push([id, dMajor, dMinor, dSub, verif, step, platform, hi.h, hi.i, '', note, '']);
     }
 
     await sheets.spreadsheets.values.update({

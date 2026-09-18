@@ -21,6 +21,7 @@ const suites = [
   'eval_digest.test.js',
   'confidence.test.js',
   'convert_gate.test.js',
+  'sheet_layout_contract.test.js',
   'crossref_delta.test.js',
   's1_crossref_cwd.test.js',
   's1_designer_maxout.test.js',
