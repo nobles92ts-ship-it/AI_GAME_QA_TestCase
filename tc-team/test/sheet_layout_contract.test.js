@@ -31,6 +31,25 @@ function positionalMemoIndex() {
   return { positional: Number(m[1]), tcData: Number(m[2]) };
 }
 
+// 패널 열 세대 — 프로젝트 정보 패널(add_project_info)과 라벨 블록(apply_labeling)은 한 칸 차이로 맞물린다.
+// 구 세대 K~O/L · 신 세대 L~P/M — 어느 쪽이든 `라벨 시작 = 패널 시작 + 1` 이 성립한다.
+// 2026-09-18: v4.3.3 이 패널만 신세대로 올리고 라벨은 두어, 둘 다 L 이 되며 라벨이 패널 제목 칸을 덮었다.
+function colIndex(letter) { return letter.charCodeAt(0) - 65; }
+
+function panelStartColumn() {
+  const src = fs.readFileSync(path.join(UTIL, 'add_project_info.js'), 'utf8');
+  const m = src.match(/!([A-Z])1:[A-Z]\d/);
+  assert.ok(m, 'add_project_info.js 에서 패널 범위(!X1:Y10)를 찾지 못했다 — 표현이 바뀌었으면 이 게이트부터 고칠 것');
+  return m[1];
+}
+
+function labelStartColumn() {
+  const src = fs.readFileSync(path.join(UTIL, 'apply_labeling.js'), 'utf8');
+  const m = src.match(/!([A-Z])\$\{START \+ 1\}/);
+  assert.ok(m, 'apply_labeling.js 에서 라벨 시작 열을 찾지 못했다 — 표현이 바뀌었으면 이 게이트부터 고칠 것');
+  return m[1];
+}
+
 t('시트를 만드는 쪽과 검증하는 쪽의 비고 열 위치가 같다 (헤더 없는 덤프에서 한 칸 밀리지 않는다)', () => {
   const header = headerColumns();
   const idx = positionalMemoIndex();
@@ -50,6 +69,14 @@ t('담당자가 마지막 열이다 (뒤에 열을 붙이면 트레일링 ragged
 t('tc_data(7요소) 경로의 비고 인덱스는 시트 레이아웃과 무관하게 마지막이다', () => {
   const idx = positionalMemoIndex();
   assert.strictEqual(idx.tcData, 6, `tc_data 비고=${idx.tcData} — 7요소 계약이 바뀌었으면 tc-생성.md 와 같이 볼 것`);
+});
+
+t('패널 시작 열과 라벨 블록 시작 열이 한 칸 차이다 (라벨이 패널 제목 칸을 덮지 않는다)', () => {
+  const panel = panelStartColumn(), label = labelStartColumn();
+  assert.strictEqual(
+    colIndex(label), colIndex(panel) + 1,
+    `패널 시작=${panel} · 라벨 시작=${label} — 두 파일이 다른 세대다. ` +
+    `패널 열도 세트로 움직인다 (add_project_info · apply_labeling · jira_assignees)`);
 });
 
 console.log(`\n결과: ${pass} PASS / ${fail} FAIL`);

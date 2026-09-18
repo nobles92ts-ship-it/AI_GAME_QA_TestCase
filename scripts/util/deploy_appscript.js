@@ -30,7 +30,7 @@ const SCRIPT_ID_PATH = path.join(__dirname, '../credentials/appscript_script_id.
 // ⚠ Apps Script content PUT은 전체 교체 — 프로젝트의 모든 .gs 파일을 여기에 포함할 것
 const GS_FILES = [
     { name: 'tab_manager',      path: path.join(__dirname, '../../appscript/tab_manager.gs') },
-    { name: 'bvt_slack',        path: path.join(__dirname, '../../appscript/bvt_slack.gs') },
+    { name: 'dashboard_share',  path: path.join(__dirname, '../../appscript/dashboard_share.gs') },
     { name: 'dashboard_builder', path: path.join(__dirname, '../../appscript/dashboard_builder.gs') },
     { name: 'tc_nav',           path: path.join(__dirname, '../../appscript/tc_nav.gs') },
 ];
@@ -138,7 +138,7 @@ async function getOrCreateScriptId(auth) {
 
 async function uploadCode(auth, scriptId) {
     if (!fs.existsSync(SLACK_CONFIG_PATH)) {
-        throw new Error(`slack_config.json을 찾을 수 없습니다: ${SLACK_CONFIG_PATH} (bvt_slack.gs의 __SLACK_TOKEN__ 치환에 필요)`);
+        throw new Error(`slack_config.json을 찾을 수 없습니다: ${SLACK_CONFIG_PATH} (dashboard_share.gs의 __SLACK_TOKEN__ 치환에 필요)`);
     }
     const slackToken = JSON.parse(fs.readFileSync(SLACK_CONFIG_PATH, 'utf-8')).token;
     if (!slackToken) {
@@ -160,6 +160,32 @@ async function uploadCode(auth, scriptId) {
             .replace(/__SPREADSHEET_ID__/g, SPREADSHEET_ID)
     }));
 
+    // ⚠ content PUT은 전체 교체다. GS_FILES에 없는 원격 파일(예: 7차의 'BVT Auto Tracker')이
+    //   그대로 삭제되므로, 배포 전에 원격을 읽어 "우리가 모르는 파일"은 원문 그대로 되돌려 넣는다.
+    //   매니페스트도 마찬가지 — 이미 있으면 건드리지 않는다. 스코프를 늘리면 기존 트리거의
+    //   인가가 풀려 조용히 멈추기 때문이다(시트마다 필요한 스코프가 다르다).
+    let remoteFiles = [];
+    try {
+        const got = await auth.request({
+            method: 'GET',
+            url: `https://script.googleapis.com/v1/projects/${scriptId}/content`,
+        });
+        remoteFiles = got.data.files || [];
+    } catch (err) {
+        console.log('ℹ 기존 원격 내용 없음 (신규 프로젝트로 간주)');
+    }
+
+    const ourNames = new Set([...gsFiles, ...htmlFiles].map(f => f.name).concat('appsscript'));
+    const keptFiles = remoteFiles.filter(f => !ourNames.has(f.name));
+    if (keptFiles.length) {
+        console.log(`✔ 원격 전용 파일 보존: ${keptFiles.map(f => f.name).join(', ')}`);
+    }
+
+    const remoteManifest = remoteFiles.find(f => f.name === 'appsscript');
+    if (remoteManifest) {
+        console.log('✔ 기존 매니페스트 유지 (스코프 변경 없음 — 트리거 인가 보존)');
+    }
+
     await auth.request({
         method: 'PUT',
         url: `https://script.googleapis.com/v1/projects/${scriptId}/content`,
@@ -167,7 +193,8 @@ async function uploadCode(auth, scriptId) {
             files: [
                 ...gsFiles,
                 ...htmlFiles,
-                {
+                ...keptFiles,
+                remoteManifest || {
                     name: 'appsscript',
                     type: 'JSON',
                     source: JSON.stringify({
@@ -207,10 +234,10 @@ async function main() {
     console.log(`\n📝 Apps Script 편집기: ${editorUrl}`);
     console.log('\n⚠️  셋업 함수 1회 실행이 필요합니다 (편집기 → 함수 드롭다운 → ▶ 실행):');
     console.log('   - setupAll()          ← 탭 색상 정렬: M3 체크박스 + onEdit + 일일 09:00 (최초 1회만)');
-    console.log('   - setupBvtSlackAll()  ← BVT Slack 전송: M5 라벨 + M6 체크박스 + onM6Edit 트리거');
+    console.log('   - setupDashboardShareAll() ← 대시보드 공유: M5 라벨 + M6 체크박스 + onM6Edit 트리거');
     console.log('\n   개별 실행도 가능:');
     console.log('   - setupM3Button() / setupOnEditTrigger() / setupDailyTrigger()');
-    console.log('   - setupM6Button() / setupBvtSlackTrigger()');
+    console.log('   - setupM6Button() / setupDashboardShareTrigger()');
     console.log('\n   ⚠ 스코프 추가(외부 요청)로 실행 시 권한 재승인 창이 뜹니다 — 허용해주세요.');
     console.log('═══════════════════════════════════════════════\n');
 }

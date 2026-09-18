@@ -8,6 +8,20 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.4] — 2026-09-18
+
+### Fixed
+
+- **The panel and the label block were a generation apart, and the label won.** The project-info panel and the label block are interlocked one column apart — old layout K~O with labels at L, current layout L~P with labels at M. v4.3.3 moved the panel to the current layout and left the label writer where it was, putting both at L: the labels were written straight over the panel's own title cells. The two move together, along with the assignee filler, and the layout gate now asserts the one-column relationship in both directions. Verified against a positive sample first — on the previous release it fails.
+- **A usage example still named an agent retired two majors ago.** `pipeline_retry.sh` documented its wrapper with `--agent tc-writer-v2`, a name that stopped existing in v4.0.0. Anyone copying that line got an agent the repository does not ship. It now names a current one, and the dependency checker — which reads `--agent` flags as hard requirements — confirms it resolves.
+
+### Changed
+
+- **The remaining shared utilities came forward.** The published copies had been frozen since 2026-09-04 because this directory was never part of the sync path: the retry wrapper (token-expiry now aborts immediately instead of burning retries), the SSoT drift check (its scan now covers the finalize and pipeline entry scripts), and the label writer. They are declared file by file rather than as a directory — several files in here are deliberately *older* than their source, having been hand-sanitized for publication, and a blanket sync would undo that.
+- **`bvt_slack.gs` is retired; `dashboard_share.gs` replaces it.** The deploy script does a full replace of the Apps Script project, so its list and the shipped `appscript/` directory have to agree exactly — a file left behind in one and dropped from the other silently deletes functions from the deployed project. Both now match the deploy script, and the sync declares that list explicitly instead of leaving the directory to drift.
+
+---
+
 ## [v4.3.3] — 2026-09-18
 
 ### Fixed
