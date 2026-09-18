@@ -133,7 +133,7 @@ need('완료처리', 'finalize.sh 실행기 참조', has('완료처리', 'finali
 need('skill', 'S7의 finalize.sh 위임', has('skill', 'finalize.sh'));
 {
   // 실행기 실물 존재 (md가 가리키는 기계가 실재하는지)
-  for (const p of [`${T}/scripts/finalize.sh`, `${T}/scripts/run_pipeline_full.sh`, `${T}/scripts/run_pipeline_s1only.sh`]) {
+  for (const p of [`${T}/scripts/finalize.sh`, `${T}/scripts/run_pipeline_full.sh`, `${T}/scripts/run_pipeline_s1only.sh`, `${T}/scripts/crossref_delta.sh`]) {
     if (!fs.existsSync(p)) findings.push({ file: '완료처리', type: '파일없음', what: `실행기 실물 부재: ${p}` });
   }
 }
@@ -187,10 +187,12 @@ for (const k of ['설계', '생성', '리뷰', 'digest']) {
 }
 
 // 12) C-15 연계 기능 승격 게이트 (2026-07-28, 7차 회고 유형 C)
+//     + C-16 병기·미정의 임의 확정 검수 (2026-09-10, tc-학습 P-25 — 세공 TC055 재발 2회)
 need('검수', 'C-15 연계 기능 승격 게이트', has('검수', 'C-15'));
-need('검수', '검수 범위 C-01 ~ C-15 표기', hasRe('검수', /C-01\s*~\s*C-15/));
-need('검수에이전트', '검수 범위 C-01~C-15 표기', has('검수에이전트', 'C-01~C-15'));
-forbid('검수에이전트', /C-01~C-14/, '검수 범위가 C-14로 회귀 (C-15 승격 게이트 누락)');
+need('검수', 'C-16 병기·미정의 임의 확정 검수', has('검수', 'C-16'));
+need('검수', '검수 범위 C-01 ~ C-16 표기', hasRe('검수', /C-01\s*~\s*C-16/));
+need('검수에이전트', '검수 범위 C-01~C-16 표기', has('검수에이전트', 'C-01~C-16'));
+forbid('검수에이전트', /C-01~C-1[45](?!\d)/, '검수 범위가 C-14·C-15로 회귀 (C-16 병기 확정 검수 누락)');
 need('설계', '연계 기능 TC 승격 게이트 (default-deny)', has('설계', '연계 기능 TC 승격 게이트'));
 
 // 13) 기계 게이트 실재·배선 감시 (2026-07-28 — "문서는 기계 검출이라 주장하는데 배선 없음" 재발 방지)
@@ -232,6 +234,47 @@ forbid('digest', /tc-team-v2[\\/]/, 'digest 출처가 구 v2 경로를 가리킴
   } catch {}
 }
 
+// 15) digest EVAL 번호 SSoT 등재 (2026-09-10 신설 — EVAL-21 실측 발견)
+//     digest 는 **발췌본**이라 새 규칙을 발명하면 안 된다. 그런데 EVAL-21(QA 스코프 준수)이
+//     digest 에만 있고 tc-리뷰.md 에는 없었다 — 발췌본이 원본에 없는 번호를 CRITICAL 로 집행 중이었다.
+//     S4 는 digest 를 집행하므로, 등재 없는 번호는 "리뷰 규칙인 척하는 고아 규칙"이 된다.
+{
+  const nums = (k) => new Set((text[k].match(/EVAL-\d{2}/g) || []).map(x => x.toUpperCase()));
+  const orphan = [...nums('digest')].filter(n => !nums('리뷰').has(n)).sort();
+  if (orphan.length) {
+    findings.push({
+      file: 'digest',
+      type: '드리프트',
+      what: `digest 에만 있고 tc-리뷰.md 에 등재 없는 EVAL: ${orphan.join(', ')} — `
+        + `발췌본은 새 규칙을 발명할 수 없다. SSoT(tc-리뷰.md) 에 먼저 등재할 것`,
+    });
+  }
+}
+
+// 16) 대조 핸드오프·에이전트 정의가 규칙 파일을 거스르지 못하게 (2026-09-11 신설 — 기능A 실측)
+//     tc-대조.md §1.2-2 가 xlsx 값 apply 를 허용(09-10)했는데 에이전트 정의와 체인 핸드오프 2곳에
+//     "로컬 데이터테이블 실제값 금지 / 가져오지 말고 locate" 가 남았고, 에이전트는 규칙 파일이 아니라 그 문구를 따랐다
+//     (원본 열람 0 · locate 21건 중 13건이 xlsx 컬럼 지목). 규칙서만 고치면 조용히 무력화되는 모양이라 기계로 막는다.
+//     ⚠ 재발 경로가 실재한다: 스테이징 사본(run_pipeline_s1only.sh.*_PENDING_*)이 옛 문구를 들고 있어 교체되는 순간 되살아난다.
+{
+  const STALE = /실제값\s*금지|실제값은\s*가져오지\s*말|값은\s*가져오지\s*말고\s*locate/;
+  forbid('대조에이전트', STALE, 'xlsx 값 apply 해제(§1.2-2) 뒤에도 옛 금지 문구 잔존 — 에이전트가 규칙 파일 대신 이 문구를 따른다');
+  const readChain = f => { try { return fs.readFileSync(`${T}/scripts/${f}`, 'utf8'); } catch { return ''; } };
+  const s1 = readChain('run_pipeline_s1only.sh');
+  const full = readChain('run_pipeline_full.sh');
+  // 델타 대조 핸드오프는 2026-09-11 부터 crossref_delta.sh 한 곳이다(full.sh S4 · finalize.sh S7 이 source).
+  // full.sh 에는 대조 핸드오프가 없으므로 옛 문구 재유입만 본다. 파일 부재는 위 5) 실행기 실물 검사가 잡는다.
+  const delta = readChain('crossref_delta.sh');
+  for (const [f, s, handoff] of [['run_pipeline_s1only.sh', s1, true], ['crossref_delta.sh', delta, true], ['run_pipeline_full.sh', full, false]]) {
+    const m = s.match(STALE);
+    if (m) findings.push({ file: '대조', type: '금지패턴', what: `${f} 대조 핸드오프에 옛 금지 문구 잔존 — 발견: "${m[0]}"` });
+    if (handoff && s && !s.includes('xlsx_extract.md')) findings.push({ file: '대조', type: '드리프트', what: `${f} 대조 핸드오프가 xlsx_extract.md 를 가리키지 않음 — 에이전트가 추출본을 모른다` });
+  }
+  if (s1 && !s1.includes('xlsx_extract.js')) findings.push({ file: '대조', type: '드리프트', what: 'run_pipeline_s1only.sh 에 xlsx_extract.js 미배선 — 규칙서는 추출본을 약속하는데 체인이 만들지 않음' });
+  need('대조에이전트', '대조 에이전트 정의가 xlsx_extract.md 를 가리킴', has('대조에이전트', 'xlsx_extract.md'));
+  need('대조', 'tc-대조.md §1.2-2 가 xlsx_extract.md 를 명시', has('대조', 'xlsx_extract.md'));
+}
+
 // ── 출력 + 이력 ─────────────────────────────────────────────────────────────
 const quiet = process.argv.includes('--quiet');
 const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -243,7 +286,7 @@ if (missing.length) {
 }
 
 if (findings.length === 0) {
-  if (!quiet) process.stdout.write(`✅ ssot_drift_check: 드리프트 0건 (파일 ${Object.keys(FILES).length}개, 검사 15종 — tc-team 정본)\n`);
+  if (!quiet) process.stdout.write(`✅ ssot_drift_check: 드리프트 0건 (파일 ${Object.keys(FILES).length}개, 검사 16종 — tc-team 정본)\n`);
   process.exit(0);
 }
 

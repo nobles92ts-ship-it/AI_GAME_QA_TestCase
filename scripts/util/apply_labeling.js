@@ -1,5 +1,5 @@
 /**
- * FINAL-5b: 라벨(_labels.json)을 L/M 세로 레이아웃으로 기재 — 기능 무관 일반화
+ * FINAL-5b: 라벨(_labels.json)을 M/N 세로 레이아웃으로 기재 — 기능 무관 일반화
  *
  * 사용법:
  *   node apply_labeling.js <spreadsheetId> <sheetName> <labelsJsonPath>
@@ -9,9 +9,11 @@
  *     "기획확인":   ["[값 미정] 질문 한 문장?\n왜 필요한지 한 줄", ...],   // 0~N건 (구 `\n→` 형식은 08-04 폐기)
  *     "테스트데이터": ["[서버·기획] 본문...\n▷ 목적...", ...]       // 0~M건
  *   }
+ *   ⚠ 받은 그대로 기재한다 — 거르기는 여기 일이 아니다. finalize.sh FINAL-5a↔5b 사이에서
+ *     tc-team/lib/crossref_labels_annotate.js 가 대조가 답을 찾은 질문을 이미 뺐다(2026-09-11~ · 꼬리표는 붙이지 않는다).
  *
- * 레이아웃(확정): L=섹션 헤더 한 칸(병합X, 기획확인 갈색 / 데이터 남색),
- *   M=항목 세로 나열(OVERFLOW, 배경·테두리 없음), 12행~, 열너비 불변(미니대시보드 보호).
+ * 레이아웃(확정): M=섹션 헤더 한 칸(병합X, 기획확인 갈색 / 데이터 남색),
+ *   N=항목 세로 나열(OVERFLOW, 배경·테두리 없음), 12행~, 열너비 불변(미니대시보드 보호).
  *   apply_v7_LM_layout.js 를 일반화한 것.
  */
 const { google } = require('googleapis');
@@ -20,7 +22,9 @@ const fs = require('fs');
 
 const PLAN_HDR = '📋 기획 확인 요청';
 const DATA_HDR = '🔧 테스트 데이터 생성 요청';
-const LCOL = 11, MCOL = 12, START = 11; // L, M, 12행(0-base 11)
+// 2026-09-04 BTS 열 신설로 한 칸 이동: 구 L/M → M(섹션 헤더)/N(항목 본문).
+// 이름으로 부른다 — 또 밀릴 때 숫자만 고치면 된다.
+const HDR_COL = 12, BODY_COL = 13, START = 11; // M, N, 12행(0-base 11)
 
 const NAVY = { red: 0.141, green: 0.231, blue: 0.322 };
 const BROWN = { red: 0.420, green: 0.290, blue: 0.102 };
@@ -59,34 +63,34 @@ async function applyLabeling(spreadsheetId, sheetName, labels) {
     const planStart = START, planEnd = planStart + planItems.length;
     const dataStart = planEnd, dataEnd = dataStart + dataItems.length;
 
-    // 재실행 대비: L12:M(넉넉히) 값 정리
-    await sheets.spreadsheets.values.clear({ spreadsheetId, range: `'${sheetName}'!L${START + 1}:M${START + 60}` });
+    // 재실행 대비: M12:N(넉넉히) 값 정리
+    await sheets.spreadsheets.values.clear({ spreadsheetId, range: `'${sheetName}'!M${START + 1}:N${START + 60}` });
     if (planItems.length === 0 && dataItems.length === 0) {
         console.log('라벨 없음 — 기재 생략');
         return;
     }
 
-    // 값 입력 (L=헤더는 각 섹션 첫 행, M=본문)
+    // 값 입력 (M=헤더는 각 섹션 첫 행, N=본문)
     const rows = [];
     planItems.forEach((it, i) => rows.push([i === 0 ? PLAN_HDR : '', it]));
     dataItems.forEach((it, i) => rows.push([i === 0 ? DATA_HDR : '', it]));
     await sheets.spreadsheets.values.update({
-        spreadsheetId, range: `'${sheetName}'!L${START + 1}`, valueInputOption: 'RAW', requestBody: { values: rows },
+        spreadsheetId, range: `'${sheetName}'!M${START + 1}`, valueInputOption: 'RAW', requestBody: { values: rows },
     });
 
-    // 서식 (순서 중요: L 전체 흰색 먼저 → 헤더가 덮음)
+    // 서식 (순서 중요: M 전체 흰색 먼저 → 헤더가 덮음)
     const reqs = [
-        { repeatCell: { range: { sheetId: gid, startRowIndex: planStart, endRowIndex: dataEnd, startColumnIndex: LCOL, endColumnIndex: LCOL + 1 }, cell: { userEnteredFormat: { backgroundColor: WHITE } }, fields: 'userEnteredFormat.backgroundColor' } },
+        { repeatCell: { range: { sheetId: gid, startRowIndex: planStart, endRowIndex: dataEnd, startColumnIndex: HDR_COL, endColumnIndex: HDR_COL + 1 }, cell: { userEnteredFormat: { backgroundColor: WHITE } }, fields: 'userEnteredFormat.backgroundColor' } },
     ];
     if (planItems.length) {
-        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: planStart, endRowIndex: planStart + 1, startColumnIndex: LCOL, endColumnIndex: LCOL + 1 }, cell: { userEnteredFormat: hdrFmt(BROWN) }, fields: FMT_FIELDS } });
-        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: planStart, endRowIndex: planEnd, startColumnIndex: MCOL, endColumnIndex: MCOL + 1 }, cell: { userEnteredFormat: bodyFmt }, fields: FMT_FIELDS } });
+        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: planStart, endRowIndex: planStart + 1, startColumnIndex: HDR_COL, endColumnIndex: HDR_COL + 1 }, cell: { userEnteredFormat: hdrFmt(BROWN) }, fields: FMT_FIELDS } });
+        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: planStart, endRowIndex: planEnd, startColumnIndex: BODY_COL, endColumnIndex: BODY_COL + 1 }, cell: { userEnteredFormat: bodyFmt }, fields: FMT_FIELDS } });
     }
     if (dataItems.length) {
-        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: dataStart, endRowIndex: dataStart + 1, startColumnIndex: LCOL, endColumnIndex: LCOL + 1 }, cell: { userEnteredFormat: hdrFmt(NAVY) }, fields: FMT_FIELDS } });
-        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: dataStart, endRowIndex: dataEnd, startColumnIndex: MCOL, endColumnIndex: MCOL + 1 }, cell: { userEnteredFormat: bodyFmt }, fields: FMT_FIELDS } });
+        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: dataStart, endRowIndex: dataStart + 1, startColumnIndex: HDR_COL, endColumnIndex: HDR_COL + 1 }, cell: { userEnteredFormat: hdrFmt(NAVY) }, fields: FMT_FIELDS } });
+        reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: dataStart, endRowIndex: dataEnd, startColumnIndex: BODY_COL, endColumnIndex: BODY_COL + 1 }, cell: { userEnteredFormat: bodyFmt }, fields: FMT_FIELDS } });
     }
-    // ⚠ 열너비·테두리는 건드리지 않음 (불변 — 미니대시보드 M열 보호)
+    // ⚠ 열너비·테두리는 건드리지 않음 (불변 — 미니대시보드 N열 보호. 폭 소유자는 add_project_info.js)
 
     await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: reqs } });
     console.log(`라벨링 기재 완료 [${sheetName}] — 기획확인 ${planItems.length}건 / 테스트데이터 ${dataItems.length}건`);
