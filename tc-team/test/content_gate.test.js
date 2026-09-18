@@ -24,6 +24,58 @@ t('클린 행 = PASS', () => {
   assert.ok(res.pass, JSON.stringify(res.byType));
 });
 
+t('P-27 내부 마킹(⚠) 차단 — 양성', () => {
+  const F = '인게임 전투 중 회피하면 "회피" 텍스트가 노출되는지 확인 (DFT_HitDamage_FontSize ⚠ 미지정(Define 데이터 어셋 확인 필요))';
+  const res = checkContent([row({ F })]);
+  assert.strictEqual(res.pass, false);
+  assert.strictEqual(res.byType.internal_mark, 1);
+});
+
+t('P-27 음성 — 마킹 없는 상수 병기는 통과', () => {
+  const F = '인게임 전투 중 회피하면 "회피" 텍스트가 노출되는지 확인 (DFT_HitDamage_FontSize)';
+  const res = checkContent([row({ F })]);
+  assert.ok(res.pass, JSON.stringify(res.byType));
+});
+
+t('P-27 음성 — 「미지정」 단독은 정당 관례라 안 걸린다', () => {
+  const F = '결과물 등급이 노출 기준 등급(Sample_HighGradeCondition, 미지정)과 같으면 연출이 노출되는지 확인';
+  const res = checkContent([row({ F })]);
+  assert.ok(res.pass, JSON.stringify(res.byType));
+});
+
+t('P-28 상수명 없는 경계수치 = 경고(비차단) — 양성', () => {
+  const res = checkContent([row({ F: '영문 30자 이내 메시지 입력 후 저장 및 반영이 되는지 확인' })]);
+  assert.ok(res.pass, '경고는 차단하지 않는다');
+  assert.strictEqual(res.warnByType.bare_boundary_number, 1);
+});
+
+t('P-28 음성 — 소수량 전제(N개 이상)는 경고 아님 (2026-09-10 단위 축소)', () => {
+  const rows = [
+    row({ F: '진행 중인 퀘스트가 2개 이상 등록된 상태에서 슬롯을 접어도 1개는 펼쳐진 상태로 유지되는지 확인' }),
+    row({ A: '002', F: '캐릭터 보유개수가 2개 이상일 경우 캐릭터 삭제 가능 확인' }),
+    row({ A: '003', F: '자동 사냥 범위 내 타게팅 가능한 대상이 1개 이상 있는지 확인' }),
+  ];
+  const res = checkContent(rows);
+  assert.ok(res.pass);
+  assert.ok(!res.warnByType.bare_boundary_number, JSON.stringify(res.warnByType));
+});
+
+t('P-28 양성 — 임계값 단위는 계속 잡는다', () => {
+  const rows = [
+    row({ F: '채널 점유율이 20% 미만으로 지속되면 병합 대상에 포함되는지 확인' }),
+    row({ A: '002', F: '성장 기준 레벨인 100레벨 도달 시 스탯이 성장하지 않는지 확인' }),
+  ];
+  const res = checkContent(rows);
+  assert.strictEqual(res.warnByType.bare_boundary_number, 2);
+});
+
+t('P-28 음성 — 상수명 병기하면 경고 없음', () => {
+  const F = '인벤토리 사용률이 79%(InventorySafeRatio 80 미만)일 때 게이지가 기본 색상으로 표시되는지 확인';
+  const res = checkContent([row({ F })]);
+  assert.ok(res.pass);
+  assert.ok(!res.warnByType.bare_boundary_number, JSON.stringify(res.warnByType));
+});
+
 t('추상표현(정상적으로) 차단', () => {
   const res = checkContent([row({ F: '기능이 정상적으로 작동하는지 확인' })]);
   assert.strictEqual(res.pass, false);

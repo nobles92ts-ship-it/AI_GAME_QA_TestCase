@@ -15,11 +15,16 @@ const suites = [
   'dup_gate.test.js',
   'origin_gate.test.js',
   'item_dict.test.js',
+  'xlsx_extract.test.js',
   'item_cite_gate.test.js',
   'ab_compare.test.js',
   'eval_digest.test.js',
   'confidence.test.js',
   'convert_gate.test.js',
+  'crossref_delta.test.js',
+  's1_crossref_cwd.test.js',
+  's1_designer_maxout.test.js',
+  'impact_scope.test.js',
   'phase0_spike.js',
 ];
 let allPass = true;

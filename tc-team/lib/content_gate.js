@@ -4,6 +4,7 @@
  *
  * v2 FINAL-4(run_pipeline.sh:437-450)의 정확 복제 — 단 역할 분리(계획 §4 S5/S6):
  *   여기(S5·로컬): 추상표현(F) · Output Format 잔류(임의 셀) · G열 enum · J열 화이트리스트
+ *                  · 내부 마킹 유출(F, P-27) · 상수명 없는 경계수치(F, P-28 경고)
  *   S6(시트 평가): #ERROR!  — 수식 평가 후에만 발생하므로 업로드 후 재덤프에서 검사 (여기 제외)
  *
  * v2 대비 승격: v2는 완료처리 단계 게이트 → v3는 업로드 前 차단(미검증 업로드 원천 차단, tc_final.ok 발급 전).
@@ -28,6 +29,25 @@ const EXACT_VAGUE = /정확히\s*(갱신|제거|처리|표시|반영|동작)/;
 // Google Sheets는 셀 첫 글자 '를 리터럴 지시자로, = + @를 수식 시작으로 해석해 저장값이 원본과 달라진다.
 // 그대로 올리면 S6 Post-Write read-back 대조가 반드시 CRITICAL 실패(exit 5) → 여기서 선차단해 재작업 방지.
 const LEADING_SPECIAL = /^\s*['=+@]/;
+// ── P-27 내부 마킹 유출 (2026-09-10, 7차 전수 환류) ──
+// 분석 단계가 "기획서에 값이 없다"고 남긴 내부 마킹이 F열에 실려 QA에게 그대로 나갔다.
+// F열은 문서 필드가 아니라 **실행 문장**이라 내부 주석이 섞이면 안 된다.
+// ⚠ 검출식은 '⚠' 단독이 정답 — 2026-09-10 전수 실측(생성시점 13,586 / 라이브 9,517문장):
+//   '⚠' 단독            = 생성 33 / 라이브 29, 전건이 진짜 유출 (오탐 0)
+//   '⚠|미지정|확인 필요' = 생성 300 / 라이브 132 — '(상수명, 미지정)' 정당 표기 관례와 충돌 → 기각
+// 넓히지 말 것. 넓히면 파이프라인이 정상 행에서 멈춘다.
+const INTERNAL_MARK = /⚠/;
+// ── P-28 상수명 없는 경계 수치 (동일 환류) — 경고 등급 ──
+// 경계 수치가 상수명 병기 없이 값만 있으면 기획 수치가 바뀔 때 어느 TC가 그 상수를 쓰는지
+// 역추적할 수 없어 갱신에서 통째로 누락된다(7차 실측: PK_시스템 146·148·167이 그렇게 빠졌다).
+// 라이브 오탐률을 아직 못 재서 **차단하지 않는다** — 분류 후 violation 승격 판단.
+// ⚠ 단위에서 `개·칸·슬롯` 은 뺐다 (2026-09-10 실측): 넣으면 89건인데 그중 36건이
+//   `퀘스트 2개 이상` · `캐릭터 2개 이상` · `대상이 1개 이상` 같은 **테스트 전제 수량**이라
+//   상수화 대상이 아니다(상수명이 없는 게 정상). 빼면 53건이 되고 진짜 후보 손실은 0.
+//   분류 대상 목록 = team/lessons/_no_sync/7차_스냅샷대조_20260910/P28_분류대상_89건.md
+// ⚠ 이 식이 못 잡는 부류: `0/30 → 1/30` 처럼 단위·경계어가 없는 수치(PK_시스템 167). 별도 식 필요.
+const BOUND_NUM = /\d[\d,]*\s*(자|%|초|분|LV|레벨|단계)\s*(이내|이상|이하|초과|미만|까지|도달)/;
+const PAREN_IDENT = /\([^)]*(?:[A-Za-z]+_[A-Za-z0-9_]+|[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)[^)]*\)/;
 const TEXT_COLS = [1, 2, 3, 4, 5, 6, 9]; // B~G, J (A=TC ID·H/I=결과값 제외)
 
 function checkContent(rows) {
@@ -46,6 +66,9 @@ function checkContent(rows) {
       else violations.push({ row: i, tc_id: tcId, type: 'delegation_unflagged', cell: 'F', value: F });
     }
     if (EXACT_VAGUE.test(F)) warnings.push({ row: i, tc_id: tcId, type: 'exact_vague', cell: 'F', value: F });
+    if (INTERNAL_MARK.test(F)) violations.push({ row: i, tc_id: tcId, type: 'internal_mark', cell: 'F', value: F });
+    if (BOUND_NUM.test(F) && !PAREN_IDENT.test(F))
+      warnings.push({ row: i, tc_id: tcId, type: 'bare_boundary_number', cell: 'F', value: F });
     for (const c of TEXT_COLS) {
       const v = r[c] == null ? '' : String(r[c]);
       if (LEADING_SPECIAL.test(v))
@@ -59,7 +82,7 @@ function checkContent(rows) {
   return { pass: violations.length === 0, total: rows.length, violations, byType, warnings, warnByType };
 }
 
-module.exports = { checkContent, ABSTRACT, G_ENUM, J_WHITELIST, DELEGATION, EXACT_VAGUE };
+module.exports = { checkContent, ABSTRACT, G_ENUM, J_WHITELIST, DELEGATION, EXACT_VAGUE, INTERNAL_MARK, BOUND_NUM, PAREN_IDENT };
 
 // ── CLI ──
 if (require.main === module) {
