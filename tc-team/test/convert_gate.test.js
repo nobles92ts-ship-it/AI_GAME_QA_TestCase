@@ -14,14 +14,14 @@ let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  PASS ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + ' — ' + e.message); } }
 
 // 소분류(cat3)만 치환되는 최소 설계서 — 트리/배분표/기본기능표 3종을 모두 갖춘 파싱 가능 형태
-function design(cat3) {
+function design(cat3, basicStage = '정상') {
   return `# TC 설계서 (convert 게이트 유닛테스트 픽스처 — 실제 기능 아님)
 
 ## 기본기능 검증 항목
 
 | # | 대분류 | 중분류 | 소분류 | 검증단계 | 검증 내용 (간략) | 플랫폼 |
 |---|--------|--------|--------|----------|-----------------|--------|
-| 1 | 기본기능 | 우편 시스템 | ${cat3} | 정상 | 우편 배너 영역이 표시되는지 | PC |
+| 1 | 기본기능 | 우편 시스템 | ${cat3} | ${basicStage} | 우편 배너 영역이 표시되는지 | PC |
 
 ## 분류 그룹핑 트리
 
@@ -42,10 +42,10 @@ function design(cat3) {
 const CLEAN = '우편 배너 노출 규격 화면';
 const DIRTY = '우편 배너 버튼 클릭 화면'; // FORBIDDEN_VERBS_IN_CATEGORY: /버튼을?\s*클릭/i
 
-function runConvert(cat3) {
+function runConvert(cat3, basicStage) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'convgate-'));
   const designPath = path.join(dir, 'tc_design.md');
-  fs.writeFileSync(designPath, design(cat3));
+  fs.writeFileSync(designPath, design(cat3, basicStage));
   const r = spawnSync(process.execPath, [CONVERT, 'convert', designPath, dir], { encoding: 'utf8' });
   const read = (f) => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { return null; } };
   return { status: r.status, stderr: r.stderr || '', skeleton: read('tc_skeleton.json'), blocker: read('conversion_blocker.json') };
@@ -95,6 +95,14 @@ t('골격 검사: E/G enum + B/C/D 빈 값', () => {
   const cols = res.violations.map(v => v.col).sort();
   assert.deepStrictEqual(cols, ['B', 'C', 'D', 'E', 'G']);
   assert.ok(res.violations.every(v => v.idx === 0), '위치는 골격 행 인덱스(idx)로 보고');
+});
+
+t('V-04: 기본기능 표 검증단계 빈 칸 → 문장화 전에 exit 4 (빈 E가 골격·시트로 흘러가지 않는다)', () => {
+  // 트리 항목은 정규식이 정상|부정|예외를 강제하지만 기본기능 표 칸은 빈 채로 골격에 실렸다 (2026-09-11 대조군: 구 코드 exit 0)
+  const r = runConvert(CLEAN, '');
+  assert.strictEqual(r.status, 4, `exit ${r.status} 기대 4 / stderr: ${r.stderr.slice(0, 300)}`);
+  assert.ok(r.blocker && r.blocker.blockers.some(b => b.type === 'skeleton_E' && /검증단계 빈 값/.test(b.msg)), JSON.stringify(r.blocker));
+  assert.strictEqual(r.skeleton, null, '차단됐는데 골격이 기록됨');
 });
 
 t('드리프트 가드: 같은 분류명을 convert 게이트와 merge preWrite가 함께 잡는다', () => {

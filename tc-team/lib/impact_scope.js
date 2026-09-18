@@ -85,26 +85,39 @@ function findPageId(specDir, raw) {
   return m ? m[1] : null;
 }
 
+// 머리말 출처 줄 = 출처 이름을 키로 한 `키: 값` 메타 줄. Vault 실측 형식(2026-09-11 · 453문서):
+//   `> Confluence: <URL>`(300) · `- page_id: <id>`(52) · `- URL: <URL>`(44) · `- **page_id**: <id>`(32)
+//   · `- **URL**:`(29) · `- **Page ID**:`(6) · `url`·`source`·`원본`·`출처`(각 3~5) · `> Confluence (live):`(1)
+// 'Confluence' 가 든 줄이면 다 받던 옛 판정은 머리말 산문 속 **남의 id** 도 받았다
+//   (「버프_디버프_아이콘_UI」 머리말의 "…Confluence 「상태이상 시스템」(443449460)에 있다").
+const SOURCE_LINE = /^\s*(?:[>*-]\s*)?(?:\*\*)?(?:confluence|page[ _]?id|url|source|원본|출처)(?:\s*\([^)]*\))?(?:\*\*)?\s*:/i;
+
 /**
  * pageId 를 담고 있는 Vault 문서를 찾아 그래프 노드 id(= 파일명)로 되돌린다.
  * ⚠ 본문 아무 데나 있는 id 로 잡으면 안 된다 — 부모 컨테이너가 자식 목록에 자식 id 를 적어두면
  *   부모가 self 로 잡힌다(2026-09-05 실측: 「버프/디버프 정의」가 「버프/디버프」로 오해결).
- *   그 문서 **자신의 출처 표기**(머리말 Confluence 줄)에서만 찾는다.
+ *   그 문서 **자신의 출처 표기**(머리말 출처 줄 = SOURCE_LINE)에서만 찾는다.
+ * ⚠ 출처 줄이 없으면 id 를 언급만 한 문서로 되돌아가지(fallback) 않는다 — null 이다.
+ *   2026-09-11 실측: Vault 미등재 「스킬 강화 시스템」(424509531)이 그 id 를 본문 근거로 적은
+ *   「아이템 Index 사용 및 구분 정책」으로 잡혀 남의 이웃 23건이 접점 축으로 승격됐다.
+ *   그런 문서는 bodyRefs 로만 돌려준다(경고용).
+ * @returns {{ node: string|null, bodyRefs: string[] }}
  */
 function resolveSelfNode(vault, pageId) {
-  if (!pageId || !fs.existsSync(vault)) return null;
-  const fallback = [];
+  const bodyRefs = [];
+  if (!pageId || !fs.existsSync(vault)) return { node: null, bodyRefs };
+  const idRe = new RegExp(`(?<!\\d)${pageId}(?!\\d)`);  // 짧은 id 가 긴 id 의 일부로 맞지 않게
   for (const f of walk(vault, [])) {
     if (f.includes(`${path.sep}specs${path.sep}`)) continue;  // TC 산출물은 위키 정의가 아니다
     let text;
     try { text = fs.readFileSync(f, 'utf8'); } catch { continue; }
-    if (!text.includes(pageId)) continue;
+    if (!idRe.test(text)) continue;
     const head = text.split('\n').slice(0, 15);
-    const own = head.some((l) => /Confluence/i.test(l) && l.includes(pageId));
-    if (own) return path.basename(f, '.md');
-    fallback.push(path.basename(f, '.md'));
+    const own = head.some((l) => SOURCE_LINE.test(l) && idRe.test(l));
+    if (own) return { node: path.basename(f, '.md'), bodyRefs };
+    bodyRefs.push(path.basename(f, '.md'));
   }
-  return fallback[0] || null;
+  return { node: null, bodyRefs };
 }
 
 function tokenize(nodeId) {
@@ -155,7 +168,9 @@ if (fs.existsSync(aliasPath)) {
 }
 
 const pageId = findPageId(specDir, raw);
-const self = arg('--node', null) || resolveSelfNode(vault, pageId);
+const forcedNode = arg('--node', null);
+const resolved = forcedNode ? { node: forcedNode, bodyRefs: [] } : resolveSelfNode(vault, pageId);
+const self = resolved.node;
 
 // 인접(위키링크만 — similarity 는 2026-05-10 스냅샷이라 신규 페이지 무커버)
 const adj = new Map();
@@ -195,6 +210,9 @@ if (self) {
 
 if (!self) {
   result.warnings.push(`self 노드 미해결 (pageId=${pageId}). Vault 에 이 페이지의 .md 가 없다 — 색인(인박스 판정)부터 해결해야 한다.`);
+  if (resolved.bodyRefs.length) {
+    result.warnings.push(`본문 참조만 발견: ${resolved.bodyRefs.join(', ')} — 이 id 를 언급할 뿐 머리말 출처 줄이 아니라 self 로 쓰지 않았다(이웃을 끌어오면 남의 접점 축이 된다).`);
+  }
 } else if (!adj.has(self)) {
   result.warnings.push(`self 노드 '${self}' 가 그래프에 없다. 그래프 재생성(_regen_integrated_assets.py) 필요.`);
 } else {

@@ -302,12 +302,18 @@ if (cmd === 'extract-s3-rules') {
   // 2026-08-10 실측: 규칙 도입 후 라벨 77건 중 9건에 금지어가 남았는데 chain.log 에만 떠 아무도 못 봤다.
   let notice5 = '';
   try { notice5 = fs.readFileSync(path.join(SPEC, '.final5_notice.txt'), 'utf8').trim(); } catch (e) { /* 없으면 정상 */ }
+  // 기획확인 패널에서 뺀 질문(tc-team/lib/crossref_labels_annotate.js) — 성공한 런의 **검토 요청**이라 notice 자리.
+  // 2026-09-11 꼬리표 주입 → 필터 전환: 과신한 apply 가 이제 질문을 조용히 지운다(실측 1/6 — 원문 모순 질의를
+  //   관련 규칙을 찾은 것만으로 「답 있음」 처리). 파일(_labels_removed.json)만 두면 아무도 안 열어 보고에 올린다.
+  let removed5 = '';
+  try { removed5 = fs.readFileSync(path.join(SPEC, '.final5_removed.txt'), 'utf8').trim(); } catch (e) { /* 없으면 정상 */ }
   const report = [
     alert5,
     `${alert5 ? '⚠ tc-team 풀체인 완료(일부 실패)' : '✅ tc-team 풀체인 완료'} — 탭 \`${tab}\` · ${rows}행`,
     sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : '',
     `단계 시간(초): ${timeLine}`,
     notice5,
+    removed5,
     '',
     '🖼 이미지 매칭(선택): 시각자료가 필요한 TC가 있으면 "/tc-이미지매칭"으로 수동 추가할 수 있습니다. (비-기본기능 10~20% 권장 / 파이프라인 자동 미포함)',
     '🧪 테스트 데이터 셋팅(선택): 테스트 데이터 생성 요청 라벨이 필요하면 "테스트 데이터 라벨링 해줘"로 수동 추가할 수 있습니다. (기준: 같은 폴더 라벨링_기준.md / 파이프라인 자동 미포함)',

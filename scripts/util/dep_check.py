@@ -118,6 +118,23 @@ DEPRECATION_RE = re.compile(
     re.IGNORECASE)
 
 
+# 주석 안의 **예시·표본** 경로 — 실재하지 않는 것이 정상이다(린터가 "이런 걸 잡는다"고 적어 둔 샘플,
+# 과거에 적발된 파일을 나열한 회고 주석). CHANGELOG 면제(HISTORY_SOURCES)와 같은 부류다.
+# ⚠ **주석 줄 + 예시 표지어**가 둘 다 있을 때만 면제한다. 한쪽만으로 풀면 코드 주석의 진짜
+#   의존성 안내(예시: `// node scripts/util/foo.js 를 먼저 돌린다`)까지 통째로 눈이 멀어진다.
+#   근거: 2026-09-04 doc_reality_lint.js 의 `tc-team/lib/없는파일.js`(양성 표본)·
+#   `agents/tc-updater.md`(2026-06-10 적발 이력) 2건이 [FAIL] 을 내며 STEP 1.5 를 막았다.
+COMMENT_LINE_RE = re.compile(r'^\s*(//|#|\*|/\*|<!--)')
+EXAMPLE_RE = re.compile(
+    r'예시|샘플|sample|표본|없는파일|존재하지\s*않는|가상의|e\.g\.|적발',
+    re.IGNORECASE)
+
+
+def is_comment_example(line):
+    """주석 줄이면서 예시·표본임을 밝힌 줄인가."""
+    return bool(COMMENT_LINE_RE.match(line)) and bool(EXAMPLE_RE.search(line))
+
+
 def load_gitignore_rules():
     """staging 의 .gitignore 규칙 → (정확이름 집합, 글로브 목록).
 
@@ -185,6 +202,12 @@ def build_existing_index():
 
 def normalize_ref(ref):
     """참조 문자열을 staging 상대경로 후보로 정규화."""
+    # 정규식 리터럴 안의 경로 — `$TCTEAM\/scripts\/crossref_delta\.sh` (테스트가 체인 배선을 검사할 때 쓴다).
+    # `\/` 는 Windows 경로에 나오지 않는 조합이라 이게 정규식이라는 판별식이 된다. 이때만 이스케이프를 푼다
+    # (조건 없이 풀면 `{CLAUDE_HOME}\...` 의 `\.` 까지 먹어 진짜 경로가 뭉개진다).
+    # 2026-09-18: 이 오탐 1건이 `⛔ STOP` 을 내 게이트를 막고 있었다 — 오탐은 게이트를 죽인다.
+    if r'\/' in ref:
+        ref = ref.replace('\\', '')
     basename = Path(ref).name
     stripped = re.sub(r'^[{$][A-Z_]+[}]?[/\\]', '', ref)
     stripped = re.sub(
@@ -229,7 +252,10 @@ def main():
                         ref = m.group(0)
                         if is_runtime_ref(ref):   # specs/state/work 등 런타임 산출물 오탐 제외
                             continue
-                        if DEPRECATION_RE.search(line_of(text, m.start())):  # "폐기됨" 안내문 내 죽은 포인터
+                        ref_line = line_of(text, m.start())
+                        if DEPRECATION_RE.search(ref_line):  # "폐기됨" 안내문 내 죽은 포인터
+                            continue
+                        if is_comment_example(ref_line):     # 주석 속 예시·양성 표본 경로
                             continue
                         basename, stripped = normalize_ref(ref)
                         # 셋업이 .template/.example 에서 생성하는 설정 파일은 원본 존재로 충족

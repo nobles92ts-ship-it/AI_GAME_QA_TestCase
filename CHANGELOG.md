@@ -8,6 +8,27 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.2] — 2026-09-18
+
+### Added
+
+- **The crossref step was allowed to read the data tables, and never did.** A rule change on 2026-09-10 unlocked value lookups against the local spreadsheet tables, but measurement on the next live run showed the agent had not opened a single one — it kept answering from the wiki index alone. `lib/xlsx_extract.js` now does the reading deterministically: it parses the table index, detects which sheets a spec actually names, keeps only the rows whose tokens the spec mentions (whole files were dragging in tens of kilobytes of unrelated rows), and renders a bounded extract that carries its own provenance line — file, sheet, row count, build, date. A question answered from a table now says which cell it came from.
+- **A design's image markers were never checked against the spec they claim to describe.** Across every spec on disk (94 specs, 11,644 test cases), the R2 confidence signal correlated with the number of markers the designer wrote (r = 0.845) and almost not at all with the number of images the spec actually contains (r = 0.197). The same Confluence page, run twice, produced 0 images / 17 markers / R2 at 80% and 37 images / 0 markers / R2 at 0%. R2 was not a broken formula; it was reading a broken input. `lib/design_image_marker_audit.js` now audits the markers against the spec itself, and R2 is demoted to a badge — it carries no score.
+- **The learning DB is now three tiers.** Patterns confirmed into the rules stay in `tc-학습.md`; a single sighting goes to an observation buffer and is promoted only on a second occurrence; entries already folded into a rule file move to a history archive. The pipeline loads only the first tier.
+- Test suites for the delta crossref, impact scope, S1 crossref working directory, S1 designer output ceiling, and the table extractor.
+
+### Changed
+
+- **The last delta crossref was injecting into a file that did not exist yet.** The S7 pass ran *before* `finalize`, but the planning-question panel it injects into (`_labels.json`) is written *by* finalize's own FINAL-5a step — so every run injected into nothing and reported zero. It now runs between FINAL-5a and FINAL-5b, after the panel is derived and before it is written. The function itself moved out of `run_pipeline_full.sh` into `scripts/crossref_delta.sh`, so both call sites (S4 and S7) share one definition instead of two copies that drift.
+- **Confidence now cites the spec instead of guessing at it.** When the content words of a test sentence appear in a single cell of the source spec above a 0.7 threshold, R2 and R3 drop to advisory and the memo quotes the source line. Sentence-shaped unresolved items are also attached only to their own test case now — previously a whole sentence went into the matcher, common words matched nearly every case on the screen, and one run averaged 8.8 unresolved items per test with 99% landing in the lowest band. Saturated signal is no signal.
+
+### Fixed
+
+- **An empty verification-stage cell reached the sheet.** The tree items were guarded by an enum check, but the basic-function table's own cells were not, so a blank stage passed through conversion into the skeleton and out to the spreadsheet — the column is hidden in the sheet view, so nobody saw it being left empty. It is now caught before sentence generation (exit 4). The published copy of `validate_tc_rows.js` had been frozen since 2026-09-04 and was missing both this check and the BTS column shift; it is now synchronized.
+- **The dependency checker flagged its own examples and regex literals.** A path written inside a regex literal (`$TCTEAM\/scripts\/x\.sh`) was read as a literal path and reported missing, and the checker's own explanatory comment was reported against itself. Both are exempt now, verified by removing a real file and confirming the failure still reproduces.
+
+---
+
 ## [v4.3.1] — 2026-09-09
 
 ### Fixed

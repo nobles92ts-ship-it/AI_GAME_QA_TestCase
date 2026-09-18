@@ -109,7 +109,7 @@ NODE="{NODE_PATH}"
 | 게이트(C) | `lib/crossref_source_gate.py` | 착수 전 색인 존재·신선도 확인. exit 0=OK / 3=MISSING / 4=STALE / 5=NO_KB |
 | 자동복구(A) | `lib/brain_index_sync.py` | stdio MCP로 `ctx_index` 직접 호출해 그 KB에 번들 색인(멱등) |
 | 배선 | `scripts/run_pipeline_s1only.sh` STEP 2-대조 | 게이트 → 실패 시 복구 → 재검 → 그래도 실패면 **에이전트 미호출** |
-| 경로 못박기 | 같은 블록 | `CLAUDE_PROJECT_DIR`/`CONTEXT_MODE_PROJECT_DIR`=`$PROJECT_ROOT` — 게이트가 검사한 KB와 에이전트가 뒤지는 KB를 일치시킨다 |
+| 작업 폴더 못박기 | 같은 블록 | 대조 에이전트를 서브셸에서 `cd "$XPROJ"`(=`$PROJECT_ROOT`) 한 뒤 띄워 게이트가 검사한 KB와 에이전트가 뒤지는 KB를 일치시킨다. ⚠ 환경변수(`CLAUDE_PROJECT_DIR`/`CONTEXT_MODE_PROJECT_DIR`)만으로는 안 맞는다 — 에이전트의 context-mode 는 claude 작업 폴더로 KB 를 고른다(2026-09-11 실측 · `next_run_verify.md` ①). 환경변수는 같은 값이라 남겨 둠 |
 | 설정 | `team/tc_config.json` `crossref_bundle` | 번들 원본 경로(머신마다 다름). 빈 값이면 STALE 판정·복구 스킵(비차단) |
 
 **핵심 계약**: 게이트 차단 시 `dxr_crossref.json`에 `skipped:true` + `skip_reason`을 적고 **대조를 아예 실행하지 않는다.**

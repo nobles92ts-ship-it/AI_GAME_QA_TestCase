@@ -11,8 +11,12 @@
  * 모드 2종 (둘 다 돈다 — 오너 선택 "둘 다"):
  *   --mode fixplan : S4→S5 사이. fix_plan.json 이 새로 다는 「기획 확인 필요」.
  *                    여기서 해결되면 답이 S5 적용 경로를 그대로 타서 기대값까지 채워진다.
- *   --mode final   : S6→S7 사이. 최종 TC 전량 중 비고열=「기획 확인 필요」.
- *                    출처가 어디든 100% 걸리는 마지막 그물(사람에게 나가기 직전).
+ *   --mode final   : finalize.sh FINAL-5a↔5b 사이(2026-09-11 이관). _labels.json 패널 ∪ 최종 TC 비고열=「기획 확인 필요」.
+ *                    출처가 어디든 100% 걸리는 마지막 그물(사람에게 나가기 직전). 5a 뒤라야 패널 문장이
+ *                    그대로 term 이 되어 주입기의 완전일치가 성립한다(구 자리 S6→S7 은 패널이 태어나기 전).
+ *
+ * id: 원장(dxr_crossref.json)의 같은 접두(D4-/D7-) 최대 번호 다음부터 매긴다. 병합기가 id 로 덮어쓰므로
+ *   매번 1부터 매기면 재실행(finalize --only 5 등)이 이전 델타의 다른 질의 결과를 지운다(2026-09-11).
  *
  * 출력: {mode, generated_at, items:[{id, tc_id, term, context}]}
  * exit: 0=수집 있음(대조 실행) / 4=0건(스킵, 정상) / 1=오류(호출측이 비차단 처리)
@@ -34,8 +38,9 @@ function readJSON(p) {
 }
 
 /**
- * 이전 런의 대조 결과 꼬리표(`→ [DXR] …`)를 떼어낸다.
- * ⚠ 이게 없으면 crossref_labels_annotate.js 가 패널에 주입한 순간 문자열이 달라져
+ * 구 런의 대조 결과 꼬리표(`→ [DXR] …`)를 떼어낸다. 2026-09-11 이후 꼬리표는 새로 붙지 않지만
+ *   (crossref_labels_annotate.js 가 주입기 → 필터로 전환) 그 전 산출물을 재처리할 때를 위해 남긴다.
+ * ⚠ 이게 없으면 꼬리표가 붙은 문장이 원장 term 과 달라져
  *   **이미 물어본 항목을 매번 새 항목으로 다시 묻는다** (2026-09-09 음성 대조에서 실측: 33건이 그대로 재수집).
  *   질의문으로도 부적절하다 — 우리가 붙인 답을 뇌에 되묻게 된다.
  */
@@ -60,6 +65,18 @@ function alreadyAsked(crossref) {
     if (it && it.tc_id) seen.add('tc:' + String(it.tc_id));
   }
   return seen;
+}
+
+/** 원장에서 같은 접두(D4-/D7-) id 의 최대 번호 + 1 */
+function nextSeq(crossref, prefix) {
+  let max = 0;
+  for (const it of ((crossref && crossref.items) || [])) {
+    const id = String((it && it.id) || '');
+    if (!id.startsWith(prefix)) continue;
+    const n = Number(id.slice(prefix.length));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return max + 1;
 }
 
 /** fix_plan.json → 신규 「기획 확인 필요」 */
@@ -163,6 +180,8 @@ function main() {
   const crossref = readJSON(path.join(work, 'dxr_crossref.json'));
   const seen = alreadyAsked(crossref);
 
+  const prefix = mode === 'fixplan' ? 'D4-' : 'D7-';
+  let seq = nextSeq(crossref, prefix);
   const items = [];
   const dupKeys = new Set();
   for (const it of res.items) {
@@ -171,7 +190,7 @@ function main() {
     if (seen.has(k)) continue;               // 이미 대조를 거친 항목 — 다시 묻지 않는다
     if (it.tc_id && seen.has('tc:' + it.tc_id)) continue;
     dupKeys.add(k);
-    items.push({ id: (mode === 'fixplan' ? 'D4-' : 'D7-') + (items.length + 1), ...it });
+    items.push({ id: prefix + (seq++), ...it });
   }
 
   const payload = { mode, generated_at: new Date().toISOString(), items };

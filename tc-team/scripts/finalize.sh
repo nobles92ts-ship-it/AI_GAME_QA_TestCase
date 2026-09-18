@@ -54,6 +54,15 @@ fi
 
 say() { echo "[FINALIZE] $*"; }
 
+# 델타 대조(S7) — 정의는 crossref_delta.sh 한 곳(run_pipeline_full.sh S4 와 공유), 호출은 FINAL-5 안(5a↔5b).
+# 함수가 기대하는 이름을 여기서 맞춘다 — 값은 run_pipeline_full.sh 와 같다.
+LIB="$PROJECT_ROOT/tc-team/lib"
+WORK="$SPEC"
+CLI_BASE='-p --permission-mode bypassPermissions'
+CHAIN_LOG="$SPEC/chain.log"
+log() { say "$*"; }
+source "$(dirname "${BASH_SOURCE[0]}")/crossref_delta.sh"
+
 # ── 실행 순서: 규칙서 "순서: **FINAL-1 → 2 → 5 → 3**" 라인에서 파싱 ────────────
 ORDER=$("$NODE" -e "
 const fs=require('fs');
@@ -201,6 +210,10 @@ $vout"
   # 구버전 validate_labels.js(이 필드 없음)로 롤백돼도 매칭 실패 → 0 유지(fail-safe).
   LABEL_BANNED=$(grep -o '금지 어휘 [0-9]\+' <<< "$vout" | head -1 | grep -o '[0-9]\+')
   LABEL_BANNED=${LABEL_BANNED:-0}
+  # 5a↔5b 사이 — DXR 델타 대조·주입 (2026-09-11 이관 · 규칙 tc-대조.md §1.1-a). 5a 가 방금 쓴 문장을
+  # 그대로 질의 키로 뇌에 묻고, 답을 그 문장 끝에 붙인 뒤 5b 가 기재한다. 비차단 — 결과와 무관하게 5b 진행.
+  # 구 자리(run_pipeline_full.sh, finalize 앞)는 _labels.json 이 태어나기 전이라 전 런 주입 0건이었다.
+  crossref_delta final S7
   say "FINAL-5b 라벨 기재"
   if "$NODE" "$UTIL/apply_labeling.js" "$SHEET_ID" "$TAB" "$SPEC/_labels.json"; then
     RESULT[5]="✓"

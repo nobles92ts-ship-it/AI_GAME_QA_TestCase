@@ -30,6 +30,10 @@ RUNAGENT="$UTIL/run-agent.sh"
 RETRY="$UTIL/pipeline_retry.sh"
 GUARD="$UTIL/silent_exit_guard.sh"
 CLI_BASE='-p --permission-mode bypassPermissions'
+# 설계자(tc-team-designer) 호출 출력 상한 — 2026-09-12 오너 결정(a). CLI 기본 64000 은 대형 기획서에서
+# effort max 사고 한 턴만으로 넘친다(09-11 스킬_강화_시스템 508행: 64K 절단 5회 → 128K 재기동 최대 응답 85,077).
+# 명시 env 가 이긴다. 검수·대조 호출과 v2 엔진(run-agent.sh 공유)은 CLI 기본 그대로 — 근거=next_run_verify 「S1 설계자가 CLI 출력 상한 64K 에 걸린다」
+DESIGNER_MAX_OUT="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-128000}"
 
 FEAT="" ; SHEET_ID="" ; CONF_URL="" ; RESUME="" ; LOCAL=0
 while [[ $# -gt 0 ]]; do
@@ -218,7 +222,7 @@ fi
 
 # ── STEP 1 설계 (opus) ───────────────────────────────────────────────────────
 if [[ $START -le 1 ]]; then
-log "[STEP 1] 설계 시작"
+log "[STEP 1] 설계 시작 (출력 상한 $DESIGNER_MAX_OUT)"
 HANDOFF="## HANDOFF
 - 기능명: $FEAT
 - STEP: 1 (step_result.json의 step 필드에 그대로 기재)
@@ -229,10 +233,10 @@ HANDOFF="## HANDOFF
 
 ## 작업 지시
 confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) → 드라이브 업로드.
-tc-학습.md 활성 설계 패턴 반영 필수 — 특히 P-18(상태이상·연출 상호작용 4유형), P-19(서술형 섹션을 대조표에 분해), P-20(BVA 상·하한 분리, 통합 1건 금지), P-22(자원 증감 소분류의 재접속복구·롤백·동시요청·반복재판정 4유형), P-23(열거값은 값 수만큼 개별 전개, '각 ~별' 통합 1건 금지).
+tc-학습.md 활성 설계 패턴 반영 필수 — 특히 P-18(상태이상·연출 상호작용 4유형), P-19(서술형 섹션을 대조표에 분해), P-20(BVA 상·하한 분리, 통합 1건 금지), P-22(자원 증감 소분류의 재접속복구·롤백·동시요청·반복재판정 4유형), P-23(열거값은 값 수만큼 개별 전개, '각 ~별' 통합 1건 금지), P-25(기획서 병기·미정의를 한쪽으로 단정 금지 — 세션 복구 계열 포함), P-26(재현스탭 전제·조작·관측 3요소 + 측정 불가 부사 금지), P-29(미구현·발생불가 기능에 TC 생성 금지).
 Confluence MCP 재호출 금지."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
-RUNAGENT_DEBUG_FILE='$SPEC/step1_debug.log' bash '$RETRY' '$SPEC/step1_stderr.log' -- \
+CLAUDE_CODE_MAX_OUTPUT_TOKENS='$DESIGNER_MAX_OUT' RUNAGENT_DEBUG_FILE='$SPEC/step1_debug.log' bash '$RETRY' '$SPEC/step1_stderr.log' -- \
 bash '$RUNAGENT' $CLI_BASE --model opus --effort max --agent tc-team-designer \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1
 rc=$?
 [[ $rc -eq 10 ]] && stop_auth "STEP 1"
@@ -260,13 +264,30 @@ XSRC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','
 if [[ "$CROSSREF" == "on" ]]; then
   log "[STEP 2-대조] DXR 뇌 대조 시작 (crossref_brain=on)"
 
+  # ── xlsx 원본 추출 (결정론 · 비차단) — 2026-09-11 신설 ──────────────────────────────
+  # 대조가 xlsx 값을 apply 하려면 원본을 열어야 하는데, LLM 에게 코드를 돌리라고 부탁하는 구조는
+  # 실측으로 한 번도 발화하지 않았다(기능A: locate 13건이 "로컬 xlsx 미열람"만 남김).
+  # → 사실(셀 값)은 코드가 파일로 내려놓고, 에이전트는 Read 만 한다. 본 대조·S4·S7 델타가 같은 파일을 쓴다.
+  "$NODE" -e "require('fs').rmSync('$SPEC/xlsx_extract.md',{force:true})" 2>/dev/null || true
+  XTM=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_tablemap||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+  XMR=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(String(c.xlsx_extract_max_rows||200))}catch(e){process.stdout.write('200')}" 2>/dev/null)
+  XEARGS=(--raw "$SPEC/confluence_raw.md" --tablemap "${XTM:-{WORK_ROOT}/<프로젝트>_관리/_테이블맵.md}" --out "$SPEC/xlsx_extract.md" --max-rows "${XMR:-200}")
+  [[ -n "$IDT" ]] && XEARGS+=(--tables "$IDT")
+  "$NODE" "$PROJECT_ROOT/tc-team/lib/xlsx_extract.js" "${XEARGS[@]}" >>"$CHAIN_LOG" 2>&1
+  xerc=$?
+  case $xerc in
+    0) log "[STEP 2-대조] xlsx 추출 — $(grep -c '^### ' "$SPEC/xlsx_extract.md" 2>/dev/null || echo 0)시트 → xlsx_extract.md" ;;
+    4) log "[STEP 2-대조] xlsx 추출 스킵 — 참조 시트 0건 또는 원본/테이블맵 없음 (비차단)" ;;
+    *) log "[STEP 2-대조][경고] xlsx 추출기 비정상 종료 rc=$xerc — fail-safe 스킵(비차단)" ;;
+  esac
+
   # ── 사전 색인 게이트 (C) + 자동 복구 (A) — 2026-08-23 신설 ─────────────────────────
   # 배경: context-mode KB 는 프로젝트 디렉터리마다 갈린다(sha256(projectDir)[:16]).
   #   체인은 대조 에이전트를 $PROJECT_ROOT 에서 돌리는데 뇌는 {WORK_ROOT} KB 에만 색인돼 있어
   #   질의가 아무리 정확해도 전량 "No results found" 였다. 그 출력이 §1.6 정상 경로인
   #   '무적중 → 전 항목 keep' 과 구분되지 않아 오래 안 보였다(2026-08-23 진단 문서 참조).
   # 이 게이트는 "찾아봤는데 없다"(정상) 와 "찾아볼 곳이 없었다"(결함) 를 갈라놓는다.
-  # KB 는 아래에서 CLAUDE_PROJECT_DIR 로 못박으므로 게이트와 에이전트가 같은 KB 를 본다.
+  # KB 는 아래에서 에이전트를 XPROJ 로 cd 해 띄우므로 게이트와 에이전트가 같은 KB 를 본다(환경변수만 박았을 땐 갈렸다 — 2026-09-11).
   XPROJ="$PROJECT_ROOT"
   XBUNDLE=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_bundle||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
   XGATE="$PROJECT_ROOT/tc-team/lib/crossref_source_gate.py"
@@ -307,13 +328,17 @@ if [[ "$CROSSREF" == "on" ]]; then
 
 ## 작업 지시
 tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC\")에 대조 → dxr_crossref.json 생성.
-4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep) + 스코프경계(로컬 데이터테이블 실제값은 가져오지 말고 locate=위치만).
+4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep).
+로컬 데이터테이블 값: $SPEC/xlsx_extract.md 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
 §1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."
-  # CLAUDE_PROJECT_DIR 못박기 — context-mode 가 KB 를 고르는 최우선 변수다(cli.bundle.mjs 실측).
-  # 이걸 고정해야 위 게이트가 검사한 KB 와 에이전트가 실제로 뒤지는 KB 가 같아진다.
-  # 안 박으면 체인을 어느 폴더에서 띄웠느냐에 따라 KB 가 조용히 갈린다(2026-08-23 결함의 발생 경로).
-  CLAUDE_PROJECT_DIR="$XPROJ" CONTEXT_MODE_PROJECT_DIR="$XPROJ" \
-  RUNAGENT_DEBUG_FILE="$SPEC/crossref_debug.log" bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-team-대조 "$XHANDOFF" >>"$CHAIN_LOG" 2>&1 \
+  # 작업 폴더를 XPROJ(게이트가 검사한 KB 의 프로젝트)로 못박는다 — 서브셸이라 체인의 작업 폴더는 그대로다.
+  # 환경변수만으로는 안 된다: claude 가 띄운 context-mode 는 KB 를 claude 자신의 작업 폴더로 고른다.
+  # 2026-09-11 사본 실측(같은 입력·작업 폴더만 바꿈): 프로젝트 밖에서 띄우면 게이트는 초록인데 에이전트는 그 폴더 해시로
+  # 새로 생긴 빈 KB 를 봤다("Knowledge base is empty" — 위키 출처 0 · keep 15/28). 루트에서 띄우면 위키 출처 11 · keep 10/29.
+  # crossref_delta.sh(S4·S7)와 같은 고정이다. 환경변수는 작업 폴더와 같은 값이라 그대로 둔다.
+  ( cd "$XPROJ" && \
+    CLAUDE_PROJECT_DIR="$XPROJ" CONTEXT_MODE_PROJECT_DIR="$XPROJ" \
+    RUNAGENT_DEBUG_FILE="$SPEC/crossref_debug.log" bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-team-대조 "$XHANDOFF" ) >>"$CHAIN_LOG" 2>&1 \
     || log "[STEP 2-대조][경고] 대조 에이전트 비정상 종료 — fail-safe 스킵(비차단)"
   fi   # XSKIP 분기 종료
   if [[ -f "$SPEC/dxr_crossref.json" ]]; then
@@ -351,6 +376,29 @@ if [[ -f "$SPEC/candidates.json" ]]; then
     || log "[STEP 2][경고] coverage_gate 실패 — 비차단 계속"
   GATE_LINE="- 전개기 완전성 게이트: $SPEC/coverage_gaps.json (gaps = 결정론 바닥 미충족 잠재 누락 — 각 건 원문 대비 확인 후 케이스 추가(HIGH) 또는 근거 기각(⊘). C-12 1:1 매핑표 기계 사전 패스)"
 fi
+# 이미지 마커 감사 (2026-09-11 신설 · 결정론 · 비차단)
+#   확신도 R2(-20)는 기획서에 그림이 몇 장인지가 아니라 **설계기가 `[이미지 참조 필요]` 마커를
+#   달았는지**에만 반응한다 (실측 94스펙: r(마커,R2)=0.845 vs r(이미지,R2)=0.197).
+#   같은 Confluence 402948225 를 두 번 돌린 대조쌍 — v1 이미지 0/마커 17/R2 80%,
+#   v2 이미지 37/마커 0/R2 0% — 로 마커가 실물과 무관하게 붙는 것이 확인됐다.
+#   전수 104건 중 34건(33%)이 어긋난다. 고치지는 않고 검수자에게 사실만 넘긴다.
+IMG_LINE=""
+"$NODE" "$PROJECT_ROOT/tc-team/lib/design_image_marker_audit.js" "$SPEC" --quiet >/dev/null 2>&1
+IMG_RC=$?
+IMG_JSON="$SPEC/design_image_marker_audit.json"
+if [[ $IMG_RC -eq 3 ]]; then
+  IMG_V=$(grep -o '"verdict": "[a-z]*"' "$IMG_JSON" 2>/dev/null | head -1 | sed 's/.*"\([a-z]*\)"$/\1/')
+  IMG_N=$(grep -o '"images": [0-9]*' "$IMG_JSON" 2>/dev/null | head -1 | grep -o '[0-9]*')
+  IMG_M=$(grep -o '"markers": [0-9]*' "$IMG_JSON" 2>/dev/null | head -1 | grep -o '[0-9]*')
+  if [[ "$IMG_V" == "miss" ]]; then
+    IMG_LINE="- ⚠ 이미지 마커 감사(miss): 기획서 이미지 ${IMG_N}장인데 설계 마커 0건 ($IMG_JSON). ⚠ 이미지 수는 트리거일 뿐 근거가 아니다 — 판정은 「그 소분류의 기대결과가 텍스트만으로 서는가」로만 한다. 스트링·수치가 본문에 있으면 이미지가 많아도 마커 불요, 색·아이콘 모양이 기대결과에 들어갈 때만 단다. 확인하고 불요로 판단했으면 그 사실을 보고서에 남길 것(침묵 금지). 마커가 없으면 그림으로만 판정되는 화면이어도 QA 메모에 「그림 대조」 지침이 안 나온다(R2 는 2026-09-11부터 점수 0 · 표시 전용). 규칙 SSoT=tc-설계검수.md '이미지 마커 감사 연동'"
+  else
+    IMG_LINE="- ⚠ 이미지 마커 감사(ghost): 기획서 이미지 0장인데 설계 마커 ${IMG_M}건 ($IMG_JSON). 근거 없이 해당 소분류 전 항목 메모에 「그림 대조」 지침이 붙는다(점수 영향 없음) — 원문에서 마커 근거를 확인하고 없으면 마커 제거를 지적할 것. 규칙 SSoT=tc-설계검수.md '이미지 마커 감사 연동'"
+  fi
+  log "[STEP 2] 이미지 마커 감사: $IMG_V (이미지 ${IMG_N} · 마커 ${IMG_M})"
+else
+  log "[STEP 2] 이미지 마커 감사: 어긋남 없음 (rc=$IMG_RC)"
+fi
 log "[STEP 2] 설계검수 시작"
 HANDOFF="## HANDOFF
 - 기능명: $FEAT
@@ -359,8 +407,9 @@ HANDOFF="## HANDOFF
 - 설계 파일: $SPEC/tc_design.md
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 $GATE_LINE
+$IMG_LINE
 - DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 소비 — discover→C-05/C-12 커버리지 분모 포함, apply/locate→중복 재지적 금지. 없으면 현행대로. 규칙 SSoT=tc-설계검수.md 'DXR 대조 연동')
-- ⚠ C-05 분모 완전성 교차 시 tc-학습.md P-18·P-19·P-20·P-22·P-23으로 원문 대비 누락 확인."
+- ⚠ C-05 분모 완전성 교차 시 tc-학습.md P-18·P-19·P-20·P-22·P-23·**P-25·P-26·P-29**로 원문 대비 누락 확인."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
 RUNAGENT_DEBUG_FILE='$SPEC/step2_debug.log' bash '$RETRY' '$SPEC/step2_stderr.log' -- \
 bash '$RUNAGENT' $CLI_BASE --model sonnet --agent tc-team-설계검수 \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1
@@ -389,7 +438,7 @@ run_step3() { # $1=모드 라벨 (review|blocker)
   do_transition design_fixing 0 "$prev"
   local model_args=(--model sonnet)
   [[ "$GAP" -gt 0 ]] && model_args=(--model opus --effort max)
-  log "[STEP 3] 설계수정 시작 (mode=$mode, model=${model_args[1]})"
+  log "[STEP 3] 설계수정 시작 (mode=$mode, model=${model_args[1]}, 출력 상한 $DESIGNER_MAX_OUT)"
   HANDOFF="## HANDOFF
 - 기능명: $FEAT
 - STEP: 3 (step_result.json의 step 필드에 그대로 기재)
@@ -405,7 +454,7 @@ design_review.md 이슈(존재 시) + DXR 대조 결과(apply/discover, 존재 �
 수정 후 직변환 사전 게이트(tc-설계.md Step 11.5) 재실행 — exit 0 필수 (배분표 3자 동치 재계산).
 드라이브 재업로드."
   bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
-RUNAGENT_DEBUG_FILE='$SPEC/step3_debug.log' bash '$RETRY' '$SPEC/step3_stderr.log' -- \
+CLAUDE_CODE_MAX_OUTPUT_TOKENS='$DESIGNER_MAX_OUT' RUNAGENT_DEBUG_FILE='$SPEC/step3_debug.log' bash '$RETRY' '$SPEC/step3_stderr.log' -- \
 bash '$RUNAGENT' $CLI_BASE ${model_args[*]} --agent tc-team-designer \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1
   local rc=$?
   [[ $rc -eq 10 ]] && stop_auth "STEP 3"

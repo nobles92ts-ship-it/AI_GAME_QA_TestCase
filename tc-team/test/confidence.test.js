@@ -35,7 +35,7 @@ t('대·중분류와 리스크 마커가 리프에 전달된다', () => {
 t('소분류 점수표 (감점 규칙별 1회씩)', () => {
   const want = [
     ['우편 배너', 100, 'A', 'R7'],       // 감점 0 + 설계기법 배지(점수 영향 없음)
-    ['쿠폰 코드', 35, 'D', 'R1,R2'],     // 미결 질의 -45, 이미지 의존 -20
+    ['쿠폰 코드', 55, 'C', 'R1,R2'],     // 미결 질의 -45, 이미지 의존 = 배지(0) — 2026-09-11 R2 강등 전엔 -20 → 35 D
     ['우편함 보상', 47, 'D', 'R3,R4,R5'], // keep 2건 -(25+8) + locate 1건 -5(증분) + gap -15
     ['환전 비율', 70, 'B', 'R4,R6'],     // crossref locate 1건 -12, 얕은 앵커 -18
   ];
@@ -68,9 +68,10 @@ t('항목 점수표 (9건 전수)', () => {
   const want = [
     ['우편 배너', '정상', 1, 100, 'A', 'R7'],
     ['우편 배너', '정상', 2, 100, 'A', 'R7'],
-    ['쿠폰 코드', '정상', 1, 35, 'D', 'R1,R2'],
-    ['쿠폰 코드', '정상', 2, 80, 'B', 'R2'],
-    ['쿠폰 코드', '정상', 3, 80, 'N', 'R2'],   // [J:추후구현] → 등급 N
+    // 쿠폰 3건 — 2026-09-11 R2 배지 강등으로 각 +20 (35 D→55 C · 80 B→100 A · 80 N→100 N). R2 는 배지로 남는다.
+    ['쿠폰 코드', '정상', 1, 55, 'C', 'R1,R2'],
+    ['쿠폰 코드', '정상', 2, 100, 'A', 'R2'],
+    ['쿠폰 코드', '정상', 3, 100, 'N', 'R2'],   // [J:추후구현] → 등급 N
     ['우편함 보상', '정상', 1, 67, 'C', 'R3'], // 문장이 용어 2개를 물음 → -(25+8)
     ['우편함 보상', '정상', 2, 100, 'A', ''],  // 문장에 용어 0개 → 소분류명 누출 차단으로 무감점
     ['우편함 보상', '부정', 1, 55, 'C', 'R3,R4,R5'], // keep 1개 -25 + locate 1개 -5 + 단계 gap -15
@@ -94,6 +95,19 @@ t('R2(이미지)는 소분류 전 항목에 상속된다', () => {
   const c = items.filter((i) => i.leaf.startsWith('쿠폰'));
   assert.strictEqual(c.length, 3);
   c.forEach((i) => assert.ok(i.reasons.some((r) => r.id === 'R2' && r.inherited), `${i.stage}-${i.no}`));
+});
+
+t('R2 는 배지다 — 감점하지 않고 표시만 남는다 (2026-09-11 강등)', () => {
+  const all = [...scored.flatMap((s) => s.reasons), ...items.flatMap((i) => i.reasons)].filter((r) => r.id === 'R2');
+  assert.ok(all.length > 0, 'R2 가 아예 사라지면 QA 지침(그림 대조)도 사라진다');
+  assert.ok(all.every((r) => r.d === 0), 'R2 가 점수를 깎았다');
+});
+
+t('R2 되살림 오버라이드 — penalty 20 이면 종전 점수(쿠폰 정상-1 35 D)로 돌아간다', () => {
+  const old = computeItems(FIX, { rules: { R2: { penalty: 20 } } }).items.find((i) => i.leaf.startsWith('쿠폰') && i.stage === '정상' && i.no === 1);
+  assert.strictEqual(old.score, 35);
+  assert.strictEqual(old.grade, 'D');
+  assert.strictEqual(old.reasons.find((r) => r.id === 'R2').d, -20);
 });
 
 t('[J:추후구현] 항목은 등급 N (점수와 무관하게 채점 대상 제외)', () => {
@@ -355,6 +369,136 @@ t('기본기능 섹션은 매핑 대상이 아니다 (드리프트로도 안 잡
   assert.strictEqual(perRow.length, 1);
   assert.strictEqual(perRow[0].tcid, '002');
 });
+
+// ── 원문 직접 근거 대조 (2026-09-11) ────────────────────────────────────
+// 「기획서에 있으면 무시하세요」로 떠넘기던 확인을 도구가 한다. 원문 한 칸에 TC 문장이 거의 그대로
+// 있으면 R2·R3 는 참고(감점 0)로 돌리고, R1 은 절대 빼지 않는다.
+{
+  const { docCells, groundOf, STOP_BASE } = require('../scripts/confidence/confidence_core.js');
+  const stop = new Set([...STOP_BASE, '선택', '상태', '버튼', '경우', '던전']);
+  // 실물(기능A §2-1 L80)을 그대로 옮긴 행
+  const L80 = '## 2-1. 정예 던전 화면\n| 던전 입장 버튼 | 해당 버튼 클릭 시, 해당 맵의 StartPos 좌표로 이동합니다.  다음과 같은 경우 Dimmed 처리하며, 클릭 시 케이스에 맞는 토스트 메시지를 출력합니다.   * 선택한 던전의 남은 시간 및 충전 시간의 합이 0 초인 경우   + 이용 가능한 시간이 남아있지 않습니다. * PC 전투력이 선택한 던전의 요구 전투력 미만인 경우   + 전투력 {0} 달성 시 입장할 수 있습니다. * 두 조건을 모두 만족하지 않는 경우 전투력 부족 토스트만 출력합니다. |';
+  const cells = docCells(L80, stop);
+
+  t('원문 근거 — 양성: TC 142 문장이 §2-1 「던전 입장 버튼」 칸에 잡힌다', () => {
+    const g = groundOf('남은 시간과 충전 시간의 합이 0초이면서 플레이어 캐릭터의 전투력도 요구 전투력 미만인 상태에서 던전 입장 버튼을 선택하면 전투력 부족 토스트 메시지만 출력되는지', cells, stop);
+    assert.ok(g.cov >= TUNING.groundThreshold, `cov=${g.cov}`);
+    assert.strictEqual(g.sec, '2-1');
+    assert.strictEqual(g.label, '던전 입장 버튼');
+    assert.ok(/전투력 부족 토스트만/.test(g.quote), g.quote);
+  });
+
+  t('원문 근거 — 음성: 원문에 없는 주제는 판정선을 못 넘는다', () => {
+    const g = groundOf('파티원이 탈퇴하면 보상 분배 비율이 다시 계산되는지', cells, stop);
+    assert.ok(g.cov < TUNING.groundThreshold, `cov=${g.cov}`);
+  });
+
+  t('원문 근거 — 내용어 3개 미만은 판정하지 않는다(null)', () => {
+    assert.strictEqual(groundOf('버튼이 선택되는지', cells, stop), null);
+  });
+
+  t('원문 근거 — confluence_raw.md 가 없으면 대조를 쉬고 점수는 종전 그대로', () => {
+    const { items: its, diag } = computeItems(FIX);
+    assert.strictEqual(diag.groundCells, 0);
+    assert.ok(its.every((i) => i.ground === null));
+    assert.ok(its.every((i) => !i.reasons.some((r) => r.waived)));
+  });
+
+  // 통합 — 픽스처 + 원문 한 장
+  const os = require('os'), fsx = require('fs');
+  const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-ground-'));
+  fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+  fsx.writeFileSync(path.join(d, 'confluence_raw.md'), [
+    '## 2-1. 쿠폰',
+    '| 쿠폰 코드 입력 | 쿠폰 코드는 12자리 입력을 수용합니다. * 오입력 시 안내 문구를 노출합니다. |',
+    '## 3-1. 보상',
+    '| 보상 수령 | 등급표에 따른 보상 수량을 지급합니다. * 보상 수량 초과 요청은 차단합니다. |',
+  ].join('\n'), 'utf8');
+  const G = computeItems(d).items;
+  const gi = (n, stage, no) => G.find((i) => i.leaf.startsWith(n) && i.stage === stage && i.no === no);
+  fsx.rmSync(d, { recursive: true, force: true });
+
+  // (2026-09-11 R2 배지 강등 뒤로는 R2 가 원래 0 이라 점수는 근거 여부와 무관하게 55 — 이 테스트는 이제
+  //  「근거가 잡히면 R2 를 참고로 표시하고, R1 은 절대 빠지지 않는다」만 잠근다)
+  t('원문 근거 — R2 는 참고로 표시하고 R1 은 남는다 (쿠폰 정상-1: 55)', () => {
+    const i = gi('쿠폰', '정상', 1);
+    assert.strictEqual(i.score, 55);
+    assert.ok(i.reasons.some((r) => r.id === 'R1' && r.d < 0), 'R1 이 빠지면 안 된다');
+    assert.ok(i.reasons.some((r) => r.id === 'R2' && r.d === 0 && r.waived));
+    assert.strictEqual(i.ground.sec, '2-1');
+  });
+
+  t('원문 근거 — R3 는 참고로 돌리고 용어는 지우지 않는다 (보상 정상-1: 67 → 100)', () => {
+    const i = gi('우편함', '정상', 1);
+    assert.strictEqual(i.score, 100);
+    const r3 = i.reasons.find((r) => r.id === 'R3');
+    assert.ok(r3 && r3.waived && r3.d === 0 && r3.terms.length > 0);
+  });
+
+  t('원문 근거 — keep 이 빠지면 locate 는 기준 감점을 다시 문다 (보상 부정-1: 55 → 73)', () => {
+    // 종전: R5 −15 · R3 −25 · R4 −5(keep 이 기준 선점 → 증분만) = 55
+    // 근거: R3 참고 → R4 는 keep 없는 기준 −12 로 재계산 · R5 그대로 = 73
+    const i = gi('우편함', '부정', 1);
+    assert.strictEqual(i.score, 73);
+    assert.strictEqual(i.reasons.find((r) => r.id === 'R4').d, -12);
+    assert.strictEqual(i.reasons.find((r) => r.id === 'R5').d, -15);
+  });
+
+  t('원문 근거 — 원문에 없는 TC 는 종전 감점 그대로 (환전 정상-1: 70)', () => {
+    const i = gi('환전', '정상', 1);
+    assert.strictEqual(i.score, 70);
+    assert.strictEqual(i.ground, null);
+  });
+}
+
+// ── 문장형 미정 항목은 자기 TC 에만 (2026-09-11) ─────────────────────────
+// 문장 통째(…는지 확인)는 흔한 단어가 많아 낱말 기준으로 옆 TC 에까지 붙는다(기능A 99% D).
+{
+  const { isSentenceTerm } = require('../scripts/confidence/confidence_core.js');
+
+  t('문장형 분류 — 어미로만 가른다 (긴 명사구는 낱말형)', () => {
+    assert.strictEqual(isSentenceTerm('난이도 버튼을 다시 선택하면 흰색 테두리가 그대로 유지되는지 확인'), true);
+    assert.strictEqual(isSentenceTerm('남은 시간이 0인 카드에서 0으로 표기되는지'), true);
+    assert.strictEqual(isSentenceTerm('파티 획득 알림 유지 시간 확정값 (DA_UIData LootingUIDelay)'), false);
+    assert.strictEqual(isSentenceTerm('남은 시간 표현 공통 규칙'), false);
+  });
+
+  const os = require('os'), fsx = require('fs');
+  const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-sent-'));
+  fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+  const xr = JSON.parse(fsx.readFileSync(path.join(d, 'dxr_crossref.json'), 'utf8'));
+  const OWN = '등급표에 따른 보상 수량이 지급되는지 확인';               // 자기 TC = 우편함 정상-1
+  const ORPHAN = '우편함이 가득 찬 상태에서 보상을 수령하면 대기열에 쌓이는지 확인'; // 자기 TC 없음
+  xr.items.push({ term: OWN, branch: 'keep', source: '' }, { term: ORPHAN, branch: 'keep', source: '' });
+  fsx.writeFileSync(path.join(d, 'dxr_crossref.json'), JSON.stringify(xr), 'utf8');
+  const on = computeItems(d);
+  const off = computeItems(d, { sentenceOwnOnly: false });
+  fsx.rmSync(d, { recursive: true, force: true });
+  const r3terms = (res, n, stage, no) => {
+    const i = res.items.find((x) => x.leaf.startsWith(n) && x.stage === stage && x.no === no);
+    return ((i.reasons.find((r) => r.id === 'R3') || {}).terms) || [];
+  };
+  const hasOwn = (arr) => arr.some((x) => x.startsWith('등급표에 따른 보상 수량'));
+
+  t('문장형 — 자기 TC(우편함 정상-1)에는 붙는다', () => {
+    assert.ok(hasOwn(r3terms(on, '우편함', '정상', 1)));
+  });
+
+  t('문장형 — 흔한 단어(보상·수량)를 공유하는 옆 TC(우편함 부정-1)에는 안 붙는다', () => {
+    assert.ok(!hasOwn(r3terms(on, '우편함', '부정', 1)));
+  });
+
+  t('문장형 — 자기 TC 가 없으면 어디에도 안 붙고 diag.sentenceOrphans 로 드러난다', () => {
+    assert.ok(on.items.every((i) => !((i.reasons.find((r) => r.id === 'R3') || {}).terms || []).some((x) => x.startsWith('우편함이 가득'))));
+    assert.deepStrictEqual(on.diag.sentenceOrphans, [ORPHAN]);
+    assert.strictEqual(on.diag.sentenceTerms, 2);
+  });
+
+  t('문장형 — 스위치를 끄면 구 방식(흔한 단어로 옆 TC 에도 붙음)으로 돌아간다', () => {
+    assert.ok(hasOwn(r3terms(off, '우편함', '부정', 1)), '구 방식 재현이 안 되면 sweep 비교가 무의미하다');
+    assert.deepStrictEqual(off.diag.sentenceOrphans, []);
+  });
+}
 
 console.log(`결과: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

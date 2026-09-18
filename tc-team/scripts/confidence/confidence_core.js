@@ -27,7 +27,12 @@ const { DESIGN_TREE_RE, classifyDesignLine, splitLeafMarkers } = require(path.re
 // 값을 바꾸면 test/confidence.test.js 의 기대표가 깨진다 — 그게 이 표의 안전장치다.
 const RULES = [
   { id: 'R1', label: '기획 확인 필요 (미결 질의)', penalty: 45 },
-  { id: 'R2', label: '이미지 참조 필요 (텍스트 근거 부재)', penalty: 20 },
+  // R2 — 2026-09-11 배지로 강등(점수 0, 표시 전용 — 오너 결정). 감점을 먹이던 시절의 문제:
+  //   R2 는 기획서 그림 수가 아니라 **설계기가 마커를 달았는가**만 본다(r(마커,발화)=0.845 vs r(이미지,발화)=0.197).
+  //   같은 Confluence 402948225 를 두 번 돌리자 R2 발화가 80%↔0% 로 뒤집혔고(D 39.6%↔8.4%), 기능A은
+  //   마커가 거의 전 화면에 걸려 전 TC 가 −20 을 먹었다. 재현되지 않는 축은 점수에서 뺀다.
+  //   대가(sweep 실측): 해상도 59→46 · 등급 이동 1,635건 · D 11.2%→6.5%. 되살리려면 penalty 만 올리면 된다(sweep 변형 있음).
+  { id: 'R2', label: '이미지 참조 필요 — 표시 전용', penalty: 0 },
   { id: 'R3', label: '외부 의존 미해소 (crossref keep)', penalty: 25, per: 8, cap: 45 },
   { id: 'R4', label: '외부 의존 위치만 확인 (crossref locate)', penalty: 12, per: 5, cap: 25 },
   { id: 'R5', label: '커버리지 floor 미달 (gap)', penalty: 15, per: 15, cap: 30 },
@@ -42,6 +47,12 @@ const TUNING = {
   itemXrefMinTokens: 1,                // 항목 매칭 최소 비식별자 토큰 수.
                                        //   소분류는 2 고정 — 말뭉치가 화면 전체라 넓어 오탐이 쉽다.
                                        //   항목은 문장 하나뿐이라 1 로 둔다(2로 올리면 실측 529건이 일괄 승격).
+  groundThreshold: 0.7,                // 원문 직접 근거 판정선 — TC 내용어가 원문 한 칸에 이 비율 이상 들어 있으면
+                                       //   근거 있음 → R2·R3 를 참고(감점 0)로 돌린다. 1.01 이면 대조를 끈다(구 방식).
+                                       //   (2026-09-11 실측: 0.7 에서 대조군 R1 근거율 6% vs 전체 21% — 아래 groundOf 주석)
+  groundMinTokens: 3,                  // 내용어가 이보다 적은 TC 는 판정하지 않는다(짧은 문장은 우연 일치가 쉽다)
+  sentenceOwnOnly: true,               // 문장형 미정 항목(…는지 확인)은 «자기 TC» 에만 붙인다 — isSentenceTerm 주석
+  sentenceOwnThreshold: 0.7,           //   자기 TC = 용어의 내용어가 TC 본문에 이 비율 이상 (원문 근거 대조와 같은 기준)
 };
 
 /** 규칙 n건의 실효 감점(양수). 보너스·비스케일 규칙은 건수와 무관. */
@@ -90,6 +101,12 @@ const STOP_BASE = new Set(['화면', '정보', '출력', '확인', '상태', '�
   '입력', '가능', '노출', '보기', '적용', '기능', '항목', '사용', '표시', '시스템']);
 
 const isIdent = (w) => /[A-Za-z]/.test(w);
+// 섹션 표기 정규화 — 설계기가 `§2-3` 처럼 § 를 붙여 내는 런이 45%다(2026-09-10 실측: 5,405건 중 2,454).
+// 벗겨 두지 않으면 메모가 `§§2-3` 이 되고, `Number('§2')`=NaN 이라 앵커 정렬도 조용히 무효가 된다.
+// ⚠ 표시·정렬에만 쓴다. R6 의 깊이 판정(`src.split('-').length`)은 § 가 붙어도 값이 같아
+//   건드릴 이유가 없고, 건드리면 점수가 움직인다.
+const bareSec = (s) => String(s).replace(/^[\s§]+/, '');
+const secDepth = (s) => bareSec(s).split('-').length;
 // 언더스코어 처리 (2026-07-30): 대조 에이전트가 용어를 `전투_처치_판정_시스템` 처럼 쓰는 런이 있다.
 // `_` 를 구분자에 안 넣으면 토큰 1개가 되어 어디에도 매칭되지 않고 **감점이 조용히 0** 이 된다
 // (실측: 1챕터 R3/R4 발화 26.2% → 0%, A 등급 73.8% → 96%). 그렇다고 무조건 쪼개면
@@ -235,15 +252,20 @@ function compute(SPEC, override) {
   const unresolved = (crossref.items || []).filter((i) => i.branch === 'keep' || i.branch === 'locate');
   const xrefByLeaf = {};
   const anchorByLeaf = {};
+  // 문장형 미정 항목은 그 문장이 나온 «자기 TC» 가 있는 소분류에만 붙인다 (isSentenceTerm 주석)
+  const gStop = new Set([...STOP_BASE, ...G_GENERIC, ...autoStop]);
+  const owns = sentenceOwner(gStop, tuning.sentenceOwnThreshold);
+  const sentenceMode = (t) => tuning.sentenceOwnOnly && isSentenceTerm(t);
   leaves.forEach((lf) => {
     const hay = (lf.name + ' ' + lf.mid + ' ' + lf.major + ' ' + lf.items.map((x) => x.text).join(' ')).toLowerCase();
     xrefByLeaf[lf.name] = unresolved.filter((u) => {
+      if (sentenceMode(u.term)) return lf.items.some((x) => owns(u.term, x.text));
       const hits = tokenize(u.term).filter((w) => matchTok(hay, w));
       return hits.some(isIdent) || hits.length >= 2;
     });
     const hitRows = cmRows.filter((r) => r.keywords.some((k) => k && hay.includes(k.toLowerCase())));
     const depths = hitRows.map((r) => (/^이전 기록/.test(r.src) ? 0 : r.src.split('-').length));
-    anchorByLeaf[lf.name] = { max: depths.length ? Math.max(...depths) : 0, srcs: [...new Set(hitRows.map((r) => r.src))], n: hitRows.length };
+    anchorByLeaf[lf.name] = { max: depths.length ? Math.max(...depths) : 0, srcs: [...new Set(hitRows.map((r) => r.src))], n: hitRows.length, rows: hitRows };
   });
 
   // ── 소분류 단위 감점 (히트맵 리포트용) ────────────────────────────────
@@ -257,7 +279,12 @@ function compute(SPEC, override) {
       const p = pen('R1', jPlan.length); score -= p;
       reasons.push({ id: 'R1', d: -p, detail: `${jPlan.length}건 — ${jPlan.map((i) => i.stage + '-' + i.no).join(', ')}` });
     }
-    if (lf.needImage) { const p = pen('R2'); score -= p; reasons.push({ id: 'R2', d: -p, detail: '소분류 전체가 이미지 판독 의존' }); }
+    // R2 — 배지(점수 0). 사실(그림 판독이 필요한 화면)은 남겨 메모의 QA 지침으로 쓴다. penalty>0 이면 종전처럼 감점.
+    if (lf.needImage) {
+      const p = pen('R2');
+      if (p) { score -= p; reasons.push({ id: 'R2', d: -p, detail: '소분류 전체가 이미지 판독 의존' }); }
+      else reasons.push({ id: 'R2', d: 0, badge: true, detail: '소분류 전체가 이미지 판독 의존' });
+    }
 
     const xr = xrefByLeaf[lf.name] || [];
     const keeps = xr.filter((x) => x.branch === 'keep');
@@ -327,10 +354,110 @@ function compute(SPEC, override) {
   const diag = {
     unresolvedTerms: unresolved.length,
     matchedLeaves: leaves.filter((lf) => (xrefByLeaf[lf.name] || []).length).length,
+    // 문장형 미정 항목 중 자기 TC 를 못 찾은 것 — 어느 TC 에도 감점되지 않는다. 사라진 게 아니라 여기로 온다.
+    sentenceTerms: unresolved.filter((u) => sentenceMode(u.term)).length,
+    sentenceOrphans: unresolved.filter((u) => sentenceMode(u.term)
+      && !leaves.some((lf) => lf.items.some((x) => owns(u.term, x.text)))).map((u) => u.term),
   };
 
   // RULES 는 리포트의 라벨 조회용 — 오버라이드가 있으면 실제 적용된 표를 넘긴다.
-  return { scored, sections, charters, skeleton, cmRows, RULES: rules, rules, tuning, pen, diag, autoStop, tokenize, gapUnmapped };
+  return { scored, sections, charters, skeleton, cmRows, RULES: rules, rules, tuning, pen, diag, autoStop, tokenize, gapUnmapped, gStop, owns, sentenceMode };
+}
+
+// ── 원문 직접 근거 대조 (2026-09-11) ────────────────────────────────────
+// 「기획서에 있으면 이 감점은 무시하세요」 같은 문구로 확인을 사람에게 떠넘기지 않는다 — 원문은 이미 손에 있다.
+// TC 문장의 내용어가 기획서 원문의 **한 칸**(표 셀 하나)에 groundThreshold 이상 들어 있으면 그 TC 는
+// 원문에 직접 근거가 있다. 그런 TC 는
+//   · R2(이미지 판독 의존) — 글로 된 원문이 있으니 성립하지 않는다
+//   · R3(미해소 외부 의존) — 이 TC 의 기대결과는 원문에 명시돼 있다. 붙은 미정 항목은 흔한 단어
+//     하나로 걸린 것이 대부분이다(실측 TC 142: 16건 전부 `시간`·`충전`·`상태에서` 류로 걸렸고, 이 TC
+//     주제를 다룬 건 0건). 지우지 않고 참고(감점 0)로 남긴다 — 정말 관련 있는 미정 항목이 가려지지 않게.
+// 검증(2026-09-11, 11,218건): 양성 표본 TC 142 = 79% 적중(§2-1 「던전 입장 버튼」) /
+//   대조군 R1(설계자가 "기획서에 답 없음"이라 선언한 TC) 근거율 6% vs 전체 21% — 판정기가 헐겁지 않다.
+//   영향: 근거 2,288건(20.4%) · 등급 이동 1,182건 · D 14.7%→11.9%.
+// R1·R4·R5·R6 은 건드리지 않는다 (R1 은 설계자의 명시적 선언, R4 는 외부 값, R5·R6 은 커버리지 축).
+//
+// ⚠ 한국어는 조사·어미가 붙어 활용형이 스톱워드를 빠져나간다(`상태에서`·`선택하면`·`출력되는지`).
+//   이 대조만은 어간을 떼어 비교한다. R3/R4 매칭(tokenize)은 건드리지 않는다 — 그쪽 임계는
+//   2026-07-30 측정 후 종결된 축이다(SKILL.md 재제안 금지 ①).
+const G_ENDINGS = ['되는지', '하는지', '있는지', '없는지', '되는가', '입니다', '합니다', '됩니다', '에서는', '으로는',
+  '에서', '에게', '으로', '까지', '부터', '이며', '이면', '하면', '되면', '하는', '되는', '하고', '하여', '해서',
+  '되어', '되고', '인지', '는지', '으면', '이다', '을', '를', '이', '가', '은', '는', '의', '에', '로', '와', '과',
+  '도', '만', '면', '한', '된', '할', '될', '인'];
+const G_GENERIC = ['선택', '상태', '출력', '표기', '정보', '영역', '화면', '버튼', '경우', '직후', '다시', '그대로',
+  '유지', '표현', '규칙', '표시', '노출', '동작', '해당', '현재', '이미', '모두', '같은', '다른', '처리', '클릭',
+  '진입', '팝업', '이후', '이전', '변경', '적용', '가능', '불가', '여부', '결과', '대상', '기준'];
+const gStem = (w) => { for (const e of G_ENDINGS) if (w.length > e.length + 1 && w.endsWith(e)) return w.slice(0, -e.length); return w; };
+const IMG_NAME = /[\w\-./]+\.(?:png|jpe?g|gif|webp)/gi;
+function groundTokens(s, stop) {
+  return [...new Set(String(s).replace(IMG_NAME, ' ').replace(/[*|[\]{}()'"`«»「」.,:;!?~=<>+\-#_\\/]/g, ' ')
+    .split(/\s+/).map((w) => gStem(gStem(w.trim())))
+    .filter((w) => w.length >= 2 && !stop.has(w) && !/^\d+$/.test(w)))];
+}
+
+/** 기획서 원문 → 근거 후보 «칸» 목록 (순수함수). 칸 = 표 셀 하나. 섹션 번호와 그 행의 머리 칸을 붙인다. */
+function docCells(rawText, stop) {
+  const cells = [];
+  let sec = '';
+  String(rawText).split('\n').forEach((line, i) => {
+    const m = line.match(/^\s*(?:#+\s*)?(\d+(?:-\d+)*)[.)]?\s+\S/);
+    if (m) sec = m[1];
+    const parts = line.split('|').map((c) => c.trim());
+    // 행의 머리 칸 = 이미지 파일명을 뺐을 때 글자가 남는 첫 칸 (예: 「던전 입장 버튼」)
+    const label = parts.find((c) => c.replace(IMG_NAME, '').replace(/[*\s]/g, '').length > 0) || '';
+    parts.forEach((c) => {
+      const set = new Set(groundTokens(c, stop));
+      if (set.size) cells.push({ sec, line: i + 1, text: c, label: c === label ? '' : label.replace(IMG_NAME, '').replace(/\*+/g, '').trim(), set });
+    });
+  });
+  return cells;
+}
+
+/**
+ * TC 문장 한 줄의 원문 직접 근거 (순수함수). 내용어가 minTokens 개 미만이면 판정하지 않는다(null).
+ * 반환 cov 는 0~1. quote 는 그 칸에서 TC 와 가장 많이 겹치는 조각 둘을 원문 순서로 잇는다
+ * (동률이면 뒤쪽 — TC 의 기대결과는 대개 원문 조각의 끝에 온다. TC 142 의 "…전투력 부족 토스트만 출력합니다").
+ */
+function groundOf(text, cells, stop, minTokens = 3) {
+  const T = groundTokens(text, stop);
+  if (T.length < minTokens || !cells.length) return null;
+  let best = null;
+  for (const c of cells) {
+    const n = T.filter((w) => c.set.has(w)).length;
+    if (!best || n > best.n) best = { n, c };
+  }
+  if (!best || !best.n) return { cov: 0, sec: '', line: 0, label: '', quote: '' };
+  // 원문은 Confluence→마크다운 변환본이라 `AreaType\_Battlefield` 처럼 이스케이프가 섞여 있다 — 인용할 때 벗긴다.
+  const pieces = best.c.text.replace(IMG_NAME, ' ').split(/\s+[*+]\s+|(?<=[.다])\s{2,}/)
+    .map((p) => p.replace(/\*+/g, '').replace(/\\([_*[\]()#+\-.!`|])/g, '$1').trim()).filter(Boolean);
+  const ranked = pieces.map((p, i) => ({ p, i, n: T.filter((w) => new Set(groundTokens(p, stop)).has(w)).length }))
+    .filter((x) => x.n > 0).sort((a, b) => (b.n - a.n) || (b.i - a.i)).slice(0, 2).sort((a, b) => a.i - b.i);
+  return {
+    cov: best.n / T.length, sec: best.c.sec, line: best.c.line, label: best.c.label,
+    quote: ranked.map((x) => x.p).join(' … '),
+  };
+}
+
+// ── 문장형 미정 항목 (2026-09-11) ─────────────────────────────────────────
+// 대조 입력(설계의 「기획 확인 필요 항목」)에는 낱말(「남은 시간 표현 공통 규칙」)만이 아니라
+// **TC 문장 통째**(「…상세 정보가 그대로 유지되는지 확인」)가 섞여 온다. 문장은 흔한 단어가 많아
+// 낱말 기준(비범용 토큰 1개) 매칭으로 **같은 화면의 거의 모든 TC 에 붙는다** — 기능A은
+// TC 1건당 미정 항목이 평균 8.8개였고 99% 가 D 였다(확신도가 아무 정보도 못 주는 포화 상태).
+// 문장형은 그 문장이 나온 «자기 TC» 에만 붙인다. 자기 TC = 용어의 내용어가 TC 본문에
+// sentenceOwnThreshold 이상 들어 있는 TC (groundOf 를 TC 본문 한 칸에 대고 잰다).
+// ⚠ 분류는 **어미로만** 한다. 길이로 가르면 「파티 획득 알림 유지 시간 확정값 (DA_UIData …)」 같은
+//   긴 명사구가 문장형으로 섞인다 — 첫 측정에서 30자 초과 명사구 321건을 섞어 효과를 약 4배 부풀렸다.
+// 실측(2026-09-11, 11,218건): 문장형 101건 · 등급 이동 105건 · 점수 하락 0 · 기능A D 84.5%→75.5%.
+// 자기 TC 를 못 찾은 문장형(고아, 실측 22건)은 어디에도 붙이지 않고 diag.sentenceOrphans 로 드러낸다.
+// 낱말형 매칭(tokenize·itemXrefMinTokens)은 건드리지 않는다 — 그쪽 임계는 재제안 금지 ① 로 종결된 축이다.
+const isSentenceTerm = (t) => /(는지|되는지|하는지)(\s*확인)?\s*$|확인\s*$/.test(String(t).trim());
+function sentenceOwner(stop, th) {
+  const cache = new Map();
+  return (term, text) => {
+    if (!cache.has(text)) cache.set(text, docCells(text, stop));
+    const g = groundOf(String(term).replace(/\s*확인\s*$/, ''), cache.get(text), stop, 1);
+    return !!(g && g.cov >= th);
+  };
 }
 
 // ── TC(항목) 단위 확신도 ────────────────────────────────────────────────
@@ -339,8 +466,11 @@ function compute(SPEC, override) {
 //   · 소분류 상속 : R2(이미지 마커 — 화면 전체 속성)
 function computeItems(SPEC, override) {
   const ctx = compute(SPEC, override);
-  const { scored, cmRows, tokenize, tuning, pen, rules } = ctx;
+  const { scored, cmRows, tokenize, tuning, pen, rules, gStop, owns, sentenceMode } = ctx;
   const out = [];
+  // 원문 직접 근거 — confluence_raw.md 가 없으면(구 런·픽스처) 대조를 쉬고 종전 점수 그대로 간다.
+  let cells = [];
+  try { cells = docCells(fs.readFileSync(path.join(SPEC, 'confluence_raw.md'), 'utf8'), gStop); } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
   scored.forEach((lf) => {
     const r2 = lf.reasons.find((r) => r.id === 'R2');
@@ -354,11 +484,18 @@ function computeItems(SPEC, override) {
       // R3/R4 매칭 말뭉치는 별도 — 'text' 로 두면 소분류명이 항목 근거로 새는 것을 막는다.
       const xhay = tuning.itemXrefHaystack === 'text' ? it.text.toLowerCase() : hay;
 
-      // R1 — 그 항목에 직접 붙은 미결 질의만
+      // 원문 직접 근거 — 이 TC 문장이 기획서 한 칸에 거의 그대로 있는가 (위 groundOf 주석)
+      const ground = cells.length ? groundOf(it.text, cells, gStop, tuning.groundMinTokens) : null;
+      const grounded = !!(ground && ground.cov >= tuning.groundThreshold);
+
+      // R1 — 그 항목에 직접 붙은 미결 질의만 (원문 근거가 있어도 빼지 않는다 — 설계자의 명시적 선언이다)
       if (it.jTag && /기획/.test(it.jTag)) { const p = pen('R1'); score -= p; reasons.push({ id: 'R1', d: -p, detail: `${it.stage}-${it.no}` }); }
 
-      // R2 — 화면 전체가 이미지 의존이면 전 항목 상속
-      if (r2) { score += r2.d; reasons.push({ ...r2, inherited: true }); }
+      // R2 — 화면 전체가 이미지 의존이면 전 항목 상속. 단 이 TC 가 글로 된 원문에 근거가 있으면 참고로만 남긴다.
+      if (r2) {
+        if (grounded) reasons.push({ ...r2, d: 0, waived: true, inherited: true });
+        else { score += r2.d; reasons.push({ ...r2, inherited: true }); }
+      }
 
       // R5 — 그 항목의 단계에 gap이 걸린 경우만
       const r5 = lf.reasons.find((r) => r.id === 'R5');
@@ -375,15 +512,22 @@ function computeItems(SPEC, override) {
       const xhit = { R3: [], R4: [] };
       xrefs.forEach((r) => {
         xhit[r.id] = (r.terms || String(r.detail).split(' / ')).filter((t) => {
+          if (sentenceMode(t)) return owns(t, it.text);   // 문장형은 자기 TC 에만 (isSentenceTerm 주석)
           const tk = tokenize(t).filter((w) => matchTok(xhay, w));
           return tk.some(isIdent) || tk.length >= tuning.itemXrefMinTokens;
         });
       });
-      const xp = xrefPenalty(rules, xhit.R3.length, xhit.R4.length);
+      // 원문 근거가 있으면 keep 은 참고로 돌리고 locate 는 keep 없는 기준으로 다시 잰다 —
+      // xrefPenalty 는 keep 이 기준 감점을 선점하면 locate 에 증분만 물리므로, keep 을 뺀 채 그 값을
+      // 쓰면 locate 가 덜 깎인다.
+      const xp = xrefPenalty(rules, grounded ? 0 : xhit.R3.length, xhit.R4.length);
       [['R3', xp.r3], ['R4', xp.r4]].forEach(([id, p]) => {
+        if (!xhit[id].length) return;
+        const base = { id, detail: xhit[id].join(' / '), terms: xhit[id].map((t) => t.split(/[（(]/)[0].trim()) };
+        if (id === 'R3' && grounded) { reasons.push({ ...base, d: 0, waived: true }); return; }
         if (!p) return;
         score -= p;
-        reasons.push({ id, d: -p, detail: xhit[id].join(' / '), terms: xhit[id].map((t) => t.split(/[（(]/)[0].trim()) });
+        reasons.push({ ...base, d: -p });
       });
 
       // 항목별 기획서 앵커 (커버리지 매핑 키워드 → 원문 섹션 위치)
@@ -392,6 +536,13 @@ function computeItems(SPEC, override) {
       const depths = hitRows.filter((r) => !/^이전 기록/.test(r.src)).map((r) => r.src.split('-').length);
       const maxD = depths.length ? Math.max(...depths) : 0;
       if (!anchors.length) anchors = lf.anchor.srcs;   // 항목 매칭 실패 시 소분류 앵커로 폴백
+
+      // 「이 TC를 쓴 이유」의 근거 행 — 커버리지 매핑에서 이 항목을 낳은 줄 1건(메인).
+      // 적중 키워드가 많은 줄 → 그래도 같으면 더 깊은 섹션 순. 항목이 못 물면 소분류 적중 행으로
+      // 폴백한다(앵커 폴백과 같은 원천). 점수와 무관한 표시 전용 필드다.
+      const nKw = (r) => r.keywords.filter((k) => k && hay.includes(k.toLowerCase())).length;
+      const whyPool = (hitRows.length ? hitRows : (lf.anchor.rows || [])).filter((r) => !/^이전 기록/.test(r.src));
+      const why = whyPool.slice().sort((a, b) => (nKw(b) - nKw(a)) || (secDepth(b.src) - secDepth(a.src)))[0] || null;
 
       // R6 — 이 항목을 콕 집은 앵커가 없거나 1단계뿐일 때
       if (maxD <= 1) { const p = pen('R6'); score -= p; reasons.push({ id: 'R6', d: -p, detail: anchors.length ? `§${anchors.join(' §')}` : '매핑 안 됨' }); }
@@ -408,6 +559,11 @@ function computeItems(SPEC, override) {
         stage: it.stage, no: it.no, text: it.text,
         score, grade: unimplemented ? 'N' : gradeOf(score, tuning.bands),
         unimplemented, reasons, anchors,
+        why: why ? { src: why.src, item: why.item, point: why.point, risk: why.risk } : null,
+        tech: r7leaf ? String(lf.note || '').trim() : '',
+        // 원문 근거 — 판정선을 넘은 것만 근거로 싣는다. 못 넘은 것도 일치율은 남긴다(감사·튜닝용).
+        ground: grounded ? { cov: Math.round(ground.cov * 100), sec: ground.sec, line: ground.line, label: ground.label, quote: ground.quote } : null,
+        groundCov: ground ? Math.round(ground.cov * 100) : null,
       });
     });
   });
@@ -416,6 +572,9 @@ function computeItems(SPEC, override) {
   ctx.diag = {
     ...ctx.diag,
     matchedItems: out.filter((i) => i.reasons.some((r) => r.id === 'R3' || r.id === 'R4')).length,
+    // 원문 근거 — 칸 0 이면 confluence_raw.md 가 없어 대조를 쉰 런이다(종전 점수 그대로)
+    groundCells: cells.length,
+    groundedItems: out.filter((i) => i.ground).length,
   };
   ctx.diag.xrefSilentMiss = ctx.diag.unresolvedTerms > 0 && ctx.diag.matchedItems === 0;
   return { items: out, ...ctx };
@@ -488,4 +647,4 @@ function mapRowsToItems(rows, items) {
   return { perRow, drift };
 }
 
-module.exports = { compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty, stampGate, STAMP_DRIFT_MAX, mapRowsToItems };
+module.exports = { bareSec, secDepth, compute, computeItems, RULES, TUNING, STOP_BASE, penaltyOf, xrefPenalty, stampGate, STAMP_DRIFT_MAX, mapRowsToItems, docCells, groundOf, isSentenceTerm };

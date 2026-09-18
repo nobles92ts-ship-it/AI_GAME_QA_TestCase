@@ -148,6 +148,9 @@ function checkSkeletonCols({ b, c, d, e, g }, locate, violations, opts = {}) {
   //   (스왑 시 G에 한글 서술문이 들어와 enum 위반 — 2026-04-17 사고 유형의 사전 차단)
   if (e && !STAGE_ENUM.includes(e)) {
     violations.push({ ...locate, col: 'E', sev: 'HIGH', msg: `검증단계 "${e}" — 허용값(정상/부정/예외) 외` });
+  } else if (!e) {
+    // 빈 E도 V-04 위반 (2026-09-11) — E는 그룹핑(병합·표시 dedup) 열이 아니므로 allowEmptyCDE 대상이 아니다
+    violations.push({ ...locate, col: 'E', sev: 'HIGH', msg: '검증단계 빈 값 — 정상/부정/예외 중 하나 필수' });
   }
   if (g && !PLATFORM_ENUM.includes(g)) {
     violations.push({ ...locate, col: 'G', sev: 'HIGH', msg: `플랫폼 "${g.slice(0, 30)}" — 허용값(PC/모바일/PC/모바일) 외 (idx4↔5 스왑 의심)` });
@@ -369,8 +372,10 @@ function formatViolations(violations) {
 // ── 입력 어댑터 (L4-03) ──────────────────────────────────────────────────────
 // 3형상 → 캐노니컬 레코드 {sheetRow, id, B..G, H, I, J} + capability 플래그
 //   (a) tc_data.json: 최상위 7요소 배열 — ID/H/I 없음
-//   (b) 슬림 스냅샷: {headers(10), rows} — 고정 패딩
-//   (c) 풀 덤프: {headers(11), rows} — ragged (트레일링 빈 셀 탈락)
+//   (b) 슬림 스냅샷: {headers(11), rows} — 고정 패딩
+//   (c) 풀 덤프: {headers(12), rows} — ragged (트레일링 빈 셀 탈락)
+// ⚠ 2026-09-04 BTS 열 신설: 시트는 A~L(J=BTS, K=비고, L=담당자)로 한 칸 밀렸다.
+//    (b)(c)는 헤더명으로 찾으므로 자동 대응하지만, 아래 '헤더 없는 rows' 분기만 위치 고정이다.
 
 function adaptInput(filePath) {
   const { loadSnapshot } = require('./load_snapshot.js');
@@ -405,20 +410,25 @@ function adaptInput(filePath) {
     });
   } else if (data && Array.isArray(data.rows)) {
     // 헤더 없는 rows 객체 — fixer 산출 tc_after_fix[N].json ({tab, savedAt, totalRows, rows})
-    // 행이 A열(TC ID)부터 위치 고정: [id, B, C, D, E, F, G, H, I, J, 담당자] (트레일링 ragged)
+    // 행이 A열(TC ID)부터 위치 고정 (트레일링 ragged):
+    //   [id, B, C, D, E, F, G, H, I, BTS, J(비고), 담당자]
+    //      0  1  2  3  4  5  6  7  8   9    10       11
+    // ⚠ 2026-09-04 이전 덤프는 BTS가 없어 비고가 9번이다. 그 시점에 멈춘 런을 재개하면
+    //   비고 자리에 담당자를 읽는다 — 재개 대신 fixer를 다시 돌릴 것.
     // 행 길이 중앙값으로 ID 포함 여부 판별 (≥8 → 시트 위치 레이아웃, 아니면 tc_data 7요소로 간주)
     const sample = data.rows.filter(Array.isArray).slice(0, 10).map(r => r.length).sort((a, b) => a - b);
     const median = sample.length ? sample[Math.floor(sample.length / 2)] : 0;
     const positional = median >= 8;
     caps = { source: positional ? 'fix_dump' : 'tc_data', hasID: positional, hasHI: positional };
     const off = positional ? 1 : 0; // ID열 유무에 따른 오프셋
+    const IDX_J = positional ? 10 : 6;  // 비고 — 시트 레이아웃이면 K열(10), tc_data면 7요소의 마지막
     data.rows.forEach((r, i) => {
       const row = Array.isArray(r) ? r : [];
       const rec = {
         sheetRow: i + 2, id: positional ? s(row[0]) : '',
         B: s(row[off + 0]), C: s(row[off + 1]), D: s(row[off + 2]), E: s(row[off + 3]),
         F: s(row[off + 4]), G: s(row[off + 5]),
-        H: positional ? s(row[7]) : '', I: positional ? s(row[8]) : '', J: s(row[off + 6 + (positional ? 2 : 0)]),
+        H: positional ? s(row[7]) : '', I: positional ? s(row[8]) : '', J: s(row[IDX_J]),
       };
       if (rec.id === 'TC ID' || rec.B === '대분류') { notes.push(`행 ${rec.sheetRow}: 중복 헤더 행 스킵`); return; }
       if (!rec.id && !rec.B && !rec.C && !rec.D && !rec.E && !rec.F) { notes.push(`행 ${rec.sheetRow}: 빈 행 스킵`); return; }
@@ -569,9 +579,13 @@ function validateFull(filePath, opts = {}) {
     const loc = caps.hasID && r.id ? `TC-${r.id}` : `행 ${r.sheetRow}`;
     const isBasic = r.B === '기본기능';
 
-    // V-04 검증단계 enum
+    // V-04 검증단계 enum — 빈 값도 위반. 대상 = 실 TC 행(ID 또는 F 보유 — 헤더·빈 행은 adaptInput이 이미 스킵)
+    //   E는 병합·표시 dedup 열이 아니다(create_gsheet가 전 행 기록) → fill-down 대상이 아니고 빈 칸은 결손이다.
+    //   2026-09-11 실측: 정예_던전_v2 수기 추가 13행이 빈 E로 통과 — E는 숨김 열(apply_format_tab HIDDEN_COLS)이라 사람이 못 보고 비운다.
     if (r.E && !STAGE_ENUM.includes(r.E)) {
       violations.push({ sev: 'HIGH', rule: 'V-04', row: r.sheetRow, msg: `${loc} 검증단계 "${r.E}" — 허용값(정상/부정/예외) 외` });
+    } else if (!r.E && (r.id || r.F)) {
+      violations.push({ sev: 'HIGH', rule: 'V-04', row: r.sheetRow, msg: `${loc} 검증단계 빈 값 — 정상/부정/예외 중 하나 필수` });
     }
     // V-03 플랫폼 enum
     if (r.G && !PLATFORM_ENUM.includes(r.G)) {

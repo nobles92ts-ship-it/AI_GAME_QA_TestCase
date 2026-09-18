@@ -8,7 +8,12 @@
  * 멱등: item.id 기준. 같은 id 가 이미 있으면 덮어쓴다(재실행 안전).
  * counts 는 병합 후 전량 재계산 — 손으로 더하지 않는다(카운터 단일화).
  *
- * usage: crossref_delta_merge.js <dxr_crossref.json> <delta_result.json> [--origin S4|S7]
+ * --input <delta_in.json> (2026-09-11): 입력 필드(term·tc_id·context)는 수집기가 소유한다.
+ *   에이전트가 term 을 고쳐 써도 id 로 수집 원문을 되돌린다 — 패널 필터(crossref_labels_annotate.js)가
+ *   term 완전일치로 답 있는 질문을 빼므로, 한 글자만 달라져도 그 질문은 답이 있는데도 조용히 남는다
+ *   (실측: 과거 델타 114건 중 1건 변형).
+ *
+ * usage: crossref_delta_merge.js <dxr_crossref.json> <delta_result.json> [--origin S4|S7] [--input <delta_in.json>]
  * exit: 0=병합 완료 / 1=오류(호출측이 비차단 처리)
  */
 'use strict';
@@ -36,9 +41,11 @@ function main() {
   const deltaPath = process.argv[3];
   const oi = process.argv.indexOf('--origin');
   const origin = oi >= 0 && process.argv[oi + 1] ? process.argv[oi + 1] : 'delta';
+  const ii = process.argv.indexOf('--input');
+  const input = ii >= 0 && process.argv[ii + 1] ? readJSON(process.argv[ii + 1], null) : null;
 
   if (!target || !deltaPath) {
-    console.error('usage: crossref_delta_merge.js <dxr_crossref.json> <delta_result.json> [--origin S4|S7]');
+    console.error('usage: crossref_delta_merge.js <dxr_crossref.json> <delta_result.json> [--origin S4|S7] [--input <delta_in.json>]');
     process.exit(1);
   }
   if (!fs.existsSync(deltaPath)) {
@@ -48,7 +55,14 @@ function main() {
 
   const delta = readJSON(deltaPath, null);
   if (!delta) { console.error('[delta_merge] 델타 결과 파싱 불가'); process.exit(1); }
-  const dItems = (delta.items || []).map(it => ({ ...it, delta: true, origin }));
+  const inById = new Map(((input && input.items) || []).map(x => [x && x.id, x]));
+  let restored = 0;
+  const dItems = (delta.items || []).map(it => {
+    const src = it && inById.get(it.id);
+    if (!src) return { ...it, delta: true, origin };
+    if (src.term !== it.term) restored++;
+    return { ...it, term: src.term, tc_id: src.tc_id, context: src.context, delta: true, origin };
+  });
 
   const base = readJSON(target, null) || { source_run: '', items: [], discovered: [], counts: {} };
   base.items = Array.isArray(base.items) ? base.items : [];
@@ -67,7 +81,7 @@ function main() {
 
   fs.writeFileSync(target, JSON.stringify(base, null, 2), 'utf8');
   const c = base.counts;
-  console.log(`[delta_merge] origin=${origin} 추가=${added} 갱신=${replaced} → in=${c.in} apply=${c.apply} locate=${c.locate} discover=${c.discover} keep=${c.keep}`);
+  console.log(`[delta_merge] origin=${origin} 추가=${added} 갱신=${replaced}${input ? ` term복원=${restored}` : ''} → in=${c.in} apply=${c.apply} locate=${c.locate} discover=${c.discover} keep=${c.keep}`);
   process.exit(0);
 }
 
