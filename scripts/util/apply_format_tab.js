@@ -72,7 +72,7 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
   // ── 헤더(1행) 서식 ──────────────────────────
   requests.push({
     repeatCell: {
-      range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 10 },
+      range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 11 },
       cell: {
         userEnteredFormat: {
           backgroundColor: { red: 0.1765, green: 0.2510, blue: 0.3490 }, // #2D4059
@@ -98,17 +98,33 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
 
   // ── 데이터 행 서식 ───────────────────────────
 
-  // A~E (index 0~4): 흰 배경, 검정 텍스트, bold 없음, 가운데 정렬, WRAP
+  // A (index 0): ⚠ **배경색은 건드리지 않는다.** A열 배경의 주인은 확신도 스탬핑
+  //   (`tc-team/scripts/confidence/confidence_apply.js` — C등급 노랑 / D등급 빨강)이고,
+  //   그쪽이 매 실행 초기화 후 재도색하는 멱등 구조다. 여기서 같이 흰색으로 칠하면
+  //   완성된 탭에 서식을 다시 돌릴 때 확신도 색이 조용히 사라진다.
+  //   (2026-09-04 실사고: 링크 열 이관 중 51탭 재서식 → 17탭 1374셀 색 소실. 메모로 복구함)
+  const commonTextFmt = {
+    textFormat: { foregroundColor: { red: 0, green: 0, blue: 0 }, bold: false },
+    horizontalAlignment: 'CENTER',
+    verticalAlignment: 'MIDDLE',
+    wrapStrategy: 'WRAP',
+  };
   requests.push({
     repeatCell: {
-      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: 5 },
+      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: 1 },
+      cell: { userEnteredFormat: commonTextFmt },
+      fields: 'userEnteredFormat(textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)',
+    }
+  });
+
+  // B~E (index 1~4): 흰 배경, 검정 텍스트, bold 없음, 가운데 정렬, WRAP
+  requests.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 1, endColumnIndex: 5 },
       cell: {
         userEnteredFormat: {
           backgroundColor: { red: 1, green: 1, blue: 1 },
-          textFormat: { foregroundColor: { red: 0, green: 0, blue: 0 }, bold: false },
-          horizontalAlignment: 'CENTER',
-          verticalAlignment: 'MIDDLE',
-          wrapStrategy: 'WRAP',
+          ...commonTextFmt,
         }
       },
       fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)',
@@ -149,10 +165,11 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
     }
   });
 
-  // J (index 9): 왼쪽 정렬 + OVERFLOW (줄바꿈 없음)
+  // J(링크)·K(비고) (index 9~10): 왼쪽 정렬 + OVERFLOW (줄바꿈 없음)
+  //   2026-09-04: 링크 열 신설로 비고가 J→K. 링크·메모 둘 다 같은 취급이라 한 블록으로 묶는다.
   requests.push({
     repeatCell: {
-      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 9, endColumnIndex: 10 },
+      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 9, endColumnIndex: 11 },
       cell: {
         userEnteredFormat: {
           backgroundColor: { red: 1, green: 1, blue: 1 },
@@ -167,13 +184,21 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
   });
 
   // ── 열 너비 ──────────────────────────────────
-  const colWidths = [60, 90, 110, 160, 80, 500, 90, 80, 90, 160];
+  // A~K — TC 본문은 이 스크립트가 소유한다. L~P(완료처리 패널)는 add_project_info.js 소유.
+  //   2026-09-04: F=재현스탭(500→600) / J=링크(100, 신설) / K=비고(300, 구 J에서 160→300).
+  const colWidths = [60, 90, 110, 160, 80, 600, 90, 80, 90, 100, 300];
+  // 숨김 열 — 데이터·검증은 그대로 두고 표시만 감춘다 (2026-09-04 오너 결정).
+  //   E(index 4, 검증단계): 커버리지 기준·V-16/V-18·STAGE_ENUM의 입력이라 삭제 불가.
+  //   사람이 읽을 값이 아니므로 시트에서만 감춤. 되돌리려면 이 배열을 비운다.
+  const HIDDEN_COLS = [4];
   colWidths.forEach((px, ci) => {
+    const hidden = HIDDEN_COLS.includes(ci);
     requests.push({
       updateDimensionProperties: {
         range: { sheetId, dimension: 'COLUMNS', startIndex: ci, endIndex: ci + 1 },
-        properties: { pixelSize: px },
-        fields: 'pixelSize',
+        // 숨김 대상이 아닌 열은 hiddenByUser를 건드리지 않는다 (사람이 수동으로 숨긴 열 보존).
+        properties: hidden ? { pixelSize: px, hiddenByUser: true } : { pixelSize: px },
+        fields: hidden ? 'pixelSize,hiddenByUser' : 'pixelSize',
       }
     });
   });
@@ -248,10 +273,10 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
     });
   });
 
-  // J열(비고) — 드롭다운 제거 (repeatCell + fields:'dataValidation'으로 덮어쓰기)
+  // J열(링크)·K열(비고) — 드롭다운 제거 (repeatCell + fields:'dataValidation'으로 덮어쓰기)
   requests.push({
     repeatCell: {
-      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 9, endColumnIndex: 10 },
+      range: { sheetId, startRowIndex: 1, endRowIndex: endRow, startColumnIndex: 9, endColumnIndex: 11 },
       cell: {},
       fields: 'dataValidation'
     }
@@ -299,10 +324,10 @@ async function applyFormatToTab(tabName, addConsole = false, spreadsheetId = DEF
           startRowIndex: 0,
           endRowIndex: endRow,
           startColumnIndex: 0,
-          endColumnIndex: 10,
+          endColumnIndex: 11,
         },
         filterSpecs: [
-          { columnIndex: 4 },   // E: 검증단계
+          { columnIndex: 4 },   // E: 검증단계 (숨김 열이지만 필터는 유지 — 커버리지 확인용)
           { columnIndex: 6 },   // G: 플랫폼
           { columnIndex: 7 },   // H: PC 결과
           { columnIndex: 8 },   // I: 모바일 결과

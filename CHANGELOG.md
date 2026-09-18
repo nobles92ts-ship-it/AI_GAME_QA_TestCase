@@ -8,6 +8,18 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.3] — 2026-09-18
+
+### Fixed
+
+- **The sheet writer and the sheet validator were a generation apart.** v4.3.2 shipped a validator that expects the twelve-column layout — the link column was added at J, pushing the memo to K and the assignee to L — while the writer in the same tree still emitted eleven columns. Input that arrives with its headers is matched by name and adapts on its own, so this stayed invisible there; a headerless sheet dump is read **by position**, and the validator read column index 10. On an eleven-column sheet that index is the assignee, not the memo. Every value downstream of it was one cell off, and nothing complained. The four files that define this layout — the writer, the formatter, the project-info panel, and the assignee filler — are now on the same generation and are declared as a set that moves together.
+
+### Added
+
+- **A contract gate between the two sides of the sheet layout.** The existing suites test the writer and the validator each on their own, which is exactly why a mismatch *between* them survived: both halves were green. The new gate reads the writer's header array and the validator's positional index out of the sources and asserts they agree on where the memo column is. Confirmed against a positive sample before it was trusted — run against the previous release it fails with `9 !== 10`, which is the defect it exists to catch.
+
+---
+
 ## [v4.3.2] — 2026-09-18
 
 ### Added
