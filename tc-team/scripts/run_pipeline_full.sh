@@ -39,6 +39,9 @@ RETRY="$UTIL/pipeline_retry.sh"
 STATEJSON="$PROJECT_ROOT/team/state.json"
 TEAMLOCK="$PROJECT_ROOT/team/.pipeline.lock"
 CLI_BASE='-p --permission-mode bypassPermissions'
+# 자식 격리 — run-agent.sh 가 사용자 설정(플러그인·훅·MCP 커넥터·전역 규칙)을 끊고 에이전트 md 의 tools: 대로 띄운다(감사 P2-a·b).
+# S1(s1only)·S7(finalize.sh)에도 물려준다. 되돌리기 = env 한 줄: TCTEAM_ISOLATE=0 — 테스트 test/runagent_isolate.test.js
+export TCTEAM_ISOLATE="${TCTEAM_ISOLATE:-1}"
 
 FEAT="" ; SHEET_ID="" ; CONF_URL="" ; START_FROM="s1"
 while [[ $# -gt 0 ]]; do
@@ -329,6 +332,13 @@ if [[ $ST -le 4 ]]; then
   # S3→S4 입력 계약 (2026-08-09): 재개(--start-from s4) 경로에서 S3 산출물이 없으면
   # dup_gate는 경고만 남기고 렌즈가 빈 입력으로 진행하는 사각이 있다 — 여기서 명시 정지.
   [[ -f "$WORK/tcteam_snapshot.json" ]] || fail "S4 입력 없음 — tcteam_snapshot.json (S3 먼저 완료 필요)"
+  # 재개 안전 (2026-09-24 감사 L1-01·L2-01): 지난 시도의 렌즈·판정 산출이 남아 있으면 이번 LLM 이 아무것도
+  #   못 써도 validate-json 을 통과해 그대로 쓰인다 — 진입 때 비운다. 커버리지 청크는 아래에서 이미 비운다.
+  rm -f "$WORK/lens_structure.json" "$WORK/lens_quality.json" "$WORK/lens_crossref.json" "$WORK/fix_plan.json" \
+        "$WORK/coverage_s4.json" "$WORK/exclusions_s4.json" 2>/dev/null
+  for f in lens_structure.json lens_quality.json lens_crossref.json fix_plan.json coverage_s4.json exclusions_s4.json; do
+    [[ -e "$WORK/$f" ]] && stop_integrity "S4 산출 초기화 실패 — $f 가 지워지지 않았다(잠김·디렉터리?). 남은 산출은 이번 렌즈·판정이 못 써도 검증을 통과해 지난 런 것이 쓰인다"
+  done
   log "[S4] 리뷰 입력 배치"
   # tc_design.md는 $WORK=$SPEC이라 이미 제자리 (07-29 경로 통합 — 구 cp 제거)
   [[ -f "$TCTEAM/docs/eval_digest.md" ]] && cp "$TCTEAM/docs/eval_digest.md" "$WORK/eval_digest.md"
@@ -512,6 +522,9 @@ PEOF
   "$NODE" "$HELPERS" validate-json "$WORK/coverage.json" coverage >/dev/null 2>&1 \
     && "$NODE" "$HELPERS" validate-json "$WORK/exclusions.json" exclusions >/dev/null 2>&1 \
     || fail "S4 커버리지 조립 결과 검증 실패"
+  # S4 원장 사본 — S5 봉합(seal-coverage)이 coverage.json 을 제자리에서 고치므로, S5 재개가 되돌아갈 기준점을 남긴다
+  cp "$WORK/coverage.json" "$WORK/coverage_s4.json" && cp "$WORK/exclusions.json" "$WORK/exclusions_s4.json" \
+    || fail "S4 커버리지 원장 사본 저장 실패"
   # 리뷰가 새로 단 「기획 확인 필요」를 뇌에 먼저 물어본다 (S5 적용 전이라 답이 반영될 수 있는 유일한 시점)
   crossref_delta fixplan S4
   log "[S4] 완료"
@@ -520,6 +533,22 @@ fi
 
 # ══ S5 — 적용 + 게이트 (결정론, 미커버 봉합 1라운드) ══════════════════════════
 if [[ $ST -le 5 ]]; then
+  # 재개 안전 (2026-09-24 감사 L1-01·L2-01): S5 는 늘 스냅샷에서 최종본을 다시 만든다. 지난 시도의 적용 원장이
+  #   남으면 같은 패치를 「이미 적용」으로 건너뛰어 S4 수정·봉합 행이 조용히 빠진다(실발현 아이템_강화_연출_v2 08-11 —
+  #   exit 0 으로 끝나 skipped 숫자 말고는 신호가 없었다). 원장·봉합 산출을 비우고, 봉합이 제자리에서 고친
+  #   coverage.json 을 S4 조립본으로 되돌린다. 테스트 = 사내 회귀 테스트(실데이터 픽스처라 공개 배포본 미포함)
+  rm -f "$WORK/applied_patches.json" "$WORK/applied_patches_seal.json" "$WORK/fix_plan_seal.json" "$WORK/coverage_seal.json" 2>/dev/null
+  for f in applied_patches.json applied_patches_seal.json fix_plan_seal.json coverage_seal.json; do
+    [[ -e "$WORK/$f" ]] && stop_integrity "S5 원장 초기화 실패 — $f 가 지워지지 않았다(잠김·디렉터리?). 남은 원장은 S4 수정을 건너뛰게 하고, 남은 봉합 산출은 봉합 에이전트가 못 써도 검증을 통과해 지난 봉합이 적용된다"
+  done
+  if [[ -f "$WORK/coverage_s4.json" && -f "$WORK/exclusions_s4.json" ]]; then
+    cp "$WORK/coverage_s4.json" "$WORK/coverage.json" && cp "$WORK/exclusions_s4.json" "$WORK/exclusions.json" \
+      || fail "S5 커버리지 원장 복원 실패"
+  elif compgen -G "$WORK/cov_chunk_*.json" >/dev/null; then
+    vhelp assemble-coverage "$WORK" || fail "S5 커버리지 원장 재조립 실패"   # 수리 전 S4 산출(사본 없음) — 청크에서 다시 만든다
+  else
+    log "[S5][경고] S4 커버리지 원장 사본·청크 없음 — coverage.json 을 그대로 쓴다(지난 봉합 흔적이 남았을 수 있다)"
+  fi
   log "[S5] fix_plan 적용"
   "$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_snapshot.json" "$WORK/fix_plan.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches.json" >>"$CHAIN_LOG" 2>&1 || fail "S5 apply_fix_plan 실패"
   "$NODE" "$LIB/regroup.js" "$WORK/tcteam_tc_final.json" "$WORK/tcteam_tc_final.json" >>"$CHAIN_LOG" 2>&1 || fail "S5 regroup 실패"

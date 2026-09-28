@@ -34,6 +34,13 @@ CLI_BASE='-p --permission-mode bypassPermissions'
 # effort max 사고 한 턴만으로 넘친다(09-11 스킬_강화_시스템 508행: 64K 절단 5회 → 128K 재기동 최대 응답 85,077).
 # 명시 env 가 이긴다. 검수·대조 호출과 v2 엔진(run-agent.sh 공유)은 CLI 기본 그대로 — 근거=next_run_verify 「S1 설계자가 CLI 출력 상한 64K 에 걸린다」
 DESIGNER_MAX_OUT="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-128000}"
+# S1 opus 자리(설계자 STEP 1 · 분석 공백 시 STEP 3 설계수정) 모델 — 2026-09-24 오너 결정: S1 만 claude-opus-5-5 (effort max 유지).
+# run-agent.sh 의 opus 핀(기본 claude-opus-5)은 v2 엔진과 공유라 건드리지 않고 이 체인 안에서만 기본값을 준다. 명시 env 가 이긴다.
+# 되돌리기 = env 한 줄: TCTEAM_OPUS_MODEL=claude-opus-5 — 근거 = 사내 감사 문서(공개 배포본 미포함) §3 · next_run_verify ㉑ · 테스트 test/s1_opus_pin.test.js
+export TCTEAM_OPUS_MODEL="${TCTEAM_OPUS_MODEL:-claude-opus-5-5}"
+# 자식 격리 — run-agent.sh 가 사용자 설정(플러그인·훅·MCP 커넥터·전역 규칙)을 끊고 에이전트 md 의 tools: 대로 띄운다(감사 P2-a·b).
+# 이 체인 안에서만 켠다(v2 엔진 무영향). 되돌리기 = env 한 줄: TCTEAM_ISOLATE=0 — 테스트 test/runagent_isolate.test.js
+export TCTEAM_ISOLATE="${TCTEAM_ISOLATE:-1}"
 
 FEAT="" ; SHEET_ID="" ; CONF_URL="" ; RESUME="" ; LOCAL=0
 while [[ $# -gt 0 ]]; do
@@ -222,6 +229,7 @@ fi
 
 # ── STEP 1 설계 (opus) ───────────────────────────────────────────────────────
 if [[ $START -le 1 ]]; then
+log "[STEP 1] 설계자 모델 $TCTEAM_OPUS_MODEL (S1 opus 자리 · 되돌리기 env TCTEAM_OPUS_MODEL=claude-opus-5)"
 log "[STEP 1] 설계 시작 (출력 상한 $DESIGNER_MAX_OUT)"
 HANDOFF="## HANDOFF
 - 기능명: $FEAT
@@ -320,14 +328,18 @@ if [[ "$CROSSREF" == "on" ]]; then
     "$NODE" -e "require('fs').writeFileSync('$SPEC/dxr_crossref.json',JSON.stringify({source_run:'$FEAT',items:[],discovered:[],counts:{in:0,apply:0,locate:0,discover:0,keep:0},skipped:true,skip_reason:'$XSKIP',_note:'대조 미실행 — 색인 게이트 차단. 무적중이 아니다(crossref_gate.json 참조).'},null,2))" 2>/dev/null || true
   else
 
+  # 입력 범위 = tc-대조.md §1.1(09-09 확장): tc_design.md 「기획 확인 필요 항목」 전량 ∪ C-1 ∪ B-2 (2026-09-25 수리).
+  # 옛 인계서는 C-1·B-2 만 적어 설계의 C-2 유래 기획확인이 본 대조에서 빠졌고, 검수 「미대조 기획확인」 HIGH →
+  # STEP 3 재대조가 대신 받았다(v95 18건 · v91 5건 · v93 2건). 테스트 test/s1_crossref_cwd.test.js 가 스텁이 받은 인계서로 본다.
   XHANDOFF="## HANDOFF
 - 기능명: $FEAT
 - specs 경로: $SPEC
+- 설계 파일: $SPEC/tc_design.md (입력 = 「기획 확인 필요 항목」 블록 전량 — C-1 승급분만이 아니라 C-2 분석자 코멘트 유래도 여기 있다)
 - 분석 파일: $SPEC/analysis.md (입력 = C-1 미지정값 '필수' + B-2 외부 의존성)
 - 산출: $SPEC/dxr_crossref.json (tc-대조.md §2.1 스키마)
 
 ## 작업 지시
-tc-대조.md 지침대로 analysis.md의 미지정/외부의존 항목을 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC\")에 대조 → dxr_crossref.json 생성.
+tc-대조.md §1.1 입력 범위대로 tc_design.md 「기획 확인 필요 항목」 전량 ∪ analysis.md C-1·B-2(같은 항목은 한 번만)를 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC\")에 대조 → dxr_crossref.json 생성. 입력 항목마다 결과 1건(무적중도 keep).
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep).
 로컬 데이터테이블 값: $SPEC/xlsx_extract.md 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
 §1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."

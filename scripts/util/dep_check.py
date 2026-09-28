@@ -135,6 +135,20 @@ def is_comment_example(line):
     return bool(COMMENT_LINE_RE.match(line)) and bool(EXAMPLE_RE.search(line))
 
 
+# 테스트(*.test.js)가 **스스로 만드는 샌드박스**의 경로 — 절대경로(`C:/x/hooks/…`·`/x/…`)나
+# 템플릿 변수(`${spec}/…`·`${CLAUDE_PLUGIN_ROOT}/…`)로 시작한다. 레포에 있어야 할 파일이 아니라 테스트 재료다.
+# ⚠ **상대경로는 그대로 검사한다** — `fixtures/…`·`../lib/…` 는 진짜 의존성이다(빠지면 클론에서 테스트가 죽는다).
+# 근거: 2026-09-28 runagent_isolate.test.js(가짜 설정 트리 11건)·s1_crossref_cwd.test.js(`${spec}`)가 [FAIL] 로 게이트를 막았다.
+TEST_SOURCE_RE = re.compile(r'(^|/)test/.+\.test\.js$')
+TEST_SANDBOX_REF_RE = re.compile(r'^([A-Za-z]:[/\\]|/|\$?\{)')
+
+# [HIGH] 확장자 없는 상대 require — `require('./tc_utilities')`. 위 PATH_PATTERNS 는 **확장자 붙은 경로만** 봐서
+# 이걸 못 잡았다. 2026-09-28 실증: 발행본 apply_format_tab.js 가 맨 위에서 ./tc_utilities 를 부르는데 그 파일이
+# v4.3.3 부터 없었다 = 클론한 사람의 S6(시트 쓰기)가 모듈 로드에서 죽었다. 잡은 건 테스트 1건이었다.
+REQUIRE_REL_PATTERN = re.compile(r"""require\(\s*['"](\.{1,2}/[^'"]+)['"]\s*\)""")
+REQUIRE_EXTS = ('', '.js', '.json', '.cjs', '.mjs', '/index.js')
+
+
 def load_gitignore_rules():
     """staging 의 .gitignore 규칙 → (정확이름 집합, 글로브 목록).
 
@@ -252,6 +266,8 @@ def main():
                         ref = m.group(0)
                         if is_runtime_ref(ref):   # specs/state/work 등 런타임 산출물 오탐 제외
                             continue
+                        if TEST_SOURCE_RE.search(src_rel) and TEST_SANDBOX_REF_RE.match(ref):
+                            continue              # 테스트가 만드는 샌드박스 경로(위 주석)
                         ref_line = line_of(text, m.start())
                         if DEPRECATION_RE.search(ref_line):  # "폐기됨" 안내문 내 죽은 포인터
                             continue
@@ -271,8 +287,17 @@ def main():
                             continue
                         missing_refs[src_rel].append(ref)
 
+            # 1b) [HIGH] 확장자 없는 상대 require — 파일 기준으로 풀어서 실재하는지 본다
+            if source.suffix in ('.js', '.cjs', '.mjs'):
+                for m in REQUIRE_REL_PATTERN.finditer(text):
+                    base = (source.parent / m.group(1)).resolve()
+                    if not any(Path(str(base) + e).is_file() for e in REQUIRE_EXTS):
+                        missing_refs[src_rel].append(f"require('{m.group(1)}')")
+
             # 2) [CRITICAL] --agent <name> 매핑
-            for m in AGENT_FLAG_PATTERN.finditer(text):
+            #    역사 기록물(CHANGELOG)은 면제 — 경로 검사와 같은 이유(그 버전 시점엔 실재한 에이전트다).
+            #    2026-09-28: v4.3.4 항목이 「은퇴한 tc-writer-v2 를 예시로 들던 문서를 고쳤다」고 적은 것이 [FAIL] 이 됐다.
+            for m in (AGENT_FLAG_PATTERN.finditer(text) if src_rel not in HISTORY_SOURCES else ()):
                 name = m.group(1)
                 # 플레이스홀더(<에이전트명>)·모델명(claude-sonnet-4 등) 방어
                 if not looks_like_agent(name):

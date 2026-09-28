@@ -18,6 +18,11 @@
  * 멱등: patch_id(정규화 해시)를 applied_patches.json ledger에 기록 → 재실행 시 적용분 스킵.
  *   (edit_cell은 current==after no-op으로도 멱등, add_row는 ledger로만 멱등)
  * 충돌: edit_cell before 불일치·앵커/대상 tc_id 부재 → 적용 안 함, ledger 미기록(수정 후 재시도 가능), conflicts에 수집.
+ * pre-write 회귀 거부 (2026-09-21): edit_cell 이 S6 pre-write(validatePreWrite)의 차단 위반을 «새로» 만들면 그 수정만
+ *   적용 안 함(원문 유지) · ledger 미기록 · rejected 에 수집. 충돌이 아니다 — 런은 계속 간다(종료코드 불변).
+ *   실사고 2건: S3 가 통과시킨 기본기능 행을 S4 가 V-16 위반으로 고쳐 S6 에서 런이 멈췄다(기능C 09-10 ·
+ *   기능B 09-21). S5 content_gate 는 V-16 을 안 보고, 봐도 S5 는 교정 없이 멈추므로 거기서 막아 봐야 소용없다.
+ *   ⚠ 판정은 edit 단계 시점 — 뒤이은 delete/add_row 가 만드는 위반은 여기서 안 본다(S6 가 본다).
  *
  * 적용 순서(계획 §4 — 결정론): 원본 tc_id 기준 edit → delete 표시 → add 앵커 삽입 → 삭제 반영 → 삽입 반영 → A열 재번호.
  *
@@ -26,7 +31,13 @@
  */
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
+const { to7col } = require('./sheet_write');
+const { regroupRows } = require('./regroup');
+// S6 create_gsheet 가 탭을 만들기 전에 부르는 «그» 검사기를 sheet_write 와 같은 경로 해석으로 부른다 — 규칙을 베끼면 둘이 어긋난다.
+const UTIL = process.env.TCTEAM_UTIL_DIR || path.resolve(__dirname, '..', '..', 'scripts', 'util');
+const { validatePreWrite, hasBlocking } = require(path.join(UTIL, 'validate_tc_rows.js'));
 
 const COL = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9 };
 
@@ -66,12 +77,29 @@ function buildRow(obj) {
 }
 
 /**
- * @returns {{rows, ledger:{applied:string[]}, applied:object[], skipped:object[], conflicts:object[]}}
+ * S6 pre-write 가 막을 위반(차단 등급)의 열쇠 → 위반.
+ * S5 는 적용 직후 regroup 을 돌린다 — 그 정렬(B~D 병합칸 채움 포함)을 거친 모양이 S6 이 실제로 보는 모양이다.
+ * 행 번호는 regroup 재번호로 움직이므로 원 TC ID 꼬리표(열 10, to7col 이 버린다)로 행을 가린다.
+ */
+function preWriteBlockers(rows) {
+  const grouped = regroupRows(rows.map(r => r.concat([r[COL.A]])));
+  const out = new Map();
+  for (const v of validatePreWrite(to7col(grouped)).violations) {
+    if (!hasBlocking([v])) continue;
+    const src = grouped[v.row - 2];
+    out.set(`${src ? src[10] : '?'}|${v.col}|${String(v.msg).replace(/행 \d+/g, '행 #')}`, v);
+  }
+  return out;
+}
+
+/**
+ * @returns {{rows, ledger:{applied:string[]}, applied:object[], skipped:object[], conflicts:object[], rejected:object[]}}
  */
 function applyFixPlan(snapshot, plan, ledgerIn) {
   const rows = snapshot.rows.map(r => r.slice()); // immutable copy
   const ledgerSet = new Set((ledgerIn && ledgerIn.applied) || []);
-  const applied = [], skipped = [], conflicts = [];
+  const applied = [], skipped = [], conflicts = [], rejected = [];
+  let blockers = null;             // 현재 rows 의 pre-write 차단 위반 — 첫 edit 에서 잰다
   const deletes = new Set();       // tc_id
   const inserts = [];              // {anchor, row, pid}
 
@@ -92,7 +120,16 @@ function applyFixPlan(snapshot, plan, ledgerIn) {
         conflicts.push({ pid, op: p.op, tc_id: p.tc_id, col: p.col, reason: 'before_mismatch', current: cur, expected: p.before });
         continue;
       }
+      if (!blockers) blockers = preWriteBlockers(rows);
       rows[i][ci] = p.after;
+      const next = preWriteBlockers(rows);
+      const fresh = [...next.keys()].filter(k => !blockers.has(k));
+      if (fresh.length) {
+        rows[i][ci] = cur; // 되돌림 — S6 에서 런을 세울 수정이다
+        rejected.push({ pid, op: p.op, tc_id: p.tc_id, col: p.col, reason: 'prewrite_regression', violations: fresh.map(k => next.get(k).msg) });
+        continue;
+      }
+      blockers = next;
       applied.push({ pid, op: p.op, tc_id: p.tc_id, col: p.col });
       ledgerSet.add(pid);
     } else if (p.op === 'delete_row') {
@@ -126,7 +163,7 @@ function applyFixPlan(snapshot, plan, ledgerIn) {
   // A열 재번호 (연속 3자리) — 삽입·삭제로 시프트된 ID 정합
   out = out.map((r, i) => { const c = r.slice(); c[COL.A] = String(i + 1).padStart(3, '0'); return c; });
 
-  return { rows: out, ledger: { applied: [...ledgerSet] }, applied, skipped, conflicts };
+  return { rows: out, ledger: { applied: [...ledgerSet] }, applied, skipped, conflicts, rejected };
 }
 
 module.exports = { applyFixPlan, patchId, COL };
@@ -153,10 +190,12 @@ if (require.main === module) {
   const tmp = outPath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(outSnap, null, 1)); fs.renameSync(tmp, outPath);
   if (ledgerPath) { const lt = ledgerPath + '.tmp'; fs.writeFileSync(lt, JSON.stringify(res.ledger, null, 1)); fs.renameSync(lt, ledgerPath); }
+  for (const r of res.rejected) process.stderr.write(`[apply_fix_plan][pre-write 회귀 거부] ${r.tc_id} ${r.col} — ${r.violations.join(' / ')}\n`);
   process.stdout.write(JSON.stringify({
     ok: res.conflicts.length === 0, rows: res.rows.length,
     applied: res.applied.length, skipped: res.skipped.length, conflicts: res.conflicts.length,
-    conflict_detail: res.conflicts,
+    rejected: res.rejected.length,
+    conflict_detail: res.conflicts, rejected_detail: res.rejected,
   }) + '\n');
   process.exit(res.conflicts.length === 0 ? 0 : 6);
 }

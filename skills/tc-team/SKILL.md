@@ -69,8 +69,9 @@ bash "$TCTEAM/scripts/run_pipeline_full.sh" --feature "$FEATURE_NAME" --sheet-id
 ```
 
 - **중간 승인 없음.** 멈추는 곳은 `stop_integrity`(exit 14) 뿐 — S2 design_gate blocker · S3 변환/F열/content_gate 재위반 · S5 content·dup·미커버 봉합 실패 · S6 read-back 불일치. 그 앞에 자동 재시도가 먼저 돈다(S3 청크 재시도 · F열 교정 2라운드 · S5 미커버 자동 봉합).
+- **자식 호출은 격리된다(2026-09-25)** — 체인 3종(`run_pipeline_full.sh`·`run_pipeline_s1only.sh`·`finalize.sh`)이 `TCTEAM_ISOLATE=1` 을 기본으로 export 하고, `$UTIL/run-agent.sh` 가 `$UTIL/runagent_isolate.js` 로 인자를 만든다: 사용자 설정·플러그인·MCP 커넥터·전역 규칙·자동 기억을 끊고, 에이전트 md 의 `tools:` 가 실제 도구 목록이 된다(에이전트 없는 단계는 Read·Write·Edit·Bash·Grep·Glob). context-mode 서버(뇌 `ctx_search`)는 대조와 설계자(STEP 3 설계수정이 검수의 「미대조 기획확인 → 재대조 지시」를 이행)만 받고, 색인은 체인의 프로젝트 루트로 못박힌다(작업 폴더 무관). 사용자 deny 규칙과 런 중 `.sh` 편집 가드 훅은 자식에도 그대로 실린다. ⚠ 격리 자식에는 사용자 에이전트 정의가 안 실려 **중첩 `Agent`(tc-team-대조 호출)는 못 쓴다** — 재대조는 `ctx_search` 직접 경로. ⚠ **에이전트에 도구를 더하려면 그 md 의 `tools:` 를 고친다** — 목록 밖 도구는 자식이 못 쓴다. 되돌리기 = `TCTEAM_ISOLATE=0`. 테스트 `tc-team/test/runagent_isolate.test.js`.
 - **실행락은 이 스크립트가 소유**하고 `trap EXIT` 로 완료·중단 모두에서 해제한다. 수동 폴백으로 몰 때만 드라이버가 S0-0에서 걸고 S7에서 푼다 — 잊으면 편집 가드가 유령 락을 "실행 중"으로 오독한다(2026-07-31 실사고).
-- **완주 보고에 반드시 포함**: ①crossref 4분기 비율 ②조용한 미탐 배너 ③확신도 분포 ④산출물 크기 ⑤R3·R4 동시 기록 + **S4가 삭제·수정한 목록** ⑥**참조 문서 선수집(M-052) 결과** — `linked/` 파일 수 / 본문 참조 pageId 수, **둘이 어긋나면 그 사실을 보고에 쓴다**(참조 0건이면 "참조 없음"이라고 명시. 침묵 금지). 무인 런은 품질이 나빠도 전부 초록불로 끝나므로, 이 보고가 유일한 관측 창이다. ⑧**대조 linked 관문 결과** — `keep 후보 N → apply/locate 전환 M` (참조 문서 0개면 "없음"으로 명시). 이 관문이 자면 R3 감점이 근거 없이 유지된다. ⑨**이미지 마커 감사** — `miss|ghost|ok` (어긋나면 검수 보고서에 판정이 남았는지까지 확인). R2 는 기획서 그림이 아니라 **설계 마커**에만 반응하므로, 이 감사가 없으면 한 축이 통째로 잠든 런을 못 본다. ⑩**기획확인 패널에서 뺀 질문** — final_report 의 `🔎 … 뺀 질문 N건` 알림을 그대로 옮긴다(0건이면 생략). 대조가 「답 있음」으로 과신하면 질문이 **조용히 사라지는** 자리라 사람이 한 번 훑어야 한다(2026-09-11 필터 전환).
+- **완주 보고에 반드시 포함**: ①crossref 4분기 비율 ②조용한 미탐 배너 ③확신도 분포 ④산출물 크기 ⑤R3·R4 동시 기록 + **S4가 삭제·수정한 목록**(pre-write 회귀로 **거부된 수정 포함** — chain.log `[pre-write 회귀 거부]`) ⑥**참조 문서 선수집(M-052) 결과** — `linked/` 파일 수 / 본문 참조 pageId 수, **둘이 어긋나면 그 사실을 보고에 쓴다**(참조 0건이면 "참조 없음"이라고 명시. 침묵 금지). 무인 런은 품질이 나빠도 전부 초록불로 끝나므로, 이 보고가 유일한 관측 창이다. ⑧**대조 linked 관문 결과** — `keep 후보 N → apply/locate 전환 M` (참조 문서 0개면 "없음"으로 명시). 이 관문이 자면 R3 감점이 근거 없이 유지된다. ⑨**이미지 마커 감사** — `miss|ghost|ok` (어긋나면 검수 보고서에 판정이 남았는지까지 확인). R2 는 기획서 그림이 아니라 **설계 마커**에만 반응하므로, 이 감사가 없으면 한 축이 통째로 잠든 런을 못 본다. ⑩**기획확인 패널에서 뺀 질문** — final_report 의 `🔎 … 뺀 질문 N건` 알림을 그대로 옮긴다(0건이면 생략). 대조가 「답 있음」으로 과신하면 질문이 **조용히 사라지는** 자리라 사람이 한 번 훑어야 한다(2026-09-11 필터 전환).
 
 > 아래 S0~S7 수동 순서는 **디버깅·구간 재개용 폴백**이다. 처음부터 손으로 몰지 말 것 — 2026-07-31 런이 그렇게 돌아 벽시계 2h23m 중 기계 시간은 1h12m 뿐이었다.
 
@@ -112,7 +113,7 @@ bash "$TCTEAM/scripts/run_pipeline_full.sh" --feature "$FEATURE_NAME" --sheet-id
    - **착수 보고에 `hop1/hop2/승격/참고` 4수치와 경고 전문을 포함한다.** 이 4수치가 배선이 실제로 돌았는지의 유일한 기계 판별식이다(`jq .counts impact_scope.json`).
 4. ~~Slack 착수 공지~~ — **여기서 보내지 마라**(중복 방지, 07-23). 착수 공지는 S1의 `run_pipeline_s1only.sh`가 시작 시 `send_slack_tc_request.js`로 **결정론적으로 1회** 발화한다(라인 127). 과거엔 S0(여기)에서도 보내 "TC 생성 요청 접수" 카드가 Slack에 2번 노출됨. 결정론 코드가 소유하는 side-effect이므로 LLM 단계에서 중복 발화 금지.
 
-### S1 — 설계 (LLM · opus)
+### S1 — 설계 (LLM · opus = claude-opus-5-5 · effort max — 2026-09-24~)
 기획서 → `analysis.md` + `tc_design.md`. v2 설계기 승계(SSoT + tc-학습 P-18/19/20/22/23 + **P-25/26/29**). 재실행 시 design_hash 일치하면 스킵.
 ```bash
 bash "$TCTEAM/scripts/run_pipeline_s1only.sh" --feature <기능명> --sheet-id "$SHEET" --conf-url "<URL>"
@@ -120,6 +121,7 @@ bash "$TCTEAM/scripts/run_pipeline_s1only.sh" --feature <기능명> --sheet-id "
 #       (+ item_dict.json item_dict on일 때 · dxr_crossref.json crossref on일 때)
 ```
 > `run_pipeline_s1only.sh` = 설계 체인(아이템사전→설계→검수→수정→대조주입) 전용 스크립트 — **tc-team 소유**(`$TCTEAM/scripts`, 07-27 이주). 내부 에이전트: tc-team-designer · tc-team-설계검수 · tc-team-대조 (규칙은 전부 rules 서랍 참조 — v2 비의존).
+> **모델 (2026-09-24 오너 결정 · next_run_verify ㉑)**: 설계자(STEP 1)·분석 공백 시 설계수정(STEP 3) = `TCTEAM_OPUS_MODEL` — 이 스크립트가 기본값 `claude-opus-5-5` 를 준다(명시 env 가 이김). `run-agent.sh` 의 opus 기본 `claude-opus-5` 는 v2 엔진 공용이라 불변. 검수·대조·일반 설계수정은 sonnet. 테스트 `tc-team/test/s1_opus_pin.test.js` · 근거 `사내 감사 문서(공개 배포본 미포함)`.
 > **STEP 0-사전 (결정론 · 2026-08-13)**: STEP 1 앞에서 `lib/item_dict.js` 가 DXR 테이블 → `$SPEC/item_dict.json`(아이템 실명 사전)을 뽑는다. 재현스탭 문장은 tc_design.md 에서 태어나 하류로 흐르므로 설계 앞이 유일한 주입 지점이다. 소비처 = 설계·수정 핸드오프 + S4 quality 렌즈($WORK=$SPEC이라 cp 불필요). 토글 `team/tc_config.json` `item_dict`, 원본 없는 머신은 exit 4로 조용히 스킵(비차단). 규칙 SSoT=`rules/tc-설계.md` §아이템 실명 병기.
 
 ### S2 — 격리 게이트 + 슬라이스 (결정론)
@@ -128,6 +130,7 @@ mkdir -p "$WORK"
 "$NODE" "$LIB/design_gate.js" "$SPEC/tc_design.md"        # exit 0=전개가능 / 4=설계결함(→S1 수정 루프) / 1=오류
 "$NODE" "$LIB/slicer.js" "$SPEC/confluence_raw.md" "$WORK/slices.json"   # sections[]+rules[] (원장 앵커)
 ```
+> 표 행은 셀 규칙이 하나도 안 나오면 **행 단위 규칙 1개**(`from:"table-row"`, 머리글:값 · 묶음)가 된다 — 짧은 수치·O/X 행이 원장에서 통째로 빠지던 자리(2026-09-25, 42런 실측 규칙 0개 행 604→355). 셀 규칙에는 `row`(그 행 문맥)가 붙는다. 테스트 `tc-team/test/slicer.test.js`.
 
 ### S3 — 문장화 팬아웃 (결정론 골격 + LLM 문장 + 결정론 merge)
 ```bash
@@ -174,10 +177,12 @@ L="$RULES/tc-학습.md"; [ -f "$L" ] && cp "$L" "$WORK/tc-학습.md"   # 재발 
 
 ### S5 — 적용 + 게이트 (결정론)
 ```bash
-rm -f "$WORK/applied_patches.json"   # ⚠재개 시 필수. 원장 키가 ['edit',tc_id,col,after]라 남아 있으면 edit_cell이 전량 skip되고, 재개는 원본 스냅샷에서 다시 시작하므로 F열이 S4 교정 이전으로 조용히 되돌아간다
-"$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_snapshot.json" "$WORK/fix_plan.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches.json"   # before-일치·앵커 실존·충돌=거부
-# 판별식: applied == fix_plan patches 수 · skipped == 0. `{"ok":true,...,"applied":3,"skipped":94,"conflicts":0}` 는 성공이 아니라 원장 오염이다 —
+rm -f "$WORK/applied_patches.json" "$WORK/applied_patches_seal.json" "$WORK/fix_plan_seal.json" "$WORK/coverage_seal.json"   # ⚠재개 시 필수. 원장 키가 ['edit',tc_id,col,after]라 남아 있으면 edit_cell이 전량 skip되고, 재개는 원본 스냅샷에서 다시 시작하므로 F열이 S4 교정 이전으로 조용히 되돌아간다
+[ -f "$WORK/coverage_s4.json" ] && cp "$WORK/coverage_s4.json" "$WORK/coverage.json" && cp "$WORK/exclusions_s4.json" "$WORK/exclusions.json"   # 지난 봉합이 제자리에서 고친 원장을 S4 조립본으로 — 풀체인은 2026-09-25부터 S5 진입에서 둘 다 자동(감사 L1-01·L2-01 · 회귀 테스트는 실데이터 픽스처라 공개 배포본 미포함)
+"$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_snapshot.json" "$WORK/fix_plan.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches.json"   # before-일치·앵커 실존·충돌=거부 · S6 pre-write를 새로 깨는 edit=적용 안 함
+# 판별식: applied + rejected == fix_plan patches 수 · skipped == 0. `{"ok":true,...,"applied":3,"skipped":94,"conflicts":0}` 는 성공이 아니라 원장 오염이다 —
 # 행 수도 exit 코드도 정상으로 보이고 유일한 신호가 skipped 숫자다 (2026-09-04 아바타_탈것_뽑기_연출: 94개 셀이 전부 S4 이전 문장인 채 266행 정상 완주할 뻔했다)
+# rejected = S6 pre-write(validatePreWrite)의 차단 위반을 «새로» 만드는 edit_cell 수 — 적용 안 하고 원문 유지, 런은 계속(exit 0). 목록은 chain.log `[pre-write 회귀 거부] <TC> <열> — <위반>` (2026-09-21 신설)
 "$NODE" "$LIB/regroup.js" "$WORK/tcteam_tc_final.json" "$WORK/tcteam_tc_final.json"   # 그룹 연속성 봉합(V-17)
 "$NODE" "$LIB/content_gate.js" "$WORK/tcteam_tc_final.json"                        # 차단 게이트(위반 0 필수)
 "$NODE" "$LIB/dup_gate.js" "$WORK/tcteam_tc_final.json" --out "$WORK/dup_report_final.json"   # 차단: F열 완전 동일 잔존 시 exit 1
@@ -218,6 +223,7 @@ bash "$TCTEAM/scripts/finalize.sh" --feature "$FEATURE_NAME" --sheet-id "$SHEET"
 | design_gate exit 4 | S2 | 설계 결함 → S1 수정 루프(카운터 `tcteam_s2_attempts.txt`) |
 | merge echo/해시/개수 | S3 | 시프트/타행수정 청크만 재실행(다른 청크 결과 유효) |
 | apply before-불일치 | S5 | 거부가 정상 — fix_plan 재생성 |
+| apply pre-write 회귀 | S5 | 그 edit_cell만 적용 안 함(원문 유지) · 런 계속 — 완주 보고 ⑤에 거부 목록 기재. S3가 통과시킨 행을 S4가 S6 차단 위반으로 바꾼 경우다(실사고 09-10 기능C · 09-21 기능B — 둘 다 V-16) |
 | content_gate 위반 | S5 | 추상표현·무플래그 위임 차단 → 수정 후 재실행 |
 | dup_gate exact | S5 | **먼저 `tcteam_snapshot.json`(S4 이전) F열을 대조한다.** ①원본이 서로 **다르면** = S4 품질 렌즈가 추상표현을 고치며 **끊김 시점·사전상태 접두부까지 지워** 만든 중복 → **delete 금지, 접두부 복원**(`fix_plan`의 `edit_cell.after`를 고쳐 추상표현 제거는 유지하고 접두부만 되살린다). 예외 TC는 끊김 시점 자체가 사전상태라 지우면 TC가 성립하지 않는다 — `delete_row`로 병합하면 구간별 복구 커버리지가 통째로 사라진다(2026-09-04: 5건이 2쌍으로 붕괴). ②원본도 **같으면** 진짜 설계 중복 → 병합(delete) 또는 조건 차이 명시 후 재실행. similar는 비차단(S4 판정) |
 | traceability 미커버 | S5 | add_row 봉합 fix_plan → 재적용 → 재기록 |

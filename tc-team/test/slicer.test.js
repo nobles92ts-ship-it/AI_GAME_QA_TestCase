@@ -158,6 +158,99 @@ t('tableMinChars 옵션이 표 셀에만 적용됨', () => {
   assert.strictEqual(li(loose), li(strict), '리스트 규칙 수는 tableMinChars에 영향받지 않아야 함');
 });
 
+// ── 표 행 구멍 수리 (2026-09-24 감사 L4-01) ──
+// 칸 단위 추출이 짧은 칸(12자 미만)을 버려, 칸이 전부 짧은 행은 규칙이 0개였다(현행 39런 표 데이터 행 20%).
+// 규칙이 0개인 행은 행 단위 규칙 1개(헤더: 값)로 남기고, 칸 규칙에는 row(행 맥락)를 붙인다.
+const sdoc = [
+  '## 스탯 목록',
+  '',
+  '| **스탯** | **표시명** | **구현** | **비고** |',
+  '| --- | --- | --- | --- |',
+  '| 물리 명중 | 물리 명중 | O |  |',
+  '| 치명타 확률 | 치명타 | X | 추후 |',
+  '| Common | NameCode | Sample_UI |  |',
+  '| 2026-09-01 | 홍길동 | 수정 |  |',
+  '',
+  '## 아이템 정책',
+  '',
+  '| **아이템** | **거래** | **사용** |',
+  '| --- | --- | --- |',
+  '| 스킬 강화 쿠폰 | X | O - 스킬 UI 진입 |',
+  '| 스킬 연마석 | O | O - 스킬 UI 진입 |',
+  '',
+  '## 연출',
+  '',
+  '| **구간** | **설명** |',
+  '| --- | --- |',
+  '| +6강 ~ +7강 | 1단계 이펙트 |',
+  '| 보스 등장 연출 boss_intro.png | 흔들림 |',
+].join('\n');
+const sr = slice(sdoc);
+const rowRules = sr.rules.filter((x) => x.from === 'table-row');
+
+t('칸이 전부 짧은 행도 규칙 1개로 남는다 — 행 단위(헤더: 값)', () => {
+  const hit = rowRules.find((x) => x.text.includes('물리 명중'));
+  assert.ok(hit, '물리 명중 행 규칙 없음: ' + sr.rules.map((x) => x.text).join(' | '));
+  assert.ok(hit.text.includes('구현: O'), '헤더: 값 결합 아님: ' + hit.text);
+  assert.ok(rowRules.some((x) => x.text.includes('치명타 확률') && x.text.includes('구현: X')));
+});
+
+t('숫자·단계만 있는 행(연출 구간표)도 규칙으로 남는다', () => {
+  assert.ok(rowRules.some((x) => x.text.includes('+6강 ~ +7강') && x.text.includes('1단계 이펙트')), rowRules.map((x) => x.text).join(' | '));
+});
+
+t('「한글 문장 + 이미지 파일명」 칸은 파일명만 떼고 문장을 살린다', () => {
+  assert.ok(rowRules.some((x) => x.text.includes('보스 등장 연출')), '파일명 섞인 칸이 통째로 버려짐');
+  const all = sr.rules.map((x) => x.text + ' ' + (x.row || '')).join(' ');
+  assert.ok(!/boss_intro\.png/i.test(all), '파일명이 규칙에 남음');
+});
+
+t('한글 없는 행(enum·스트링 키)과 변경 이력 행은 여전히 규칙 0개', () => {
+  const all = sr.rules.map((x) => x.text + ' ' + (x.row || '')).join(' ');
+  assert.ok(!all.includes('NameCode'), '한글 없는 행이 규칙이 됨');
+  assert.ok(!all.includes('홍길동'), '변경 이력 행이 규칙이 됨');
+});
+
+t('칸 규칙에 행 맥락(row)이 붙어 같은 문구의 두 행이 구분된다', () => {
+  const same = sr.rules.filter((x) => x.from === 'table' && x.text === 'O - 스킬 UI 진입');
+  assert.strictEqual(same.length, 2, '같은 문구 칸 규칙 2개 기대: ' + JSON.stringify(same));
+  assert.ok(same[0].row && same[0].row.includes('스킬 강화 쿠폰') && same[0].row.includes('거래: X'), 'row 맥락 없음: ' + JSON.stringify(same[0]));
+  assert.ok(same[1].row && same[1].row.includes('스킬 연마석'), 'row 맥락 없음: ' + JSON.stringify(same[1]));
+  assert.notStrictEqual(same[0].row, same[1].row);
+});
+
+// 재측정(42런)에서 남은 실누락 2형 — 이름이 짧은 스탯 행 · 볼드 행 키
+const s2 = slice([
+  '## 짧은 행',
+  '',
+  '| **스탯** | **표시명** | **구현** |',
+  '| --- | --- | --- |',
+  '| 명중 | 명중 | O |',
+  '| 예 |  |  |',
+  '',
+  '| **상황** | **자동 스킬** |',
+  '| --- | --- |',
+  '| **글로벌 쿨타임 중 자동 스킬 대기** | X |',
+  '| **수정 결과** image-20260915-081926.png |  |',
+].join('\n'));
+const s2row = s2.rules.filter((x) => x.from === 'table-row').map((x) => x.text);
+
+t('값이 짧아도 칸이 2개 이상인 행은 규칙으로 남는다 (| 명중 | 명중 | O |)', () => {
+  assert.ok(s2row.some((x) => x.includes('명중') && x.includes('구현: O')), s2row.join(' | '));
+});
+
+t('데이터 행의 볼드 첫 칸은 열 라벨이 아니라 행 키다 — 행 규칙에 들어간다', () => {
+  assert.ok(s2row.some((x) => x.includes('글로벌 쿨타임 중 자동 스킬 대기') && x.includes('X')), s2row.join(' | '));
+});
+
+t('칸 1개짜리 짧은 행·그림만 가리키는 행은 여전히 규칙 0개 (| 예 | · **수정 결과** 이미지)', () => {
+  assert.ok(!s2row.some((x) => x === '예' || x.includes('수정 결과')), s2row.join(' | '));
+});
+
+t('칸 규칙이 이미 있는 행에는 행 단위 규칙을 더하지 않는다(규칙 부풀림 방지)', () => {
+  assert.ok(!rowRules.some((x) => x.text.includes('스킬 강화 쿠폰')), '칸 규칙이 있는 행에 행 규칙이 중복 생성됨');
+});
+
 // ── 실제 confluence_raw 통합 스모크 ──
 t('실물 자동_사냥_기능/confluence_raw.md 파싱 정상', () => {
   const p = '{PROJECT_ROOT}/team/specs/자동_사냥_기능/confluence_raw.md';

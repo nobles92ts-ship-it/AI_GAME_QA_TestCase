@@ -25,6 +25,9 @@ const suites = [
   'crossref_delta.test.js',
   's1_crossref_cwd.test.js',
   's1_designer_maxout.test.js',
+  's1_opus_pin.test.js',
+  // resume_reset.test.js — 사내 기획 원문 픽스처라 공개 배포본 미포함
+  'runagent_isolate.test.js',
   'impact_scope.test.js',
   'phase0_spike.js',
 ];

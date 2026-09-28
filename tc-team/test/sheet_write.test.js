@@ -72,6 +72,23 @@ t('검증 오류(exit 4) → 즉시 중단(시트 미변형)', () => {
   assert.strictEqual(res.exit, 4);
 });
 
+t('CLI — pre-write 검증 오류로 막히면 사유가 stderr 로 나온다(삼키지 않는다 · 시트 미접촉)', () => {
+  // 검증 오류(exit 4)는 create_gsheet 가 탭을 만들기 «전»에 나간다 — 가짜 시트 ID 로도 API 를 부르지 않는다.
+  // 2026-09-21 기능B: chain.log 에 `exit 4` 만 남아 사유를 오프라인 재현으로 찾아야 했다.
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const { spawnSync } = require('child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sw-'));
+  const sp = path.join(dir, 'final.json');
+  fs.writeFileSync(sp, JSON.stringify({ rows: [
+    ['001', '기본기능', '볼륨 정보 Export', 'Export 툴 화면', '정상', '볼륨이 배치된 레벨에서 Export를 실행하면 볼륨 정보가 샘플 범위 테이블 파일(SampleArea_SampleAreaInfo.csv)로 추출되는지 확인', 'PC', '미진행', 'N/A', ''],
+  ] }));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'lib', 'sheet_write.js'), sp, 'NO_SUCH_SHEET_FOR_TEST', '테스트탭', dir], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 1);
+  assert.strictEqual(JSON.parse(r.stdout.trim().split('\n').pop()).action, 'validation_error');
+  assert.ok(r.stderr.includes('V-16'), '사유(위반 문구)가 stderr 에 있어야 한다 — 실제: ' + JSON.stringify(r.stderr));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 t('모든 v접미사 점유 → no_free_tab', () => {
   const res = resolveAndWrite(() => ({ exit: 3 }), () => {}, { baseTab: 'X', runId: 'r1', marker: null, maxSuffix: 3 });
   assert.strictEqual(res.ok, false);

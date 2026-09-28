@@ -61,13 +61,13 @@ On first pipeline run, a browser window will open for you to authorize the app. 
 
 **Note**: The agents are spawned through the `claude` executable on your `PATH` — no interpreter path has to be configured.
 
-### 5. Workflow tool (multi-agent orchestration) — required for S3·S4
+### 5. Workflow tool (multi-agent orchestration) — *not* required
 
-**Why**: Stages S3 (sentence fan-out) and S4 (adversarial review) are executed as `Workflow({scriptPath: "tc-team/workflows/..."})` calls from the driving Claude Code session. Without the Workflow tool, the pipeline runs cleanly through S0–S2 and then **stops at S3** — this is the single most common "why did it halt" for new installs.
+**The standard run does not use it.** `tc-team/scripts/run_pipeline_full.sh` runs S1–S7 from one call and dispatches every model stage — S3 sentence fan-out and S4 review included — as short `claude -p` calls through `scripts/util/run-agent.sh`. All it needs is item 4 above (the `claude` executable on your `PATH`), plus `bash` and `node`.
 
-**Verify**: In your Claude Code session, confirm the `Workflow` tool is available (multi-agent orchestration enabled). If your environment gates it behind an opt-in, enable it before the first run.
+**Where it still appears**: the manual fallback in `skills/tc-team/SKILL.md` — driving the stages one at a time from a Claude Code session to debug or resume a single stage — can run S3/S4 through `Workflow({scriptPath: "tc-team/workflows/..."})`. If you ever drive it that way, the tool must be available in that session. The stage rules are read from the same `tc-team/workflows/*.js` files on both paths, so the two cannot drift.
 
-**If unavailable**: there is no shipped fallback — S3/S4 fan-out is Workflow-only in this release. The deterministic stages (S0, S2, S5–S7) and the S1 design chain still work, but you will not get a finished sheet.
+> Earlier releases described this tool as mandatory with no fallback. That stopped being true when the single-call chain shipped; this section was not updated until v4.3.5.
 
 ---
 

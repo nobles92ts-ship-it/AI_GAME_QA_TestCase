@@ -28,6 +28,9 @@ UTIL="${TCTEAM_UTIL:-$PROJECT_ROOT/scripts/util}"
 SPECS="${TCTEAM_SPECS:-$PROJECT_ROOT/team/specs}"
 RULESDIR="${TCTEAM_RULES_DIR:-$CLAUDE_HOME/skills/tc-team/rules}"
 RUNAGENT="$UTIL/run-agent.sh"
+# 자식 격리 — run-agent.sh 가 사용자 설정(플러그인·훅·MCP 커넥터·전역 규칙)을 끊고 에이전트 md 의 tools: 대로 띄운다(감사 P2-a·b).
+# 단독 실행에도 켠다. 되돌리기 = env 한 줄: TCTEAM_ISOLATE=0 — 테스트 test/runagent_isolate.test.js
+export TCTEAM_ISOLATE="${TCTEAM_ISOLATE:-1}"
 RULES_MD="$RULESDIR/완료처리.md"
 CONFDIR="${TCTEAM_CONF_DIR:-$PROJECT_ROOT/tc-team/scripts/confidence}"
 

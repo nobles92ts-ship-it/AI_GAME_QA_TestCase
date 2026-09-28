@@ -120,5 +120,99 @@ t('원본 스냅샷 불변(immutability)', () => {
   assert.strictEqual(JSON.stringify(s.rows), before, '입력 스냅샷이 변형되면 안 됨');
 });
 
+// ── pre-write 회귀 거부 (2026-09-21) ──
+// S4 수정이 «S3 가 통과시킨 행»을 S6 pre-write(validatePreWrite) 위반으로 바꾸면 그 수정만 적용하지 않는다.
+// 문장은 실사고 2건 그대로: 기능B 009(09-21) · 기능C 022(09-10).
+const path = require('path');
+const { spawnSync } = require('child_process');
+const { to7col } = require('../lib/sheet_write.js');
+const { regroupRows } = require('../lib/regroup.js');
+const { validatePreWrite } = require(path.resolve(__dirname, '..', '..', 'scripts', 'util', 'validate_tc_rows.js'));
+// S6 이 보는 모양 = regroup 이 B~D 병합칸을 채운 뒤의 7열 (빈 B 로 재면 기본기능 행 검사가 안 탄다)
+const s6View = rows => to7col(regroupRows(rows));
+
+const EXPORT_F = '볼륨이 배치된 레벨에서 Export를 실행하면 볼륨 정보가 "SampleArea_SampleAreaInfo.csv" 파일로 추출되는지 확인';
+const EXPORT_F_PAREN = '볼륨이 배치된 레벨에서 Export를 실행하면 볼륨 정보가 샘플 범위 테이블 파일(SampleArea_SampleAreaInfo.csv)로 추출되는지 확인';
+const TOAST_F = '적용 버튼을 입력하면 "스탯 토스트 알림"이 출력되는지 확인';
+const TOAST_F_BARE = '적용 버튼을 입력하면 스탯 토스트 알림이 출력되는지 확인';
+const basicSnap = () => ({
+  headers: snap().headers,
+  rows: [
+    ['001', '기본기능', '볼륨 정보 Export', 'Export 툴 화면', '정상', EXPORT_F, 'PC', '미진행', 'N/A', ''],
+    ['002', '', '보유 효과 적용', '스탯 토스트 알림 화면', '정상', TOAST_F, 'PC', '미진행', 'N/A', ''],
+    ['003', 'QA', '영역 설정', '경계 판정', '정상', '보스가 영역 경계에 닿으면 리셋되는지 확인', 'PC/모바일', '미진행', '미진행', ''],
+  ],
+});
+const edit = (tc_id, before, after) => ({ op: 'edit_cell', tc_id, col: 'F', before, after, reason: 'x' });
+
+t('pre-write 회귀 — 전제: 픽스처 원문은 S6 검사를 통과한다(거부가 «수정 때문»임을 보장)', () => {
+  assert.strictEqual(validatePreWrite(s6View(basicSnap().rows)).ok, true);
+});
+
+t('pre-write 회귀 ★양성 ① 파일명 따옴표→괄호(보스 009) — 그 수정만 거부 · 원문 유지 · 원장 미기록', () => {
+  const p = edit('001', EXPORT_F, EXPORT_F_PAREN);
+  const r = applyFixPlan(basicSnap(), { patches: [p] }, null);
+  assert.strictEqual(r.rejected.length, 1);
+  assert.strictEqual(r.rejected[0].tc_id, '001');
+  assert.strictEqual(r.rejected[0].reason, 'prewrite_regression');
+  assert.ok(r.rejected[0].violations.some(m => m.includes('V-16')), '거부 사유에 위반 문구가 실려야 한다');
+  assert.strictEqual(r.rows[0][5], EXPORT_F, '원문 유지');
+  assert.strictEqual(r.applied.length, 0);
+  assert.strictEqual(r.conflicts.length, 0, '거부는 충돌이 아니다');
+  assert.ok(!r.ledger.applied.includes(patchId(p)), '거부된 수정은 원장에 안 적는다');
+});
+
+t('pre-write 회귀 ★양성 ② 토스트 행 따옴표 제거(기능C 022) — 거부', () => {
+  const r = applyFixPlan(basicSnap(), { patches: [edit('002', TOAST_F, TOAST_F_BARE)] }, null);
+  assert.strictEqual(r.rejected.length, 1);
+  assert.strictEqual(r.rows[1][5], TOAST_F);
+});
+
+t('pre-write 회귀 음성 — 검사를 안 깨는 수정은 그대로 적용', () => {
+  const r = applyFixPlan(basicSnap(), { patches: [
+    edit('001', EXPORT_F, '볼륨이 배치된 레벨에서 Export를 실행하면 볼륨 정보가 샘플 범위 테이블 파일로 추출되는지 확인'),
+    edit('003', '보스가 영역 경계에 닿으면 리셋되는지 확인', '보스가 영역 경계에 닿는 즉시 리셋되는지 확인'),
+  ] }, null);
+  assert.strictEqual(r.rejected.length, 0);
+  assert.strictEqual(r.applied.length, 2);
+});
+
+t('pre-write 회귀 — 섞인 plan: 거부된 수정만 빠지고 나머지는 적용', () => {
+  const r = applyFixPlan(basicSnap(), { patches: [
+    edit('001', EXPORT_F, EXPORT_F_PAREN),
+    edit('003', '보스가 영역 경계에 닿으면 리셋되는지 확인', '보스가 영역 경계에 닿는 즉시 리셋되는지 확인'),
+  ] }, null);
+  assert.deepStrictEqual(r.rejected.map(x => x.tc_id), ['001']);
+  assert.deepStrictEqual(r.applied.map(x => x.tc_id), ['003']);
+  assert.strictEqual(r.rows[2][5], '보스가 영역 경계에 닿는 즉시 리셋되는지 확인');
+});
+
+t('pre-write 회귀 — 이미 위반인 행이라도 «새» 위반을 안 만들면 거부하지 않는다', () => {
+  const s = basicSnap();
+  s.rows[1][4] = '부정'; // 기본기능 행 검증단계 위반(CRITICAL) — 수정 전부터 있다
+  assert.strictEqual(validatePreWrite(s6View(s.rows)).ok, false, '전제: 원문이 이미 위반');
+  const r = applyFixPlan(s, { patches: [edit('002', TOAST_F, '적용 버튼을 입력하면 "스탯 토스트 알림"이 바로 출력되는지 확인')] }, null);
+  assert.strictEqual(r.rejected.length, 0);
+  assert.strictEqual(r.applied.length, 1);
+});
+
+t('pre-write 회귀 CLI — 거부는 exit 0 · JSON rejected · stderr 표지(체인과 같은 인자)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'afp-'));
+  const sp = path.join(dir, 'snap.json'), fp = path.join(dir, 'fix_plan.json');
+  fs.writeFileSync(sp, JSON.stringify(basicSnap()));
+  fs.writeFileSync(fp, JSON.stringify({ patches: [edit('001', EXPORT_F, EXPORT_F_PAREN)] }));
+  const cli = spawnSync(process.execPath, [path.join(__dirname, '..', 'lib', 'apply_fix_plan.js'), sp, fp, path.join(dir, 'out.json'), '--ledger', path.join(dir, 'ledger.json')], { encoding: 'utf8' });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const j = JSON.parse(cli.stdout);
+  assert.strictEqual(j.rejected, 1);
+  assert.strictEqual(j.applied, 0);
+  assert.ok(cli.stderr.includes('[pre-write 회귀 거부] 001 F'), cli.stderr);
+  const out = JSON.parse(fs.readFileSync(path.join(dir, 'out.json'), 'utf8'));
+  assert.strictEqual(out.rows[0][5], EXPORT_F);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 console.log(`\n결과: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

@@ -9,6 +9,10 @@
 //
 // 모양 검사(정규식)가 아니라 run_pipeline_s1only.sh 를 LLM·시트·Slack 없이 스텁으로 **실제로 돌려**
 // 대조 에이전트가 기록한 작업 폴더를 본다. 샌드박스 = TCTEAM_PROJECT_ROOT (UTIL·team·specs 전부 그 밑).
+//
+// 같은 런으로 인계서 입력 범위도 본다(2026-09-25). tc-대조.md §1.1(09-09 확장)·§1.1-a 는 본 대조 입력을
+// 「tc_design.md "기획 확인 필요 항목" 블록 전량 ∪ analysis.md C-1 ∪ B-2」로 정하는데 인계서는 C-1·B-2 만 적었다
+// → 설계의 C-2 유래 기획확인이 본 대조에서 빠져 검수 「미대조 기획확인」 HIGH → STEP 3 재대조(v95 18건 · v91 5건 · v93 2건).
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -28,7 +32,7 @@ const W = (p, o) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.wri
 const copyFx = (from, to) => W(to, fs.readFileSync(path.join(FX, from), 'utf8'));
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 
-console.log('s1_crossref_cwd 테스트 (S1 본 대조 에이전트 작업 폴더 고정)');
+console.log('s1_crossref_cwd 테스트 (S1 본 대조 에이전트 작업 폴더 고정 · 인계서 입력 범위)');
 
 // 에이전트 3종 = fixtures/s1_crossref/stub_agent.js · transition = 무동작 스텁 · guard/retry = 명령 통과 스텁
 function sandbox() {
@@ -73,6 +77,14 @@ if (!BASH_OK) {
 
   t('작업 폴더를 옮겨도 산출은 원래 자리에서 소비된다 (STEP 2-대조 완료 줄에 스텁 집계)', () => {
     assert.ok(/\[STEP 2-대조\] 완료 — apply=0 locate=0 discover=0 keep=1/.test(chainLog()), chainLog().slice(-1500));
+  });
+
+  t('대조 인계서 입력 = tc_design.md 「기획 확인 필요 항목」 전량 ∪ analysis.md C-1·B-2 (tc-대조.md §1.1)', () => {
+    const h = fs.readFileSync(path.join(sb.spec, 'dxr_crossref.json.handoff'), 'utf8');
+    const spec = fwd(sb.spec);
+    assert.ok(h.includes(`${spec}/tc_design.md`), `인계서에 tc_design.md 경로 없음\n${h}`);
+    assert.ok(h.split('\n').some(l => l.includes('기획 확인 필요 항목') && l.includes('전량')), `인계서에 「기획 확인 필요 항목 전량」 지시 없음\n${h}`);
+    assert.ok(h.includes(`${spec}/analysis.md`) && h.includes('C-1') && h.includes('B-2'), `합집합이어야 한다 — analysis.md C-1·B-2 가 빠짐\n${h}`);
   });
 }
 

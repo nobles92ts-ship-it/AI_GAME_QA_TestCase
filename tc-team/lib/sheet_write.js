@@ -83,7 +83,12 @@ if (require.main === module) {
 
   const createFn = (tab) => {
     try { execFileSync(NODE, [path.join(UTIL, 'create_gsheet_tc_from_json.js'), tab, sheetId, dataPath, '--snapshot-dir', specDir], { stdio: 'pipe' }); return { exit: 0 }; }
-    catch (e) { return { exit: e.status || 1 }; }
+    catch (e) {
+      // 3=탭 존재는 v접미사로 넘어가는 정상 분기라 조용히. 그 외 실패는 사유를 넘긴다 — 삼키면 chain.log 에
+      // `exit 4` 만 남아 무엇이 막혔는지 오프라인 재현으로 찾아야 했다(2026-09-21 기능B).
+      if (e.status !== 3 && e.stderr) process.stderr.write(String(e.stderr));
+      return { exit: e.status || 1 };
+    }
   };
   const deleteFn = (tab) => { try { execFileSync(NODE, [path.join(UTIL, 'duplicate_tab.js'), sheetId, tab, '--delete'], { stdio: 'pipe' }); } catch {} };
 
