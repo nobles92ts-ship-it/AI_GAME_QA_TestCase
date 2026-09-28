@@ -23,7 +23,7 @@ LLM 단계(S1 설계 / S3 F열 문장화 / S4 리뷰·판정)는 agent/Workflow 
 
 | 유틸 | 스테이지 | 역할 | 유닛 | 실물 검증 |
 |---|---|---|---|---|
-| `apply_fix_plan.js` | S5 | fix_plan→스냅샷 결정론 적용(row_id 멱등·add/delete·ledger) | 13 | 스파이크: 실물 109→110행, 재적용 멱등 |
+| `apply_fix_plan.js` | S5 | fix_plan→스냅샷 결정론 적용(row_id 멱등·add/delete·ledger·pre-write 회귀 거부) | 20 | 스파이크: 실물 109→110행, 재적용 멱등 |
 | `slicer.js` | S4·② | 기획서 원문→헤딩 섹션 + rule_id 규칙(원문 그대로). **리스트 항목 + 표 데이터 셀**(2026-07-29) | 19 | 실물 자동_사냥 → 섹션 7·규칙 71 |
 | `content_gate.js` | S5 | FINAL-4 로컬 지표 차단(추상·OutputFormat·G·J) — 정확 복제 | 10 | 실물 v2 스냅샷 109행 PASS(동등성) |
 | `traceability.js` | S4·② | rule↔TC 역추적 원장 + 미커버 차단 게이트 | 5 | 스파이크: 실물 규칙 70에 게이트 기동 |

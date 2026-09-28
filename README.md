@@ -15,7 +15,7 @@
 
 > **Grounded in the ISTQB test process.** Stages **S1–S3** follow the ISTQB test development process — *test analysis → test design → test implementation* — and cases are derived with standard ISTQB test-design techniques (equivalence partitioning, boundary values, state transition), not ad-hoc prompting.
 
-> **Scope, stated honestly:** this is a **semi-automatic runbook**, not a single unattended command. Your Claude Code session acts as the driver and steps through S0–S7, stopping at any gate that fails. Stages S3·S4 require the **Workflow (multi-agent orchestration) tool** in that session — without it the pipeline halts at S3 ([PREREQUISITES §5](docs/PREREQUISITES.md)). A fully unattended driver is on the roadmap. Verified end-to-end on 3 production features.
+> **Scope, stated honestly:** after a short preparation step (S0 — your Claude Code session fetches the spec and records the target sheet), **one command runs S1–S7 unattended**: `tc-team/scripts/run_pipeline_full.sh`. Model stages go out as short `claude -p` calls, so no multi-agent orchestration tool is needed ([PREREQUISITES §5](docs/PREREQUISITES.md)). It is not a black box that always finishes: a failed integrity gate **stops the run and waits for a person** (exit 14), and in our own logs 13 of 38 full runs stopped at least once before completing. Verified end-to-end on 3 production features.
 
 > 📖 **Before the setup steps, read why it is shaped this way** — the eight stages, why review is adversarial, why the sheet is written exactly once, and the two lessons that cost something:
 > **[Read it in English](https://nobles92ts-ship-it.github.io/en/built/tc-team/)** · **[한국어로 읽기](https://nobles92ts-ship-it.github.io/ko/built/tc-team/)** — same write-up, 같은 글의 한국어판
@@ -42,6 +42,7 @@ This release replaces the `tc-팀-v2` multi-agent orchestrator with **tc-team**,
 - **One sheet touch** — everything is assembled and verified locally, then written once and read back for a 0-diff check
 - **4 input formats** — Confluence URL / PDF / Word / Excel, auto-detected
 - **No external API** — all model calls go through the Claude Code CLI
+- **Isolated model calls** — each `claude -p` child starts without your personal settings, plugins, MCP connectors, global rules or auto-memory; the tools declared in its agent file are the only tools it gets (`TCTEAM_ISOLATE=0` opts a run out)
 
 ---
 
@@ -85,11 +86,11 @@ The 7 fabrications are the important number. In the prior run the same failure m
 | # | Stage | Lane | What it produces |
 |---|-------|------|------------------|
 | **S0** | Preparation | main | Workspace, spec ingestion, run config |
-| **S1** | Design | **LLM** (Opus) | Spec analysis → coverage design → cross-reference → design inspection |
+| **S1** | Design | **LLM** (Opus 5.5 designer · Sonnet inspection) | Spec analysis → coverage design → cross-reference → design inspection |
 | **S2** | Isolation gate + slicing | code | Spec sliced into addressable rules |
 | **S3** | Sentence fan-out | code + LLM + code | Deterministic skeleton → LLM writes sentences → deterministic merge |
 | **S4** | Adversarial review + coverage ledger | **LLM** judgment, code ledger | Findings, verdicts, coverage/exclusions ledger |
-| **S5** | Apply + gates | code | Fix plan applied, every gate evaluated |
+| **S5** | Apply + gates | code (+ one LLM round to stitch uncovered rules) | Fix plan applied, every gate evaluated |
 | **S6** | Live write | code | **One** sheet touch, then read-back 0-diff verification |
 | **S7** | Completion | code | Confidence scoring, labelling, dashboard, Drive sync |
 
@@ -263,6 +264,7 @@ AI_GAME_QA_TestCase/
 - Coverage ledger with explicit, reason-coded exclusions
 - LLM-free confidence scoring
 - Single-touch sheet write with read-back verification
+- Single-command unattended run (S1–S7) with isolated model calls
 
 ### 🔜 Next
 - Duplicate-gate threshold tuning against a larger corpus

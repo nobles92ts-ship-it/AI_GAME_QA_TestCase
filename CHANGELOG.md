@@ -8,6 +8,31 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.5] — 2026-09-28
+
+### Fixed
+
+- **The published sheet writer could not load.** `apply_format_tab.js` requires `./tc_utilities` at the top of the file, and that module had not been shipped since v4.3.3 — on a fresh clone S6 died while loading its modules. It ships now, together with two modules reached only through lazily-evaluated `require`s (`create_xlsx_tc_from_json.js`, `load_snapshot.js`). The dependency checker never saw this because it matched paths *with an extension*; it now resolves extension-less relative `require('./x')` too, and was checked against a positive sample (remove the module → it fails for exactly that reason).
+- **`xlsx` was used but never declared.** Two modules and a rule example load it; it is now in `package.json`.
+- **Resuming a run silently threw away the review's fixes.** Resume at S4 or S5 and the previous attempt's apply ledger was still in place, so the same patches were skipped as "already applied" — the review's corrections and the stitched rows never reached the sheet, and the run exited 0 with only the `skipped` count as a clue. S5 now clears its ledgers and restores the coverage ledger from S4's copy on entry, and stops (exit 14) if it cannot.
+- **Tables were only partly in the coverage ledger.** The slicer cut tables cell by cell and dropped short cells, so about a fifth of table data rows (295 of 1,473 across 39 runs) never became rules — while traceability still reported 100%. Table rows now also become row-level rules (`table-row`) that carry their header context. Rows with no rule: 604 → 355; rules: 5,868 → 6,090.
+- **A review edit could break a row that S3 had already passed.** If a stage-4 edit would introduce a blocking pre-write violation, S5 now refuses that one edit (the original text stays), keeps going, and lists the refusal in the completion report — instead of letting the run die at S6.
+- **The S1 cross-check was handed less than its rule says.** The hand-off listed only two sections of the analysis, so "needs confirmation" items born in the design never went through the main cross-check. It now receives the full set the rule defines.
+- `sheet_write.js` passes through *why* a pre-write check blocked, instead of only an exit code.
+
+### Changed
+
+- **S1's designer runs on Claude Opus 5.5 (effort max).** Only the designer and the gap-repair step use it; inspection and cross-reference stay on Sonnet. One environment variable rolls a run back (`TCTEAM_OPUS_MODEL`).
+- **Model calls are isolated.** The chain scripts export `TCTEAM_ISOLATE=1`: each `claude -p` child starts without the operator's settings, plugins, MCP connectors, global rules or auto-memory, and the tools in its agent file become its tool list (`scripts/util/runagent_isolate.js`). Before this, every child carried the operator's whole environment — including summaries of unrelated sessions — into its first turn. `TCTEAM_ISOLATE=0` opts a run out.
+- **The docs caught up with the single-call chain.** README and PREREQUISITES §5 still described a semi-automatic runbook that needed the Workflow tool for S3·S4. The standard path has been `tc-team/scripts/run_pipeline_full.sh` (model stages as `claude -p` calls) for some time; the Workflow tool is only for the manual fallback.
+- **Dependency checker:** paths a test builds inside its own sandbox (`C:/x/…`, `${spec}/…`) are no longer reported as missing — relative fixture paths still are. CHANGELOG is exempt from the agent-name check as it already was from the path check.
+
+### Not shipped
+
+- The regression test for the resume fix is built on an internal spec and stays out of the public tree. The fix itself ships.
+
+---
+
 ## [v4.3.4] — 2026-09-18
 
 ### Fixed

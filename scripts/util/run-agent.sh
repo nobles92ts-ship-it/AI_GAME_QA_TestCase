@@ -108,7 +108,27 @@ process.stdout.write(c.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ""));
     echo "[run-agent] ERROR: 에이전트 본문이 비어 있음: $AGENT_FILE_WIN (원본: $AGENT_FILE)" >&2
     exit 1
   fi
-  exec claude "${NEW_ARGS[@]}" --system-prompt "$AGENT_BODY"
+fi
+
+# 격리 모드 (2026-09-25, 감사 P2-a·b) — TCTEAM_ISOLATE=1 일 때만. tc-team 체인이 켠다(v2 엔진 등 다른 호출자는 그대로).
+# 자식이 사용자 설정(플러그인·훅·MCP 커넥터·전역 규칙)을 싣지 않고, 에이전트 md 의 tools: 가 실제 도구 목록이 된다.
+# 인자는 runagent_isolate.js 가 만든다 — 못 만들면 이 호출만 사용자 환경 그대로 돈다(경고 한 줄).
+ISO_ARGS=()
+if [[ "${TCTEAM_ISOLATE:-0}" == "1" ]]; then
+  ISO_HELPER=$(to_win_path "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/runagent_isolate.js")
+  ISO_TXT=$("$NODE" "$ISO_HELPER" "${AGENT_FILE_WIN:-}"); iso_rc=$?
+  if (( iso_rc == 0 )); then
+    mapfile -t ISO_ARGS <<< "$ISO_TXT"
+    # 사용자 설정의 effortLevel(high)이 빠지므로 호출자가 --effort 를 안 줬으면 그 값을 명시한다 — 지금까지 자식의 실효값
+    has_effort=0; for a in "${NEW_ARGS[@]}"; do [[ "$a" == --effort || "$a" == --effort=* ]] && has_effort=1; done
+    (( has_effort )) || ISO_ARGS=(--effort high "${ISO_ARGS[@]}")
+  elif (( iso_rc != 3 )); then
+    echo "[run-agent] 경고: 격리 인자 생성 실패(rc=$iso_rc) — 이 호출은 격리하지 않는다(사용자 환경 그대로)" >&2
+  fi
+fi
+
+if [[ -n "$AGENT_NAME" ]]; then
+  exec claude "${ISO_ARGS[@]}" "${NEW_ARGS[@]}" --system-prompt "$AGENT_BODY"
 else
-  exec claude "${NEW_ARGS[@]}"
+  exec claude "${ISO_ARGS[@]}" "${NEW_ARGS[@]}"
 fi

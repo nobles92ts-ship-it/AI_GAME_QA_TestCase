@@ -1027,7 +1027,7 @@ function checkAllotmentStrict(text, leaves) {
 }
 
 module.exports = {
-  validatePreWrite, validateSkeleton, validatePostWrite, formatViolations,
+  validatePreWrite, validateSkeleton, validatePostWrite, formatViolations, hasBlocking,
   normJ, isJAllowed, expectedHI, adaptInput, fillDownRecords,
   parseDesignTables, validateFull,
   parseDesignTree, parseBasicTable, checkAllotmentStrict, normCatName,
