@@ -500,5 +500,44 @@ t('기본기능 섹션은 매핑 대상이 아니다 (드리프트로도 안 잡
   });
 }
 
+// ── S7 델타 항목은 확신도 입력에서 뺀다 (2026-09-28) ─────────────────────
+// S7 병합은 FINAL-0 뒤(FINAL-5 안)라 정규 런은 못 본다. 재실행(갱신기 --only 0)만 보고 D 로 포화시켰다.
+{
+  const os = require('os'), fsx = require('fs');
+  const OWN = '등급표에 따른 보상 수량이 지급되는지 확인';               // 자기 TC = 우편함 정상-1
+  const run = (extra, override) => {
+    const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-s7-'));
+    fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+    const xr = JSON.parse(fsx.readFileSync(path.join(d, 'dxr_crossref.json'), 'utf8'));
+    xr.items.push(...extra);
+    fsx.writeFileSync(path.join(d, 'dxr_crossref.json'), JSON.stringify(xr), 'utf8');
+    const res = computeItems(d, override);
+    fsx.rmSync(d, { recursive: true, force: true });
+    return res;
+  };
+  const scores = (res) => res.items.map((i) => `${i.major}|${i.mid}|${i.leaf}|${i.stage}|${i.no}=${i.score}`).join('\n');
+  const ownHit = (res) => {
+    const i = res.items.find((x) => x.leaf.startsWith('우편함') && x.stage === '정상' && x.no === 1);
+    return (((i.reasons.find((r) => r.id === 'R3') || {}).terms) || []).some((x) => x.startsWith('등급표에 따른 보상 수량'));
+  };
+  const base = run([]);
+  const s7 = run([{ id: 'D7-1', term: OWN, branch: 'keep', source: '', origin: 'S7' }]);
+  const s7off = run([{ id: 'D7-1', term: OWN, branch: 'keep', source: '', origin: 'S7' }], { excludeS7Delta: false });
+  const s4 = run([{ id: 'D4-1', term: OWN, branch: 'keep', source: '', origin: 'S4' }]);
+
+  t('S7 델타 — 병합본을 읽어도 점수가 병합 전과 같다 (재실행 = 정규 런)', () => {
+    assert.strictEqual(scores(s7), scores(base));
+    assert.ok(!ownHit(s7));
+  });
+
+  t('S7 델타 — S4 델타는 FINAL-0 앞에 붙으므로 그대로 센다', () => {
+    assert.ok(ownHit(s4), 'S4 항목까지 빼면 정규 런 점수가 바뀐다');
+  });
+
+  t('S7 델타 — 스위치를 끄면 구 방식(병합본 전량)으로 돌아간다', () => {
+    assert.ok(ownHit(s7off), '구 방식 재현이 안 되면 sweep 비교가 무의미하다');
+  });
+}
+
 console.log(`결과: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

@@ -4,7 +4,10 @@
 //   STUB_MODE  : 'badid'  면 대조 결과 id 를 틀리게 낸다(판정 0건 경고 양성 표본)
 //                'apply1' 이면 **첫 질의만** 답을 찾은 것(apply · approved:true)으로, 나머지는 keep 으로 낸다
 //                (패널에서 빠지는 경로의 양성 표본 — 전량 keep 스텁만으로는 제거가 한 번도 시험되지 않는다)
+//   STUB_DROPPED : 있으면 5a 가 거르기 기록(_labels_dropped.json)에 쓸 뺀질문 배열(JSON) — 2026-10-02 거르기 배선
+//   5a 프롬프트는 spec 폴더의 .5a_prompt.txt 에 남긴다(입력 파일 안내가 실제로 실렸는지 테스트가 본다)
 const fs = require('fs');
+const path = require('path');
 const prompt = process.argv[2] || '';
 
 if (prompt.includes('FINAL-5a')) {
@@ -13,6 +16,12 @@ if (prompt.includes('FINAL-5a')) {
   if (!m) process.exit(3);
   const panel = JSON.parse(process.env.STUB_PANEL || '[]');
   fs.writeFileSync(m[1], JSON.stringify({ 기획확인: panel }, null, 2), 'utf8');
+  fs.writeFileSync(path.join(path.dirname(m[1]), '.5a_prompt.txt'), prompt, 'utf8');
+  if (process.env.STUB_DROPPED) {
+    const d = prompt.match(/"([^"]+_labels_dropped\.json)" Write/);
+    if (!d) process.exit(4);
+    fs.writeFileSync(d[1], JSON.stringify({ 뺀질문: JSON.parse(process.env.STUB_DROPPED) }, null, 2), 'utf8');
+  }
   console.log('LABELS_DONE');
   process.exit(0);
 }

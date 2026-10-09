@@ -4,6 +4,8 @@ The tc-team pipeline coordinates multiple tools. This document lists every depen
 
 Assume the target machine has **only Claude Code** installed. The setup script (`setup.sh` / `setup.ps1`) automates most of the checks below.
 
+Installing only the AI edition (`--mode ai`)? Most of this page does not apply — skip to [AI edition](#ai-edition-tc-team-ai).
+
 ---
 
 ## Required
@@ -23,12 +25,12 @@ Assume the target machine has **only Claude Code** installed. The setup script (
 
 ### 2. Python 3.10+ (optional)
 
-**Why**: Only needed if you use analysis utility scripts. Not required for the core pipeline.
+**Why**: Only needed if you use analysis utility scripts. Not required for the core pipeline. The AI edition also uses it to fetch a Confluence spec (`tc-team/lib/confluence_fetch.py` — standard library plus vendored packages, nothing to `pip install`). The test suite (`node tc-team/test/run_all.js`) includes two Python checks, so install it before you run the verification below.
 
 **Install**:
 - Windows: `winget install Python.Python.3.11`
-- macOS: `brew install python@3.11`
-- Linux: `sudo apt-get install python3 python3-pip`
+- macOS: `brew install python@3.11`, then put `$(brew --prefix python@3.11)/libexec/bin` on your `PATH` — Homebrew installs the command as `python3`, and the scripts and tests call `python`
+- Linux: `sudo apt-get install python3 python3-pip python-is-python3` (the last package provides the `python` command)
 
 **Verify**: `python --version` → `Python 3.10+`
 
@@ -138,6 +140,28 @@ After installing everything, create `.env` from `.env.example` and fill in:
 | `CONFLUENCE_SITE` | yes | `https://yourcompany.atlassian.net` |
 
 Run `setup.sh` / `setup.ps1` again after editing `.env` — it re-copies the agents and skills into your `CLAUDE_HOME` and re-substitutes every placeholder.
+
+---
+
+## AI edition (`tc-team-ai`)
+
+Installed with `setup.sh --mode ai` / `setup.ps1 -Mode ai`, or `both`. It never touches Google, so the OAuth credentials (§3), the MCP servers and the `.env` table above do not apply to it.
+
+It needs Node.js (§1) and the Claude Code CLI (§4). When the spec is a Confluence page it also needs Python (§2) and three environment variables:
+
+| Variable | Example |
+|----------|---------|
+| `CONFLUENCE_URL` | `https://yourcompany.atlassian.net/wiki` |
+| `CONFLUENCE_USERNAME` | the e-mail address of your Atlassian account |
+| `CONFLUENCE_API_TOKEN` | an API token from https://id.atlassian.com/manage-profile/security/api-tokens |
+
+A spec given as a file needs none of the three.
+
+Verify with:
+```bash
+node tc-team-ai/test/run_all.js
+```
+It ends with `ALL GREEN` when all 6 suites pass.
 
 ---
 

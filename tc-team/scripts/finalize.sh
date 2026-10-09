@@ -28,6 +28,8 @@ UTIL="${TCTEAM_UTIL:-$PROJECT_ROOT/scripts/util}"
 SPECS="${TCTEAM_SPECS:-$PROJECT_ROOT/team/specs}"
 RULESDIR="${TCTEAM_RULES_DIR:-$CLAUDE_HOME/skills/tc-team/rules}"
 RUNAGENT="$UTIL/run-agent.sh"
+# 엔진 선택 (2026-10-01, Loki Codex 이식) — TCTEAM_ENGINE=codex 면 LLM 단계 전부 codex exec(run-agent-codex.sh). 기본·그 밖의 값 = claude 그대로.
+if [[ "${TCTEAM_ENGINE:-claude}" == "codex" ]]; then RUNAGENT="$UTIL/run-agent-codex.sh"; fi
 # 자식 격리 — run-agent.sh 가 사용자 설정(플러그인·훅·MCP 커넥터·전역 규칙)을 끊고 에이전트 md 의 tools: 대로 띄운다(감사 P2-a·b).
 # 단독 실행에도 켠다. 되돌리기 = env 한 줄: TCTEAM_ISOLATE=0 — 테스트 test/runagent_isolate.test.js
 export TCTEAM_ISOLATE="${TCTEAM_ISOLATE:-1}"
@@ -175,14 +177,19 @@ _run_5a() {
 
 # ── FINAL-5: 기획 확인 라벨링 (5a 도출=agent 위임 / 5b 기재=스크립트) ─────────
 final_5() {
-  rm -f "$SPEC/.final5_alert.txt" "$SPEC/.final5_notice.txt"   # 지난 런의 배너를 물려받지 않는다
+  # 지난 런의 배너·거르기 기록을 물려받지 않는다 — 5a 가 이번에 _labels_dropped.json 을 안 쓰면 지난 런 목록이 완주 보고에 거짓으로 실린다
+  rm -f "$SPEC/.final5_alert.txt" "$SPEC/.final5_notice.txt" "$SPEC/_labels_dropped.json"
   say "FINAL-5a 기획확인 라벨 도출 (agent)"
   local p
+  # 2026-10-02 거르기 배선(기능E_v2 실측: 5a 23건 → 오너 5건). 규칙서엔 「답이 있으면 묻지 마라」가
+  # 이미 있었지만 5a 는 analysis·tc_design 만 받아 답이 있는 곳(원문 다른 절·참조 문서·데이터 설명)을 열지 않았다.
   p="너는 기획 확인 라벨 도출 담당이다 (tc-team S7 FINAL-5a — 절차 SSoT: 완료처리.md).
-1. \"$SPEC/analysis.md\"(C-1 미지정값·C-2 모호) + \"$SPEC/tc_design.md\"(기획 확인 필요 항목) Read.
-2. \"$RULESDIR/라벨링_기준.md\" Read — **기획 확인(태그 4종)만** 도출. 품질 가드 4종 적용, 근거 확인, 키워드 매칭 금지.
-3. \"$SPEC/_labels.json\" Write: {\"기획확인\": [\"[태그] 질문 한 문장?\\n왜 필요한지 한 줄 (사람 말)\", ...]} — 라벨링_기준.md §문장 형식 그대로. 화살표 접두 금지(구 형식 \\n→ 는 08-04 폐기). 테스트데이터 키는 생략(선택·수동 정책).
-다른 파일 금지. 저장 후 \"LABELS_DONE\"만 출력."
+1. \"$SPEC/analysis.md\"(C-1 미지정값·C-2 모호) + \"$SPEC/tc_design.md\"(기획 확인 필요 항목) Read — 여기서 나온 것은 **질문 후보**다. 그대로 옮기지 마라.
+2. \"$RULESDIR/라벨링_기준.md\" Read — **기획 확인(태그 4종)만** 도출. 후보마다 §1 「거르기 3단계」(답 찾기 → 이 답 없이 TC를 못 쓰는가 → 같은 축 묶기)를 적용한다. 품질 가드 4종 적용, 키워드 매칭 금지.
+3. 답 찾기는 아래에서 Grep 으로 한다(통째 읽기 금지 · 없는 파일은 건너뜀): \"$SPEC/confluence_raw.md\"(같은 기획서의 다른 절) · \"$SPEC/linked\"(참조 문서) · \"$SPEC/xlsx_extract.md\"(게임 데이터 — 키 이름 옆 설명 칸까지 읽는다).
+4. \"$SPEC/_labels.json\" Write: {\"기획확인\": [\"[태그] 질문 한 문장?\\n왜 필요한지 한 줄 (사람 말)\", ...]} — 거르기를 통과한 것만. 라벨링_기준.md §문장 형식 그대로. 화살표 접두 금지(구 형식 \\n→ 는 08-04 폐기). 테스트데이터 키는 생략(선택·수동 정책).
+5. \"$SPEC/_labels_dropped.json\" Write: {\"뺀질문\": [{\"질문\": \"후보 요지\", \"갈래\": \"답 있음|테스트 무관|묶음\", \"근거\": \"답이 있는 파일·절과 그 내용 한 줄 / 답 없이도 TC가 써지는 이유 / 합친 질문\"}]} — 거르기에서 뺀 후보 전부(없으면 빈 배열).
+이 두 파일 외 다른 파일 금지. 저장 후 \"LABELS_DONE\"만 출력."
   # 쿼터·인증 감지는 pipeline_retry.sh가 소유(rc 10=인증, 11=쿼터) — 있으면 경유한다.
   local arc=0
   _run_5a "$p"

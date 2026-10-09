@@ -8,6 +8,34 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.6] — 2026-10-09
+
+### Added
+
+- **An AI edition — `tc-team-ai`.** Give it a spec (a Confluence link or a file) and no spreadsheet. It runs the same engine up to S5, then writes a Markdown bundle that an AI agent can run QA from: `INDEX.md` (execution rules, run order, open planning questions), `cases/NN_<group>.md`, `spec.md` and `results.md`.
+  - Every TC keeps its reproduction sentence byte for byte, and that sentence stays the source of truth. Beside it, a model splits the sentence into precondition, action, expectation and observation.
+  - A deterministic gate checks each split against the original sentence: numbers, English identifiers, quoted UI strings, negation, and how many of the original's content words survive. A split that fails twice is dropped, and that TC ships as the original sentence only.
+  - Each split is stored with the sentence it was made from. If the final TC list is rebuilt and a sentence changes, the export throws the old split away instead of attaching it to the wrong TC.
+  - Confidence grades are computed without a sheet, by the same `confidence_core.js`.
+  - Each TC lists up to three spec rules that cover it. A rule is joined to the final TC by its sentence, not its row number, because the coverage ledger is numbered before S5 inserts, deletes and renumbers rows. The same sentence may sit in a `기본기능` (smoke) row and a QA row, which the design allows; then the section of the ledger's row decides. A link that still cannot be joined is left out rather than attached to the wrong TC, and `AI_DONE` counts these as `rule_links_unmapped` (`null` when the run has no ledger to join).
+  - Runner: `node tc-team-ai/scripts/run_ai.js --feature _ai_<name>`. Skill: `/tc-team-ai`. Run folders must start with `_ai_`, so an AI run never shares a spec folder or a `state.json` entry with a sheet run of the same spec, and may use only letters, digits, `_` and `-`, because the chain puts the name into shell commands. A run in which not one rewrite output could be read stops with exit 12 instead of shipping an all-original bundle: either nothing was written (CLI missing, wrong model name, no network) or nothing was valid JSON.
+- **`run_pipeline_full.sh --no-sheet`.** The chain stops after S5 with the final TC JSON. S1 gets `--local`: it skips the Slack kick-off, and its designer is told to skip the Drive upload. S6 and S7 never run. `tc-team-ai/test/engine_nosheet.test.js` pins this with a `--sheet-id` control run.
+- **Install modes.** `setup.ps1 -Mode human|ai|both`, `setup.sh --mode …`, or `TC_MODE`; `install.ps1` asks, and installs the human edition when it cannot ask (a non-interactive host). `human` is the default and installs exactly what it did before. `ai` installs the AI skill, the three S1 agents and the tc-team rule folder, and skips the Google setup.
+- **Spec fetch without a model.** `tc-team/lib/confluence_fetch.py` uses the Confluence REST API to write `confluence_raw.md`, plus the storage HTML, source metadata and up to five linked pages. BeautifulSoup and markdownify are vendored under `tc-team/lib/_vendor` together with their dependencies (soupsieve, six, typing_extensions) and licences, so nothing needs `pip install`. `tc-team/scripts/s0_prepare.py` does all of S0 for a sheet run, and `tc-team/lib/list_tabs.js` lists a spreadsheet's tabs for the `_vN` decision.
+- **Codex engine.** `TCTEAM_ENGINE=codex` sends every model stage through `codex exec` (`scripts/util/run-agent-codex.sh` → `run_agent_codex.py`). It takes the same arguments as `run-agent.sh`, and Claude stays the default.
+
+### Changed
+
+- **S7 looks for the answer before it asks.** FINAL-5a used to turn every design-time open point into a planning-confirmation question. It now searches other sections of the spec, linked pages and extracted game-data descriptions first, then drops a candidate that is already answered, that a TC can be written without, or that repeats another question's axis. Dropped candidates go to `_labels_dropped.json` and appear in the completion report, so nothing disappears silently.
+- **Confidence no longer reads S7's delta cross-reference items** (`excludeS7Delta`, on by default). S7 merges them after FINAL-0 has scored, so a normal run never saw them; a later FINAL-0 re-run did, and pushed grades down to D. Both runs now score the same input.
+- **Column J takes status flags only.** S4's edits and added rows may write empty, `추후 구현`, `구현 우선순위 낮음`, `기획 확인 필요` or `DXBUG-N` in column J, and the fix-plan validator rejects anything else.
+
+### Fixed
+
+- `install.ps1` advertised a `/tc-로컬` command that has not existed since v4.0.0. It now prints the usage for the mode you installed.
+
+---
+
 ## [v4.3.5] — 2026-09-28
 
 ### Fixed

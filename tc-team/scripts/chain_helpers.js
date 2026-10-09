@@ -184,9 +184,16 @@ if (cmd === 'extract-s3-rules') {
     for (const f of j.findings) if (!f.tc_id || !f.severity || !f.issue) bad('finding 필수키 누락');
   } else if (kind === 'fixplan') {
     if (!Array.isArray(j.patches)) bad('patches 배열 아님');
+    const validJ = v => typeof v === 'string' &&
+      (['', '추후 구현', '구현 우선순위 낮음', '기획 확인 필요'].includes(v.trim()) ||
+       /^DXBUG-\d+$/.test(v.trim()));
     for (const p of j.patches) {
       if (!['edit_cell', 'add_row', 'delete_row'].includes(p.op)) bad('op 불량: ' + p.op);
       if (!p.reason) bad('reason 누락');
+      if (p.op === 'edit_cell' && p.col === 'J' && !validJ(p.after))
+        bad('J열 플래그 불량: ' + p.tc_id);
+      if (p.op === 'add_row' && (!p.row || !validJ(p.row.j === undefined ? '' : p.row.j)))
+        bad('신규행 J열 플래그 불량: ' + p.after_tc_id);
     }
   } else if (kind === 'coverage') {
     if (!Array.isArray(j)) bad('coverage 배열 아님');
@@ -307,12 +314,34 @@ if (cmd === 'extract-s3-rules') {
   //   관련 규칙을 찾은 것만으로 「답 있음」 처리). 파일(_labels_removed.json)만 두면 아무도 안 열어 보고에 올린다.
   let removed5 = '';
   try { removed5 = fs.readFileSync(path.join(SPEC, '.final5_removed.txt'), 'utf8').trim(); } catch (e) { /* 없으면 정상 */ }
+  // 5a 거르기에서 뺀 질문(_labels_dropped.json · finalize.sh FINAL-5a · 2026-10-02) — 위 S7 제거와 같은 이유로 보고에 올린다:
+  //   「답 있음」·「테스트 무관」 판정이 과신이면 질문이 조용히 사라진다. 「묶음」은 다른 질문에 합쳐 패널에 남으므로 건수만 센다.
+  let dropped5 = '';
+  try {
+    const all = JSON.parse(fs.readFileSync(path.join(SPEC, '_labels_dropped.json'), 'utf8'))['뺀질문'];
+    if (!Array.isArray(all)) throw new Error('뺀질문 배열 없음');
+    const gone = all.filter(x => x && x['갈래'] !== '묶음');
+    const merged = all.length - gone.length;
+    if (all.length) {
+      const lines = gone.slice(0, 15).map(x => `   · [${x['갈래'] || '?'}] ${String(x['질문'] || '').split('\n')[0]}  ← ${x['근거'] || '(근거 없음)'}`);
+      if (gone.length > 15) lines.push(`   · … 외 ${gone.length - 15}건`);
+      dropped5 = [
+        `🔎 질문 단계(5a)에서 뺀 질문 ${gone.length}건${merged ? ` · 다른 질문에 묶은 것 ${merged}건` : ''} — 답이 이미 있거나 답 없이도 TC가 써진다고 판정했습니다. 한 번 훑어 주세요(판정이 과신이면 질문이 조용히 사라집니다).`,
+        ...lines,
+        '   전체 근거: _labels_dropped.json',
+      ].join('\n');
+    }
+  } catch (e) {
+    // 없으면 정상(구 런·5a 실패). 있는데 못 읽으면 뺀 질문을 아무도 못 본다 — 조용히 넘기지 않는다.
+    if (e.code !== 'ENOENT') dropped5 = `⚠ 질문 단계(5a) 거르기 기록(_labels_dropped.json)을 읽지 못했습니다 — 뺀 질문을 확인할 수 없습니다 (${e.message})`;
+  }
   const report = [
     alert5,
     `${alert5 ? '⚠ tc-team 풀체인 완료(일부 실패)' : '✅ tc-team 풀체인 완료'} — 탭 \`${tab}\` · ${rows}행`,
     sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : '',
     `단계 시간(초): ${timeLine}`,
     notice5,
+    dropped5,
     removed5,
     '',
     '🖼 이미지 매칭(선택): 시각자료가 필요한 TC가 있으면 "/tc-이미지매칭"으로 수동 추가할 수 있습니다. (비-기본기능 10~20% 권장 / 파이프라인 자동 미포함)',

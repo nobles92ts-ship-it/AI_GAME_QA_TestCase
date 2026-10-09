@@ -27,6 +27,8 @@ UTIL="$PROJECT_ROOT/scripts/util"
 SPECS="$PROJECT_ROOT/team/specs"
 CONFIG="$PROJECT_ROOT/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
 RUNAGENT="$UTIL/run-agent.sh"
+# 엔진 선택 (2026-10-01, Loki Codex 이식) — TCTEAM_ENGINE=codex 면 LLM 단계 전부 codex exec(run-agent-codex.sh). 기본·그 밖의 값 = claude 그대로.
+if [[ "${TCTEAM_ENGINE:-claude}" == "codex" ]]; then RUNAGENT="$UTIL/run-agent-codex.sh"; fi
 RETRY="$UTIL/pipeline_retry.sh"
 GUARD="$UTIL/silent_exit_guard.sh"
 CLI_BASE='-p --permission-mode bypassPermissions'
@@ -49,12 +51,15 @@ while [[ $# -gt 0 ]]; do
     --sheet-id) SHEET_ID="$2"; shift 2 ;;
     --conf-url) CONF_URL="$2"; shift 2 ;;
     --resume-from) RESUME="$2"; shift 2 ;;
-    --local)    LOCAL=1; shift ;;   # 로컬 .xlsx 출력 모드 (Google Sheets 미사용): STEP 4까지만, 5/6·완료처리 스킵
+    --local)    LOCAL=1; shift ;;   # 시트 없는 런 (Google 미사용): 착수 공지·드라이브 업로드 생략. run_pipeline_full.sh --no-sheet(AI 버전 tc-team-ai)가 쓴다
     *) echo "알 수 없는 인자: $1" >&2; exit 1 ;;
   esac
 done
 # 로컬 모드: 시트 ID 없이도 동작 (create_gsheet argv 자리만 채움 — 로컬 분기에서 무시됨)
 [[ "$LOCAL" == "1" && -z "$SHEET_ID" ]] && SHEET_ID="LOCAL_XLSX"
+# 시트 없는 런은 드라이브에도 안 올린다 — 구글 연결이 없는 PC에서 설계자가 업로드 실패에 걸리지 않게 (2026-10-08)
+DRIVE_STEP="→ 드라이브 업로드." ; DRIVE_STEP3="드라이브 재업로드."
+[[ "$LOCAL" == "1" ]] && { DRIVE_STEP="(드라이브 업로드 생략 — 시트 없는 런. tc-설계.md Step 12 를 건너뛰고 drive_links 는 빈 배열)" ; DRIVE_STEP3="(드라이브 재업로드 생략 — 시트 없는 런)" ; }
 [[ -n "$FEAT" && -n "$SHEET_ID" ]] || { echo "사용법: --feature <명> --sheet-id <ID> [--conf-url <URL>] [--resume-from step3-blocker|step4|step5|step6|final] [--local]" >&2; exit 1; }
 
 # 정지 예외 후 구간 재개 (--resume-from): 시작 시퀀스·앞 STEP 스킵, 산출물은 specs 기존 파일 사용
@@ -173,10 +178,13 @@ fs.writeFileSync(f,JSON.stringify(d,null,2));
 " >>"$CHAIN_LOG" 2>&1
 
 # 착수 공지 — per-feature 항목 파일 + 기능별 dedup 격리 (stale 공유 .kickoff_items.json / 잔존 suppress 마커 충돌 방지, 2026-07-14)
+if [[ "$LOCAL" == "1" ]]; then log "[SLACK] 시트 없는 런(--local) — 착수 공지 생략 (시트 링크가 없다)"
+else
 printf '[{"feature":"%s","confluence":"%s"}]\n' "$FEAT" "${CONF_URL:-}" > "$SPEC/.kickoff_item.json"
 "$NODE" "$UTIL/send_slack_tc_request.js" --items "$SPEC/.kickoff_item.json" \
   --sheet "https://docs.google.com/spreadsheets/d/$SHEET_ID/edit" --dedup-dir "$SPEC" >>"$CHAIN_LOG" 2>&1 \
   && log "[SLACK] 착수 공지 OK" || log "[SLACK][경고] 실패 — 계속"
+fi
 fi
 
 # 실행락 — 주인은 "런 전체"이지 이 하위 단계가 아니다 (2026-07-31 정리).
@@ -240,7 +248,7 @@ HANDOFF="## HANDOFF
 - 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭에 아이템 유형을 일반명사로 쓸 때 대표 실아이템 병기. 규칙 SSoT=tc-설계.md §아이템 실명 병기. 없으면 현행대로 유형만 기재)
 
 ## 작업 지시
-confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) → 드라이브 업로드.
+confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) $DRIVE_STEP
 tc-학습.md 활성 설계 패턴 반영 필수 — 특히 P-18(상태이상·연출 상호작용 4유형), P-19(서술형 섹션을 대조표에 분해), P-20(BVA 상·하한 분리, 통합 1건 금지), P-22(자원 증감 소분류의 재접속복구·롤백·동시요청·반복재판정 4유형), P-23(열거값은 값 수만큼 개별 전개, '각 ~별' 통합 1건 금지), P-25(기획서 병기·미정의를 한쪽으로 단정 금지 — 세션 복구 계열 포함), P-26(재현스탭 전제·조작·관측 3요소 + 측정 불가 부사 금지), P-29(미구현·발생불가 기능에 TC 생성 금지).
 Confluence MCP 재호출 금지."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
@@ -464,7 +472,7 @@ run_step3() { # $1=모드 라벨 (review|blocker)
 ## 작업 지시
 design_review.md 이슈(존재 시) + DXR 대조 결과(apply/discover, 존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.
 수정 후 직변환 사전 게이트(tc-설계.md Step 11.5) 재실행 — exit 0 필수 (배분표 3자 동치 재계산).
-드라이브 재업로드."
+$DRIVE_STEP3"
   bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
 CLAUDE_CODE_MAX_OUTPUT_TOKENS='$DESIGNER_MAX_OUT' RUNAGENT_DEBUG_FILE='$SPEC/step3_debug.log' bash '$RETRY' '$SPEC/step3_stderr.log' -- \
 bash '$RUNAGENT' $CLI_BASE ${model_args[*]} --agent tc-team-designer \"\$0\"" "$HANDOFF" >>"$CHAIN_LOG" 2>&1

@@ -69,8 +69,9 @@ const fixplan = await agent(
   `**결정론 게이트 산출물도 Read하라(있으면)**: \`${W}/dup_report.json\`의 \`exact\`(F열 완전 동일)는 렌즈가 놓쳤더라도 **네가 직접 delete/차별화 패치를 내야 한다** — 기계가 확정한 사실이라 드롭 금지. \`${W}/origin_report.json\`의 HIGH 항목은 원문 근거 부재 후보이니 원문을 확인해 유지/삭제/기획확인 중 하나로 반드시 처리하라.\n` +
   `⚠ 중복을 인지했으면 **문구를 더 비슷하게 만드는 edit 금지** — 병합(delete)하거나 조건 차이를 F열에 드러내라(2026-07-28 실측: 판정자가 중복을 알고도 사전상태 문구를 맞춰 자카드 0.94로 악화시킨 사례).\n` +
   `규칙:\n` +
-  `- edit_cell: {op, tc_id, col(F/J), before(현재값 그대로), after, reason}. after는 추상표현 금지·사람언어·단일문장.\n` +
+  `- edit_cell: {op, tc_id, col(F/J), before(현재값 그대로), after, reason}. F/E의 after는 추상표현 금지·사람언어·단일문장.\n` +
   `- add_row: {op, after_tc_id(앵커), row:{b,c,d,e,f,g,j}, reason}. 커버리지 누락 신규행. g는 정확히 PC|모바일|PC/모바일. **⚠ 앵커는 같은 소분류(d)의 마지막 행으로 골라 그룹 분산(V-17) 방지**.\n` +
+  `- J열은 설명문이 아닌 상태 플래그다. edit_cell.after(J)와 add_row.row.j는 빈값|추후 구현|구현 우선순위 낮음|기획 확인 필요|DXBUG-N 중 하나만 정확히 써라. 기획 확인 사유의 문장은 reason에 쓴다.\n` +
   `- delete_row: {op, tc_id, reason}. 무의미 중복만.\n` +
   `- 확신 없으면 배제. patches 비어도 정상.\n\n## findings\n${JSON.stringify(allFindings, null, 1)}`,
   { label: 'judge', phase: 'Judge', model: 'sonnet', schema: FIXPLAN_SCHEMA, effort: 'high' }

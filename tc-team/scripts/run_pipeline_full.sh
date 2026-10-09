@@ -15,6 +15,7 @@
 #
 # 사용: bash run_pipeline_full.sh --feature <기능명> --sheet-id <ID> [--conf-url <URL>]
 #                                 [--start-from s1|s2|s3|s4|s5|s6|s7]   (복구 재개용)
+#       시트 없이: --sheet-id 대신 --no-sheet — S5 확정본(tcteam_tc_final.json)에서 끝난다 (AI 버전 tc-team-ai)
 # 전제: specs/<기능명>/confluence_raw.md + sheet_info.txt (S0는 호출자 소관 — Loki S0 턴)
 
 set -uo pipefail
@@ -35,6 +36,8 @@ RULESDIR="${TCTEAM_RULES_DIR:-$CLAUDE_HOME/skills/tc-team/rules}"
 HELPERS="$TCTEAM/scripts/chain_helpers.js"
 S1ONLY="$TCTEAM/scripts/run_pipeline_s1only.sh"
 RUNAGENT="$UTIL/run-agent.sh"
+# 엔진 선택 (2026-10-01, Loki Codex 이식) — TCTEAM_ENGINE=codex 면 LLM 단계 전부 codex exec(run-agent-codex.sh). 기본·그 밖의 값 = claude 그대로.
+if [[ "${TCTEAM_ENGINE:-claude}" == "codex" ]]; then RUNAGENT="$UTIL/run-agent-codex.sh"; fi
 RETRY="$UTIL/pipeline_retry.sh"
 STATEJSON="$PROJECT_ROOT/team/state.json"
 TEAMLOCK="$PROJECT_ROOT/team/.pipeline.lock"
@@ -43,17 +46,18 @@ CLI_BASE='-p --permission-mode bypassPermissions'
 # S1(s1only)·S7(finalize.sh)에도 물려준다. 되돌리기 = env 한 줄: TCTEAM_ISOLATE=0 — 테스트 test/runagent_isolate.test.js
 export TCTEAM_ISOLATE="${TCTEAM_ISOLATE:-1}"
 
-FEAT="" ; SHEET_ID="" ; CONF_URL="" ; START_FROM="s1"
+FEAT="" ; SHEET_ID="" ; CONF_URL="" ; START_FROM="s1" ; NO_SHEET=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --feature)    FEAT="$2"; shift 2 ;;
     --sheet-id)   SHEET_ID="$2"; shift 2 ;;
     --conf-url)   CONF_URL="$2"; shift 2 ;;
     --start-from) START_FROM="$2"; shift 2 ;;
+    --no-sheet)   NO_SHEET=1; shift ;;   # 시트 없는 런 — S5 확정본에서 멈춘다(S6·S7 생략). AI 버전(tc-team-ai)이 쓴다
     *) echo "알 수 없는 인자: $1" >&2; exit 1 ;;
   esac
 done
-[[ -n "$FEAT" && -n "$SHEET_ID" ]] || { echo "사용법: --feature <명> --sheet-id <ID> [--conf-url <URL>] [--start-from s1..s7]" >&2; exit 1; }
+[[ -n "$FEAT" && ( -n "$SHEET_ID" || $NO_SHEET -eq 1 ) ]] || { echo "사용법: --feature <명> (--sheet-id <ID> | --no-sheet) [--conf-url <URL>] [--start-from s1..s7]" >&2; exit 1; }
 case "$START_FROM" in
   s1) ST=1 ;; s2) ST=2 ;; s3) ST=3 ;; s4) ST=4 ;; s5) ST=5 ;; s6) ST=6 ;; s7) ST=7 ;;
   *) echo "잘못된 --start-from: $START_FROM" >&2; exit 1 ;;
@@ -129,7 +133,8 @@ log "[CHAIN-FULL] 시작 — $FEAT (start-from=$START_FROM)"
 
 # ══ S1 — 설계 체인 (s1only 위임) ═══════════════════════════════════════════════
 if [[ $ST -le 1 ]]; then
-  bash "$S1ONLY" --feature "$FEAT" --sheet-id "$SHEET_ID" ${CONF_URL:+--conf-url "$CONF_URL"}
+  S1_SHEET=(--sheet-id "$SHEET_ID"); [[ $NO_SHEET -eq 1 ]] && S1_SHEET=(--local)   # s1only 기존 --local = 시트 ID 자리만 채움
+  bash "$S1ONLY" --feature "$FEAT" "${S1_SHEET[@]}" ${CONF_URL:+--conf-url "$CONF_URL"}
   rc=$?
   [[ $rc -ne 0 ]] && exit $rc   # 10/13/14/15/1 그대로 전파 (s1only가 이미 로그·마킹)
   mark s1
@@ -169,6 +174,7 @@ __HINT__
 
 ## 작업
 "__WORK__/tc_f_map.json" 을 Read하고, 위반된 idx 행의 f만 위 규칙에 맞게 재작성해 같은 파일에 반영하라(Edit 도구).
+f_violations.json 의 row는 시트 행 번호(첫 데이터 행 2), idx는 tc_f_map.json 의 0부터 시작하는 인덱스다. 반드시 보고의 idx를 사용하라(예: row 3 → idx 1). 인용할 기획서 문구가 없는 동작 검증에는 가짜 문구를 만들지 말고, 실제 검증 동작과 기대결과를 분명히 서술하라.
 idx·d는 절대 바꾸지 마라. 다른 파일 생성·수정 금지. 완료 후 "FIX_DONE"만 출력.
 PEOF
   p=${p//__RULES__/$S3RULES}; p=${p//__HINT__/$hint}; p=${p//__WORK__/$WORK}
@@ -421,8 +427,9 @@ PEOF
 
 findings 3파일을 Read하라: "__WORK__/lens_structure.json" · "__WORK__/lens_quality.json" · "__WORK__/lens_crossref.json"
 "__WORK__/tcteam_snapshot.json" 을 Read해 실제 tc_id(A열)와 현재 셀값 확인. 규칙:
-- edit_cell: {"op":"edit_cell","tc_id":"...","col":"F|J|E|G","before":"현재값 그대로","after":"...","reason":"..."}. after는 추상표현 금지·사람언어·단일문장.
+- edit_cell: {"op":"edit_cell","tc_id":"...","col":"F|J|E|G","before":"현재값 그대로","after":"...","reason":"..."}. F/E의 after는 추상표현 금지·사람언어·단일문장.
 - add_row: {"op":"add_row","after_tc_id":"앵커","row":{"b":"","c":"","d":"","e":"","f":"","g":"","j":""},"reason":"..."}. 커버리지 누락 신규행. g는 정확히 PC|모바일|PC/모바일. ⚠ 앵커는 같은 소분류(d)의 마지막 행으로 골라 그룹 분산(V-17) 방지.
+- J열은 설명문이 아닌 상태 플래그다. edit_cell.after(J)와 add_row.row.j는 빈값|추후 구현|구현 우선순위 낮음|기획 확인 필요|DXBUG-N 중 하나만 정확히 써라. 기획 확인 사유의 문장은 reason에 쓴다.
 - delete_row: {"op":"delete_row","tc_id":"...","reason":"..."}. 무의미 중복만.
 - 확신 없으면 배제. patches 비어도 정상.
 결과는 "__WORK__/fix_plan.json" 에 {"rationale":"...","patches":[...]} JSON으로 Write하라(다른 파일 금지). 저장 후 "JUDGE_DONE"만 출력.
@@ -612,6 +619,12 @@ if [[ -f "$GOLDEN" && -f "$WORK/tcteam_tc_final.json" ]]; then
   fi
 else
   log "[골든] 기준선 없음 — 비교 생략 ($GOLDEN)"
+fi
+
+# ── 시트 없는 런(--no-sheet): S5 확정본에서 끝낸다 — S6 기록·S7 완료처리는 시트가 있어야 돈다 ──
+if [[ $NO_SHEET -eq 1 ]]; then
+  log "[CHAIN-FULL] 시트 없는 런 — S5 확정본에서 종료 ($WORK/tcteam_tc_final.json)"
+  exit 0
 fi
 
 # ══ S6 — 라이브 기록 + read-back (시트 1회 접촉) ══════════════════════════════
