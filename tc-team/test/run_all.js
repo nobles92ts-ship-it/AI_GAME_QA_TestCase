@@ -7,6 +7,7 @@ const suites = [
   'apply_fix_plan.test.js',
   'slicer.test.js',
   'content_gate.test.js',
+  'fixplan_contract.test.js',
   'utils_batch.test.js',
   'sheet_write.test.js',
   'snapshot_local.test.js',
@@ -28,6 +29,8 @@ const suites = [
   's1_opus_pin.test.js',
   // resume_reset.test.js — 사내 기획 원문 픽스처라 공개 배포본 미포함
   'runagent_isolate.test.js',
+  'runagent_codex.test.js',
+  's0_prepare.test.js',
   'impact_scope.test.js',
   'phase0_spike.js',
 ];

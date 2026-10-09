@@ -190,6 +190,47 @@ t('완주 보고(chain_helpers final-report)에 뺀 질문 알림이 실린다 �
   assert.ok(rep.includes('✅ tc-team 풀체인 완료'), '검토 알림이 실패 헤더로 뒤집혔다\n' + rep);
 });
 
+// ── 5a 거르기 기록(_labels_dropped.json · 2026-10-02) — 뺀 질문이 보고에 올라와야 사람이 과신을 잡는다 ──
+const reportOf = (dropped) => {
+  const d = tmp();
+  W(path.join(d, 'sheet_info.txt'), 'SHEET_ID=S\nTAB_NAME=T\n');
+  W(path.join(d, 'tcteam_tc_final.json'), { headers: HEAD, rows: TC_ROWS });
+  if (dropped !== undefined) W(path.join(d, '_labels_dropped.json'), dropped);
+  const r = node([path.join(SCRIPTS, 'chain_helpers.js'), 'final-report', d, d, 'F']);
+  assert.strictEqual(r.status, 0, r.stderr);
+  return fs.readFileSync(path.join(d, 'final_report.txt'), 'utf8');
+};
+
+t('완주 보고: 5a 가 뺀 질문을 근거와 함께 싣는다 — 「묶음」은 건수만 · 성공 헤더는 그대로', () => {
+  const rep = reportOf({ 뺀질문: [
+    { 질문: '피격 해제 시간을 마지막 피격부터 세나요?', 갈래: '답 있음', 근거: 'xlsx_extract.md SampleStatusEndTime 설명 「마지막 공격/피격 후」' },
+    { 질문: '강제 종료 후 재접속하면 알림은?', 갈래: '테스트 무관', 근거: '상태 기반 — 복귀 후 현재 상태로 판정' },
+    { 질문: '2단계 꺼짐 지연은 몇 초?', 갈래: '묶음', 근거: 'PK 알림 시간값 질문에 합침' },
+  ] });
+  assert.ok(rep.includes('🔎 질문 단계(5a)에서 뺀 질문 2건 · 다른 질문에 묶은 것 1건'), rep);
+  assert.ok(rep.includes('[답 있음] 피격 해제 시간을 마지막 피격부터 세나요?  ← xlsx_extract.md SampleStatusEndTime'), rep);
+  assert.ok(rep.includes('[테스트 무관] 강제 종료 후 재접속하면 알림은?'), rep);
+  assert.ok(!rep.includes('2단계 꺼짐 지연은 몇 초?'), '묶음 항목은 패널에 남아 있다 — 목록에 올리면 「사라진 질문」으로 오독된다\n' + rep);
+  assert.ok(rep.includes('✅ tc-team 풀체인 완료'), '검토 알림이 실패 헤더로 뒤집혔다\n' + rep);
+});
+
+t('완주 보고: 근거가 빈 뺀 질문은 「(근거 없음)」으로 드러난다 (근거 없는 「답 있음」이 조용히 묻히지 않게)', () => {
+  const rep = reportOf({ 뺀질문: [{ 질문: '토스트도 꺼지나요?', 갈래: '답 있음' }] });
+  assert.ok(rep.includes('[답 있음] 토스트도 꺼지나요?  ← (근거 없음)'), rep);
+});
+
+t('완주 보고: _labels_dropped.json 이 없으면 5a 줄이 없다 (구 런·5a 실패 호환) · 빈 배열도 줄 없음', () => {
+  assert.ok(!reportOf(undefined).includes('질문 단계(5a)'));
+  assert.ok(!reportOf({ 뺀질문: [] }).includes('질문 단계(5a)'));
+});
+
+t('완주 보고: _labels_dropped.json 이 깨졌으면 조용히 넘기지 않는다 — 경고 한 줄 · 헤더는 성공 유지', () => {
+  const rep = reportOf('{ "뺀질문": [ 깨짐');
+  assert.ok(rep.includes('⚠ 질문 단계(5a) 거르기 기록(_labels_dropped.json)을 읽지 못했습니다'), rep);
+  assert.ok(rep.includes('✅ tc-team 풀체인 완료'), rep);
+  assert.ok(reportOf({ 다른키: [] }).includes('읽지 못했습니다'), '형식이 다른 기록을 「뺀 질문 0건」으로 삼켰다');
+});
+
 t('필터: 전부 답이 있으면 빈 배열 — 패널 0건 (apply_labeling 은 0~N건 지원)', () => {
   const all = Q.map((s, i) => ({ id: 'D7-' + i, term: s, branch: 'apply', approved: true }));
   assert.deepStrictEqual(loadFilter()(Q, all).kept, []);
@@ -239,6 +280,30 @@ if (!BASH_OK) {
     assert.strictEqual(first.r.status, 0, first.out.slice(-1500));
     assert.ok(first.applied, '5b 스텁이 라벨을 받지 못함\n' + first.out.slice(-1500));
     assert.deepStrictEqual(first.applied, PANEL, '물어볼 게 남은 질문은 한 글자도 바뀌면 안 된다');
+  });
+
+  // 2026-10-02 거르기 배선 — 규칙서에 「답이 있으면 묻지 마라」가 있었는데도 5a 는 답이 있는 파일을 안내받지 못해 23건을 냈다.
+  t('finalize --only 5: 5a 프롬프트가 답 찾을 곳(원문·참조 문서·데이터)과 거르기 기록 파일을 안내한다', () => {
+    const pf = path.join(on.spec, '.5a_prompt.txt');
+    assert.ok(fs.existsSync(pf), '5a 가 호출되지 않았다');
+    const p = fs.readFileSync(pf, 'utf8');
+    const spec = fwd(on.spec);
+    for (const s of [`"${spec}/confluence_raw.md"`, `"${spec}/linked"`, `"${spec}/xlsx_extract.md"`, `"${spec}/_labels_dropped.json" Write`, '거르기 3단계', '질문 후보']) {
+      assert.ok(p.includes(s), `프롬프트에 「${s}」 없음\n` + p);
+    }
+  });
+
+  t('finalize --only 5: 지난 런의 거르기 기록은 5a 전에 지운다 — 이번 5a 가 쓴 기록은 5b 뒤에도 남는다', () => {
+    const sb = sandbox('off');
+    W(path.join(sb.spec, '_labels_dropped.json'), { 뺀질문: [{ 질문: '지난 런', 갈래: '답 있음', 근거: 'x' }] });
+    const stale = finalize5(sb);
+    assert.strictEqual(stale.r.status, 0, stale.out.slice(-1500));
+    assert.ok(!fs.existsSync(path.join(sb.spec, '_labels_dropped.json')), '5a 가 안 썼는데 지난 런 기록이 남았다 — 완주 보고에 거짓으로 실린다');
+    const DROP = [{ 질문: '이번 런', 갈래: '테스트 무관', 근거: 'y' }];
+    const fresh = finalize5(sb, { STUB_DROPPED: JSON.stringify(DROP) });
+    assert.strictEqual(fresh.r.status, 0, fresh.out.slice(-1500));
+    assert.deepStrictEqual(R(path.join(sb.spec, '_labels_dropped.json')).뺀질문, DROP, '5a 가 쓴 거르기 기록이 사라졌다');
+    assert.deepStrictEqual(fresh.applied, PANEL, '거르기 기록이 패널 기재를 건드렸다');
   });
 
   t('finalize --only 5: 원장에 남는 term 은 에이전트가 줄여 쓴 것이 아니라 수집 원문', () => {

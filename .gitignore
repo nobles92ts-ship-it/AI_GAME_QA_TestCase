@@ -28,12 +28,15 @@ team/lessons/
 team/learned_patterns.json
 
 # 히스토리 / 로그 / 캐시
+__pycache__/
+*.pyc
 qa_history.json
 *_snapshot.json
 **/tc_after_fix*.json
 **/_final_dump.json
 **/confluence_raw.md
 **/sheet_info.txt
+!tc-team-ai/test/fixtures/**/sheet_info.txt
 *.err.txt
 qa_opinion.txt
 history.jsonl

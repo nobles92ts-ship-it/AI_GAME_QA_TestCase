@@ -43,6 +43,7 @@ This release replaces the `tc-팀-v2` multi-agent orchestrator with **tc-team**,
 - **4 input formats** — Confluence URL / PDF / Word / Excel, auto-detected
 - **No external API** — all model calls go through the Claude Code CLI
 - **Isolated model calls** — each `claude -p` child starts without your personal settings, plugins, MCP connectors, global rules or auto-memory; the tools declared in its agent file are the only tools it gets (`TCTEAM_ISOLATE=0` opts a run out)
+- **An AI edition (new in v4.3.6)** — the same S1–S5 engine without a sheet: a spec goes in, and a Markdown bundle an AI agent can execute as QA comes out ([details](#-ai-edition--tc-team-ai))
 
 ---
 
@@ -135,6 +136,14 @@ On Windows use `.\setup.ps1` instead.
 
 The setup script auto-detects Node.js and the Claude Code CLI, installs agents and skills into `~/.claude/`, substitutes every `{PROJECT_ROOT}` / `{NODE_PATH}` / `{CLAUDE_HOME}` / `{CONFLUENCE_SITE}` placeholder, creates `.env` and `pipeline_config.json` from templates, and runs `npm install`.
 
+It installs one of three editions. `human` is the default and is everything described here. `ai` installs only the [AI edition](#-ai-edition--tc-team-ai) and skips the Google files. `both` installs both:
+
+```bash
+bash ./setup.sh --mode ai
+```
+
+On Windows: `.\setup.ps1 -Mode ai`. Setting `TC_MODE` to `human`, `ai` or `both` does the same, and the one-line Windows installer (`install.ps1`) asks.
+
 Then, in Claude Code, hand it a sheet link and a spec link **together**:
 
 ```
@@ -146,6 +155,41 @@ Then, in Claude Code, hand it a sheet link and a spec link **together**:
 Your session then drives S0–S7, reporting at each stage and halting on any gate failure. A spec link **without** a sheet link is rejected rather than guessed at. One feature per run — there is no batch mode.
 
 Full walkthrough: [docs/SETUP.md](docs/SETUP.md) · Dependencies: [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
+
+---
+
+## 🧪 AI edition — `tc-team-ai`
+
+The pipeline above ends in a sheet that a person reads. The AI edition ends in Markdown that an AI agent reads, then executes as QA.
+
+It is not a second engine. `tc-team-ai/scripts/run_ai.js` runs the same S1–S5 chain with `--no-sheet` — same designer, same gates, same coverage ledger — and stops there. S6 and S7 exist to write and label a sheet, so they are skipped: no Google Sheets, no Slack kick-off. S1's designer is told to skip its Drive upload — an instruction rather than a code-level block, which is why the run report checks that its Drive link list came back empty. Two steps follow S5.
+
+| Step | Lane | What it does |
+|------|------|--------------|
+| Rewrite | **LLM** (Sonnet, `Read`/`Write` tools only) | Splits each TC's steps into **precondition / action / expected / observation** |
+| Preservation gate | code | Checks that the split kept the sentence's anchors — numbers (none dropped, none added), names, quoted labels, negation — and most of its key words. A failed split is discarded; that TC runs from its original sentence |
+| Export | code | Confidence scoring without a sheet, then the Markdown bundle |
+
+**The original sentence stays the source of truth.** TC IDs and step sentences in the bundle are byte-identical to the S5 result; the split sits beside them as a reading aid. If a sentence changes after it was split, the split is dropped at export rather than shipped stale.
+
+The bundle lands in `team/specs/_ai_<feature>/ai_bundle/`:
+
+| File | Contents |
+|------|----------|
+| `INDEX.md` | Execution rules, run order, open spec questions, reproduction aids |
+| `cases/NN_<group>.md` | The TCs, one file per screen |
+| `spec.md` | The spec, section by section — where to look when an expected result is ambiguous |
+| `results.md` | A table the executing agent fills in. Re-exporting never overwrites it |
+
+Install with `--mode ai` (or `both`), then in Claude Code:
+
+```
+/tc-team-ai <spec-source>
+```
+
+`<spec-source>` is a Confluence URL or a file. No sheet link is asked for. The skill prepares `team/specs/_ai_<feature>/` and then calls the runner. The runner accepts only names that start with `_ai_` and use letters, digits, `_` and `-`: an AI run's folder is never mistaken for a sheet run's, and a spec title cannot break the shell commands the chain builds from it.
+
+**Scope, stated honestly:** the gate's thresholds are starting values, not yet tuned on a corpus. It cannot see a positive statement turned negative, an added condition with no number in it, or a sub-condition dropped while most of the words survive — which is why the bundle's rules make the original sentence, not the split, the thing to execute. The first production run (one feature, 106 TCs, 98 minutes end to end) shows both sides: every split passed, 8 of them on a retry, yet a hand check of 12 found one that had dropped a sub-condition. Every run ends with an `AI_DONE` line that counts how many TCs fell back to their original sentence; read it before relying on the splits. A run in which not one rewrite output could be read stops with exit 12 instead of shipping an all-original bundle: either nothing was written (CLI missing, wrong model name, no network) or nothing was valid JSON. Prerequisites for this edition, including Confluence access: [PREREQUISITES — AI edition](docs/PREREQUISITES.md#ai-edition-tc-team-ai).
 
 ---
 
@@ -221,6 +265,9 @@ AI_GAME_QA_TestCase/
 │   ├── tc-team/
 │   │   ├── SKILL.md              # S0–S7 stage contracts (entry point)
 │   │   └── rules/                # 9 rule files — the SSoT you customise
+│   ├── tc-team-ai/
+│   │   ├── SKILL.md              # AI edition — spec intake, run, report
+│   │   └── rules/                # Rewrite rules + the execution rules shipped in every bundle
 │   ├── tc-대시보드/               # Dashboard refresh
 │   ├── tc-이미지매칭/             # Confluence image → sheet column matching
 │   └── haiku/
@@ -230,6 +277,11 @@ AI_GAME_QA_TestCase/
 │   ├── scripts/                  # Chain drivers + confidence scoring
 │   ├── test/                     # 16 suites
 │   └── docs/                     # Driver reference, EVAL digest, guides
+│
+├── tc-team-ai/                   # AI edition — runs the engine without a sheet
+│   ├── lib/                      # Rewrite stage + preservation gate, Markdown export, sheet-free confidence
+│   ├── scripts/run_ai.js         # The runner
+│   └── test/                     # 6 suites (synthetic fixtures)
 │
 ├── scripts/
 │   ├── handoff_gate.py           # Between-step markdown integrity gate
@@ -252,7 +304,7 @@ AI_GAME_QA_TestCase/
 | Agent runtime | Claude Code CLI |
 | Orchestration | Bash + Node.js |
 | Input parsers | `xlsx` · `pdf-parse` / `pdfjs-dist` · `mammoth` · MCP (Confluence ADF) |
-| Output | Google Sheets API via `googleapis` |
+| Output | Google Sheets API via `googleapis` · Markdown bundle (AI edition) |
 | MCP integrations | `google-sheets`, Atlassian |
 
 ---
@@ -265,6 +317,7 @@ AI_GAME_QA_TestCase/
 - LLM-free confidence scoring
 - Single-touch sheet write with read-back verification
 - Single-command unattended run (S1–S7) with isolated model calls
+- AI edition: spec-only runs that end in a Markdown bundle an AI agent executes
 
 ### 🔜 Next
 - Duplicate-gate threshold tuning against a larger corpus

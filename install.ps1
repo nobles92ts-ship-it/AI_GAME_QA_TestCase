@@ -4,7 +4,8 @@
 #   PowerShell에 아래 한 줄만 붙여넣으면 됩니다:
 #   irm https://raw.githubusercontent.com/nobles92ts-ship-it/AI_GAME_QA_TestCase/main/install.ps1 | iex
 #
-# 하는 일: (없으면) Node.js·Claude Code 자동 설치 → 이 레포 받기 → setup.ps1 실행.
+# 하는 일: (없으면) Node.js·Claude Code 자동 설치 → 이 레포 받기 → 설치 종류 고르기 → setup.ps1 실행.
+# 설치 종류: 사람용(tc-team, 구글 시트) · AI용(tc-team-ai, 기획서만) · 둘 다. 환경변수 TC_MODE=human|ai|both 면 묻지 않는다.
 # 실제 AI 실행은 "당신의" Claude Code(당신 구독)로 일어난다 — 추가 요금 0원, 토큰은 이 PC에만.
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +30,19 @@ function Refresh-Path {
   $env:Path = (@($m,$u) | Where-Object { $_ } ) -join ';'
 }
 function Have($cmd){ [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
+
+function Choose-Mode {
+  $m = "$env:TC_MODE".Trim().ToLower()
+  if ($m -in @('human', 'ai', 'both')) { return $m }
+  Write-Host ""
+  Write-Host "[설치 종류] 무엇을 설치할까요?"
+  Write-Host "   1) 사람용 — 기획서 + 구글 시트 → 시트에 TC 목록       (/tc-team)"
+  Write-Host "   2) AI용   — 기획서만 → AI가 QA를 실행할 md 묶음        (/tc-team-ai · 구글 설정 불필요)"
+  Write-Host "   3) 둘 다"
+  # 입력을 받을 수 없는 창(-NonInteractive·자동 설치)에서는 Read-Host 가 예외를 던진다 — 묻기 전과 같이 사람용으로 간다
+  try { $a = Read-Host "번호 (Enter = 1)" } catch { Write-Host "   (입력을 받을 수 없어 사람용으로 설치합니다 — 바꾸려면 TC_MODE=ai 또는 both)"; $a = '' }
+  switch ("$a".Trim()) { '2' { return 'ai' } '3' { return 'both' } default { return 'human' } }
+}
 
 function Ensure-Node {
   if (Have node) { Write-Host "  [OK] Node.js: $((node -v))" -ForegroundColor Green; return $true }
@@ -115,22 +129,29 @@ if (Have git) {
 
 $setup = Join-Path $Dest 'setup.ps1'
 if (-not (Test-Path $setup)) { Write-Host "  [X] setup.ps1 없음 — 배포본 손상" -ForegroundColor Red; exit 1 }
-Write-Host ""; Write-Host "[2] setup.ps1 실행 (에이전트·스킬 → ~/.claude)"
+$Mode = Choose-Mode
+Write-Host ""; Write-Host "[2] setup.ps1 실행 (에이전트·스킬 → ~/.claude) — 설치 종류: $Mode"
 Push-Location $Dest
 # .ps1 파일 직접 호출(& $setup)은 기본 실행정책(Restricted)에서 차단됨 — 자식 프로세스로 Bypass 실행
 try {
-  & powershell -NoProfile -ExecutionPolicy Bypass -File $setup
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $setup -Mode $Mode
   if ($LASTEXITCODE -ne 0) { Write-Host "  [X] setup.ps1 실패 (rc=$LASTEXITCODE)" -ForegroundColor Red; exit 1 }
 } finally { Pop-Location }
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host " 설치 완료! 다음 순서로 사용하세요:" -ForegroundColor Green
+Write-Host " 설치 완료! ($Mode) 다음 순서로 사용하세요:" -ForegroundColor Green
 Write-Host "   1) 터미널에서  claude  실행 → /login (본인 Pro/Max 계정)" -ForegroundColor Green
-Write-Host "   2) 가장 쉬운 사용법 (구글 설정 불필요):" -ForegroundColor Green
-Write-Host "        claude 에  /tc-로컬 <기능명> <기획서파일>  → 엑셀(.xlsx) 자동 생성" -ForegroundColor Green
-Write-Host "   3) (선택) 구글 시트로 받으려면 docs/PREREQUISITES.md 의 구글 연결 설정 후" -ForegroundColor Green
-Write-Host "        '/tc-team 스프레드시트링크 기획서링크' 를 주면 시트에 TC가 생성됩니다." -ForegroundColor Green
+Write-Host "   2) 사용법:" -ForegroundColor Green
+if ($Mode -ne 'human') {
+  Write-Host "      - AI용 (구글 설정 불필요): claude 에  /tc-team-ai <기획서 링크>" -ForegroundColor Green
+  Write-Host "        → team/specs/_ai_<기능>/ai_bundle/ 에 AI가 QA를 실행할 md 묶음" -ForegroundColor Green
+  Write-Host "        (Confluence 링크면 환경변수 CONFLUENCE_URL · CONFLUENCE_USERNAME · CONFLUENCE_API_TOKEN)" -ForegroundColor Green
+}
+if ($Mode -ne 'ai') {
+  Write-Host "      - 사람용: docs/PREREQUISITES.md 의 구글 연결 설정 후" -ForegroundColor Green
+  Write-Host "        '/tc-team 스프레드시트링크 기획서링크' 를 주면 시트에 TC가 생성됩니다." -ForegroundColor Green
+}
 Write-Host " 비용: 0원 (본인 Claude 구독 사용량만 · 토큰은 이 PC에만)" -ForegroundColor Green
 Write-Host " 폴더: $Dest" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green

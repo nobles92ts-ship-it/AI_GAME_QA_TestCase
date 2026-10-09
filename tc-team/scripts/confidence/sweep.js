@@ -41,6 +41,8 @@ const VARIANTS = {
   '원문 근거 대조 끔(구 방식)': { groundThreshold: 1.01 },
   // 2026-09-11 — 문장형 미정 항목(…는지 확인)을 자기 TC 에만 붙이는 것이 기본값이 됐다.
   '문장형 용어 자기 TC 한정 끔(구 방식)': { sentenceOwnOnly: false },
+  // 2026-09-28 — S7 델타 항목을 R3/R4 입력에서 빼는 것이 기본값이 됐다(오너 결정). 넣으면 재실행이 보던 구 입력과 비교된다.
+  'S7 델타 포함(구 방식)': { excludeS7Delta: false },
 };
 
 const RIDS = core.RULES.map((r) => r.id);

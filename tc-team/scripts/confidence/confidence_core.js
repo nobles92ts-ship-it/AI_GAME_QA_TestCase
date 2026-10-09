@@ -53,6 +53,9 @@ const TUNING = {
   groundMinTokens: 3,                  // 내용어가 이보다 적은 TC 는 판정하지 않는다(짧은 문장은 우연 일치가 쉽다)
   sentenceOwnOnly: true,               // 문장형 미정 항목(…는지 확인)은 «자기 TC» 에만 붙인다 — isSentenceTerm 주석
   sentenceOwnThreshold: 0.7,           //   자기 TC = 용어의 내용어가 TC 본문에 이 비율 이상 (원문 근거 대조와 같은 기준)
+  excludeS7Delta: true,                // S7 델타 대조 항목(origin:"S7")은 R3/R4 입력에서 뺀다. S7 병합은 FINAL-0 뒤(FINAL-5 안)라
+                                       //   정규 런은 원래 못 보는데, 재실행(갱신기 --only 0 등)만 보고 D 로 포화시켰다.
+                                       //   false 면 구 방식(병합본 전량). (2026-09-28 실측 — next_run_verify §9-2)
 };
 
 /** 규칙 n건의 실효 감점(양수). 보너스·비스케일 규칙은 건수와 무관. */
@@ -249,7 +252,9 @@ function compute(SPEC, override) {
   });
 
   // 5) crossref 미해소 → 소분류 매칭 (식별자 1개 또는 비범용 토큰 2개 이상)
-  const unresolved = (crossref.items || []).filter((i) => i.branch === 'keep' || i.branch === 'locate');
+  // S7 델타는 정규 런의 FINAL-0 보다 늦게 붙는다 — 재실행도 같은 입력을 보도록 뺀다(TUNING.excludeS7Delta).
+  const unresolved = (crossref.items || []).filter((i) => (i.branch === 'keep' || i.branch === 'locate')
+    && !(tuning.excludeS7Delta && i.origin === 'S7'));
   const xrefByLeaf = {};
   const anchorByLeaf = {};
   // 문장형 미정 항목은 그 문장이 나온 «자기 TC» 가 있는 소분류에만 붙인다 (isSentenceTerm 주석)
