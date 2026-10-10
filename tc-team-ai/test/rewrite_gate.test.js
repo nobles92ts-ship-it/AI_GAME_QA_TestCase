@@ -30,6 +30,36 @@ const Q_OK = {
   기대: ['그 우편의 읽음 표시가 물음표(?)로 표시된다'],
   관측: ['보낸 우편함의 읽음 표시'],
 };
+// 짧은 부정(안 ~는지) — 「않는지」와 같은 부정인데 끝 낱말만 보면 「되는지」라 긍정으로 읽힌다
+const SHORT = '첨부가 0개인 유료 우편을 보내면 발송이 안 되는지 확인';
+const SHORT_OK = {
+  전제: ['첨부가 0개인 유료 우편이 있다'],
+  조작: ['그 우편을 보낸다'],
+  기대: ['발송이 안 된다'],
+  관측: ['발송 결과 문구'],
+};
+const SHORT2 = '제목이 빈 우편을 보내면 「발송 완료」 문구가 안 뜨는지 확인';
+const SHORT2_OK = {
+  전제: ['제목이 빈 우편이 있다'],
+  조작: ['그 우편을 보낸다'],
+  기대: ['「발송 완료」 문구가 안 뜬다'],
+  관측: ['발송 결과 문구'],
+};
+// 「동안」의 끝 글자 안 — 기대에 남아도 부정이 남은 게 아니다
+const KEEP = '받은 우편이 보관 기간 30일 동안 삭제되지 않는지 확인';
+const KEEP_OK = {
+  전제: ['받은 우편이 있다'],
+  조작: ['보관 기간 30일 동안 기다린다'],
+  기대: ['보관 기간 30일 동안 우편이 삭제되지 않는다'],
+  관측: ['우편함 목록'],
+};
+const RECALL = '보낸 우편은 보낸 뒤 1분 동안 회수가 안 되는지 확인';
+const RECALL_OK = {
+  전제: ['보낸 우편이 있다'],
+  조작: ['보낸 뒤 1분 동안 회수 버튼을 누른다'],
+  기대: ['1분 동안 회수가 안 된다'],
+  관측: ['회수 결과 문구'],
+};
 const reasonsOf = (orig, rw) => checkRewrite(orig, rw).reasons.join(' | ');
 const with_ = (rw, k, v) => ({ ...rw, [k]: v });
 
@@ -46,6 +76,17 @@ t('닻: 숫자·영문·기호·부정 극성', () => {
 t('닻: 「~지 확인」으로 안 끝나면 극성 판정 없음(null)', () => {
   assert.strictEqual(anchorsOf('보상 지급 결과를 기록한다').polarity, null);
 });
+t('닻: 짧은 부정(안 ~는지)도 부정이다', () => {
+  for (const o of [SHORT, SHORT2, RECALL]) assert.strictEqual(anchorsOf(o).polarity, 'neg', o);
+});
+t('닻: 안내·안전·안쪽·동안의 「안」은 부정이 아니다', () => {
+  for (const o of [
+    '받는 사람 ID 가 빈 우편을 보내면 ID 입력 방법이 안내되는지 확인',
+    '첨부가 있는 우편을 열면 첨부 보관 기간이 안전하게 표시되는지 확인',
+    '우편 상세 창을 열면 첨부 아이콘이 창 안쪽에 표시되는지 확인',
+    '받은 우편이 보관 기간 30일 동안 유지되는지 확인',
+  ]) assert.strictEqual(anchorsOf(o).polarity, 'pos', o);
+});
 
 // ── 음성 표본: 충실한 다시 쓰기는 통과 ──────────────────────────────────
 t('충실한 표본 3종 통과 (오탐 0)', () => {
@@ -60,6 +101,12 @@ t('항목 머리 번호(1) · -)는 숫자 추가로 세지 않는다', () => {
 });
 t('전제는 비어도 된다', () => {
   assert.ok(checkRewrite(CH, with_(CH_OK, '전제', [])).ok);
+});
+t('짧은 부정을 지킨 다시 쓰기는 통과 (안 된다 · 되지 않는다 · 동안이 같이 있어도)', () => {
+  for (const [o, rw] of [[SHORT, SHORT_OK], [SHORT2, SHORT2_OK], [RECALL, RECALL_OK], [KEEP, KEEP_OK],
+    [SHORT, with_(SHORT_OK, '기대', ['발송이 되지 않는다'])]]) {
+    assert.ok(checkRewrite(o, rw).ok, `오탐: ${reasonsOf(o, rw)}`);
+  }
 });
 
 // ── 양성 표본: 종류마다 하나씩 반드시 걸린다 ─────────────────────────────
@@ -88,6 +135,17 @@ t('따옴표 문구 변형 → mark_missing', () => {
 t('부정 소실(않는지 → 긍정 기대) → polarity_lost', () => {
   const rw = with_(CH_OK, '기대', ['B서버 캐릭터 우편함에도 그 우편이 도착한다']);
   assert.match(reasonsOf(CH, rw), /polarity_lost/);
+});
+// 아래 셋은 «그 이유 하나로만» 걸려야 한다 — 다른 닻(숫자·낱말 비율)이 대신 울어 초록이 되면 안 된다
+t('짧은 부정 소실(안 되는지 → 긍정 기대) → polarity_lost', () => {
+  assert.deepStrictEqual(checkRewrite(SHORT, with_(SHORT_OK, '기대', ['발송이 된다'])).reasons, ['polarity_lost']);
+  assert.deepStrictEqual(checkRewrite(SHORT2, with_(SHORT2_OK, '기대', ['「발송 완료」 문구가 뜬다'])).reasons, ['polarity_lost']);
+});
+t('「동안」의 안은 남은 부정으로 세지 않는다(않는지 소실) → polarity_lost', () => {
+  assert.deepStrictEqual(checkRewrite(KEEP, with_(KEEP_OK, '기대', ['보관 기간 30일 동안 우편이 삭제된다'])).reasons, ['polarity_lost']);
+});
+t('「동안」+ 짧은 부정 소실(안 되는지) → polarity_lost', () => {
+  assert.deepStrictEqual(checkRewrite(RECALL, with_(RECALL_OK, '기대', ['1분 동안 회수가 된다'])).reasons, ['polarity_lost']);
 });
 t('조건 탈락(서버 이전 조건 삭제) → coverage', () => {
   const o = '우편을 보낸 뒤 받는 사람이 다른 서버로 이전하면 그 우편의 처리 결과가 기획에서 확정한 규칙과 일치하는지 확인';

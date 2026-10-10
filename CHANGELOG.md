@@ -8,6 +8,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.7] — 2026-10-12
+
+### Fixed
+
+- **The AI edition's preservation gate missed the short Korean negative.** It scored a sentence as negative only when the word before 「확인」 starts with 않·없·못·아니 (「~않는지 확인」). The short form 「안 ~는지 확인」 ends in a positive-looking verb — 「안 되는지」 ends in 「되는지」 — so it was scored positive, and a split that dropped the 「안」 passed. A standalone 「안」 right before that verb now makes the sentence negative. 안 inside a word (안내 · 안전 · 안쪽 · 동안) does not.
+- **「동안」 counted as a kept negation.** For a negative original, the gate took any 「안 」 in the expectation as proof that the negation survived — including the last syllable of 동안 · 제안 · 보안, so 「30일 동안 삭제된다」 passed for 「30일 동안 삭제되지 않는지」. Only a standalone 「안」 counts now. In an internal set of 13,366 final TCs, 43 of the 2,738 negative sentences had this shape.
+- **The rewrite rule contradicted the gate.** Rule 5 said a sentence ending in 「~되는지 확인」 is positive, which is exactly how 「안 되는지 확인」 ends. The rule and the retry note sent after `polarity_lost` now name the short form.
+- Measured before release: the short form itself occurs 0 times in that set, so no sentence changed polarity. Re-gating the one real AI run (106 accepted splits, 114 attempt outputs) changed no verdict. Each hole is pinned by a sample that fails for that reason alone, and five deliberately broken versions of the fix each turn a test red.
+
+---
+
 ## [v4.3.6] — 2026-10-09
 
 ### Added
