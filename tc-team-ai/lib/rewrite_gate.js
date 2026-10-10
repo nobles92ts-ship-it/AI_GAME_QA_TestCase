@@ -3,10 +3,11 @@
  * rewrite_gate.js — AI 다시 쓰기(전제·조작·기대·관측)가 원문 재현 스탭의 뜻을 보존했는지 보는 결정론 게이트.
  *
  * 다시 쓰기는 LLM 단계라 문장을 «고쳐 쓴다». 그래서 원문에서 바뀌면 안 되는 닻을 뽑아 대조한다:
- *   숫자(빠짐·더함 둘 다) · 영문 이름(A채널의 A, HP) · 따옴표/기호(「…」, (?)) · 부정 극성(~않는지) · 핵심 낱말 비율.
+ *   숫자(빠짐·더함 둘 다) · 영문 이름(A채널의 A, HP) · 따옴표/기호(「…」, (?)) · 부정 극성(~않는지 · 안 ~는지) · 핵심 낱말 비율.
  * 걸린 TC 는 다시 쓰기를 버리고 원문만 내보낸다(fail-closed) — 판정은 여기, 처리는 호출자.
  *
- * ⚠ 못 잡는 것: 긍정 → 부정 뒤집힘(「숫자 대신 ?」 같은 정상 바꿔 말하기와 구분이 안 된다), 숫자 없는 조건 추가.
+ * ⚠ 못 잡는 것: 긍정 → 부정 뒤집힘(「숫자 대신 ?」 같은 정상 바꿔 말하기와 구분이 안 된다), 숫자 없는 조건 추가,
+ *   붙여 쓴 「안되는지」(안내되는지와 못 가른다), 기대 어디에든 부정어가 하나 있으면 지킨 것으로 본다(「보관함 안 우편」의 안 · 조건 쪽 「~지 않는」).
  *   그래서 묶음 규칙은 «재현 스탭(원문)이 정본, 네 칸은 도움말»이다 (skills/tc-team-ai/rules/ai-실행규칙.md).
  */
 const FIELDS = ['전제', '조작', '기대', '관측'];
@@ -22,18 +23,19 @@ const QUOTE_RE = /[「『"'`]([^」』"'`\n]{1,20})[」』"'`]/g;
 const PAREN_RE = /[(（]([^)）가-힣\n]{1,8})[)）]/g;   // 한글 없는 짧은 괄호 — (?) 같은 기호 표기
 const WORD_RE = /[가-힣]{2,}/g;
 const NEG_HEAD_RE = /^(않|없|못|아니)/;
-const NEG_ANY_RE = /(않|없|못|아니|안 )/;
+const NEG_ANY_RE = /(않|없|못|아니|(?<![가-힣])안\s)/;   // 안 은 따로 선 낱말만 — 동안·제안·보안의 끝 글자는 부정이 아니다
 const LIST_MARK_RE = /^\s*(?:\d+[.)]|[-*•·])\s+/;
 
 const uniq = (a) => [...new Set(a)];
 const stripMark = (s) => String(s).replace(LIST_MARK_RE, '');
 const bodyOf = (rw) => FIELDS.flatMap((k) => (Array.isArray(rw[k]) ? rw[k] : []).map(stripMark)).join('\n');
 
-// 「…는지 확인」 바로 앞 낱말이 않·없·못·아니로 시작하면 부정. 그 꼴이 아니면 판정하지 않는다(null).
+// 「…는지 확인」 바로 앞 낱말이 않·없·못·아니로 시작하거나, 그 앞에 「안」이 따로 서 있으면(안 되는지) 부정.
+// 그 꼴이 아니면 판정하지 않는다(null). 안내·안전·동안처럼 낱말 속의 「안」은 부정이 아니다.
 function polarityOf(sentence) {
-  const m = String(sentence).trim().match(/([가-힣]+)\s*확인\s*[.。]?\s*$/);
+  const m = String(sentence).trim().match(/(?:(\S+)\s+)?([가-힣]+)\s*확인\s*[.。]?\s*$/);
   if (!m) return null;
-  return NEG_HEAD_RE.test(m[1]) ? 'neg' : 'pos';
+  return NEG_HEAD_RE.test(m[2]) || m[1] === '안' ? 'neg' : 'pos';
 }
 
 function anchorsOf(sentence) {
