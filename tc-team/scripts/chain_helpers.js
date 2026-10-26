@@ -299,7 +299,7 @@ if (cmd === 'extract-s3-rules') {
   // FINAL 실패 배너(finalize.sh) — 있으면 보고 최상단에 그대로 올린다.
   // 2026-08-07 실사고: L/M 패널이 통째로 빠졌는데 완주 보고는 ✅로 끝나 사흘간 아무도 몰랐다.
   // 2026-08-16 실사고: 확신도가 통째로 빠졌는데(점수 0건) FINAL-0:✓로 완주 보고 — 같은 통에 넣는다.
-  const alerts = ['.final0_alert.txt', '.final5_alert.txt'].map((f) => {
+  const alerts = ['.final0_alert.txt', '.final5_alert.txt', '.quality_report_alert.txt'].map((f) => {
     try { return fs.readFileSync(path.join(SPEC, f), 'utf8').trim(); } catch (e) { return ''; }
   }).filter(Boolean);
   const alert5 = alerts.join('\n');
@@ -309,6 +309,9 @@ if (cmd === 'extract-s3-rules') {
   // 2026-08-10 실측: 규칙 도입 후 라벨 77건 중 9건에 금지어가 남았는데 chain.log 에만 떠 아무도 못 봤다.
   let notice5 = '';
   try { notice5 = fs.readFileSync(path.join(SPEC, '.final5_notice.txt'), 'utf8').trim(); } catch (e) { /* 없으면 정상 */ }
+  // 소분류 치트 메모(FINAL-5 치트 — lib/cheat_memo.js). 실패해도 런은 성공이라 notice 자리.
+  let cheatNotice = '';
+  try { cheatNotice = fs.readFileSync(path.join(SPEC, '.cheat_memo_notice.txt'), 'utf8').trim(); } catch (e) { /* 안 돈 런 */ }
   // 기획확인 패널에서 뺀 질문(tc-team/lib/crossref_labels_annotate.js) — 성공한 런의 **검토 요청**이라 notice 자리.
   // 2026-09-11 꼬리표 주입 → 필터 전환: 과신한 apply 가 이제 질문을 조용히 지운다(실측 1/6 — 원문 모순 질의를
   //   관련 규칙을 찾은 것만으로 「답 있음」 처리). 파일(_labels_removed.json)만 두면 아무도 안 열어 보고에 올린다.
@@ -335,11 +338,24 @@ if (cmd === 'extract-s3-rules') {
     // 없으면 정상(구 런·5a 실패). 있는데 못 읽으면 뺀 질문을 아무도 못 본다 — 조용히 넘기지 않는다.
     if (e.code !== 'ENOENT') dropped5 = `⚠ 질문 단계(5a) 거르기 기록(_labels_dropped.json)을 읽지 못했습니다 — 뺀 질문을 확인할 수 없습니다 (${e.message})`;
   }
+  let quality = '';
+  try {
+    if (fs.existsSync(path.join(W, '.quality_report_alert.txt'))) throw new Error('생성 실패 알림 확인');
+    // readJ exits the process for mandatory inputs; optional legacy reports must remain catchable.
+    const q = JSON.parse(fs.readFileSync(path.join(W, 'quality_report.json'), 'utf8'));
+    const pct = n => n === null ? '대상 없음' : (n * 100).toFixed(2) + '%';
+    quality = `품질 보고서: ${path.join(W, 'quality_report.html')} / quality_report.md\n` +
+      `규칙 ${q.coverage.rules} · TC 연결 ${q.coverage.covered} · 제외 ${q.coverage.excluded} · 미커버 ${q.coverage.uncovered}\n` +
+      `TC 직접 연결 ${pct(q.coverage.direct_rate)} · 제외 후 대상 연결 ${pct(q.coverage.scoped_rate)} · 연결/제외 처리 ${pct(q.coverage.accounted_rate)}\n` +
+      `검토 알림 ${q.warnings.length}건 · 제품 테스트 실행 결과와 별개`;
+  } catch (e) { quality = `⚠ 품질 보고서 미확인 — ${e.message}`; }
   const report = [
     alert5,
     `${alert5 ? '⚠ tc-team 풀체인 완료(일부 실패)' : '✅ tc-team 풀체인 완료'} — 탭 \`${tab}\` · ${rows}행`,
     sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : '',
     `단계 시간(초): ${timeLine}`,
+    quality,
+    cheatNotice,
     notice5,
     dropped5,
     removed5,

@@ -8,6 +8,25 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.8] — 2026-10-26
+
+### Added
+
+- **Quality report.** After the TCs are confirmed, the chain derives `quality_report.md/html/json` deterministically and ships the MD at FINAL-3. It shows the feature tree, source-to-TC coverage with the denominators kept apart, excluded / uncovered items, review notes and questions, and the execution plan. It never changes the existing result or execution columns, and it is also produced on `--no-sheet` and S6/S7 resumes.
+- **Execution-plan metadata in the S1 design.** Each design now records ten execution checks (auth failures, rejoin, reconnect, retention, URL/state tampering, token tampering, duplicate submit / concurrency, address change, viewport, calendar). Analysis §3.12 and design-review criterion C-17 cover the four policies and six extra viewpoints. Older designs without the metadata are reported as unknown, not as passing.
+- **Design evidence audit** (`lib/design_evidence_audit.js`). A read-only comparison of the settings a design declares against the declared baseline; the HIGH count is written to the chain log. Judging meaning, source and approval stays with review criteria C-06 / C-16.
+- **Cheat memo (FINAL-5).** The model only names registered cheat ids and item-name search terms; `lib/cheat_memo.js` resolves the real item id (only when the name is unique), assembles the command and writes it as a cell note on the top row of each sub-category. Cell values are never changed. Non-blocking; turn off with `TCTEAM_CHEAT_MEMO=0`.
+- **Resource-failure stop.** Quota and model-capacity failures now return retry code `11` and the S1 chain stops with exit `15` (`[STOP:resource]`) instead of retrying into the same wall. `test/pipeline_retry.test.js` pins it.
+
+### Changed
+
+- **Planning-confirmation panel layout for new tabs.** Sections now start at `R2`: a header row per section, then `R` = item number (restarting at 1 in each section) and `S` = item text. The old `M`/`N` block from row 12 is no longer written; existing tabs are not migrated. `test/sheet_layout_contract.test.js` keeps the label block one column clear of the project-info panel.
+- **Codex runner.** The first turn now waits for the tool catalog (the app CLI could start before its servers were up and skip tools), the CLI is resolved as `CODEX_CMD` → newest app CLI → `PATH`, the run is logged with the model actually called, and the sandbox setting matches the Claude workers.
+- **Brain index runtime.** The gate, the indexer and the search child now read the same runtime home, including `CODEX_HOME` under Codex, so they cannot look at different knowledge bases (`test/brain_runtime_paths.test.py`).
+- **Rules.** `tc-분석` · `tc-설계` · `tc-설계검수` · `tc-생성` · `tc-리뷰` · `라벨링_기준` · `완료처리` and `SKILL.md` follow the changes above.
+
+---
+
 ## [v4.3.7] — 2026-10-12
 
 ### Fixed

@@ -127,6 +127,36 @@ if [[ "${TCTEAM_ISOLATE:-0}" == "1" ]]; then
   fi
 fi
 
+# Explicit experiment workspace; reject relative/missing paths before invoking a model.
+# With no RUNAGENT_CWD, the original inherited working directory is unchanged.
+if [[ -n "${RUNAGENT_USAGE_FILE:-}${RUNAGENT_USAGE_DIR:-}" ]]; then
+  USAGE_HELPER=$(to_win_path "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/runagent_usage.py")
+  export RUNAGENT_BASH="$(to_win_path "$BASH")"
+fi
+if [[ -n "${RUNAGENT_CWD:-}" ]]; then
+  if [[ "$RUNAGENT_CWD" != /* && ! "$RUNAGENT_CWD" =~ ^[a-zA-Z]:[\\/] ]] || [[ ! -d "$RUNAGENT_CWD" ]]; then
+    echo "[run-agent] RUNAGENT_CWD must be an existing absolute directory" >&2
+    exit 1
+  fi
+  cd -- "$RUNAGENT_CWD" || exit 1
+fi
+
+# Opt-in metering requests JSON from Claude, then emits only its text result.
+# No usage target means the original exec command below remains unchanged.
+if [[ -n "${RUNAGENT_USAGE_FILE:-}${RUNAGENT_USAGE_DIR:-}" ]]; then
+  PY="${TCTEAM_PYTHON:-python}"
+  METER_MODEL=""
+  for ((i=0; i<${#NEW_ARGS[@]}; i++)); do
+    if [[ "${NEW_ARGS[i]}" == "--model" ]]; then METER_MODEL="${NEW_ARGS[i+1]}"; fi
+    if [[ "${NEW_ARGS[i]}" == --model=* ]]; then METER_MODEL="${NEW_ARGS[i]#--model=}"; fi
+  done
+  if [[ -n "$AGENT_NAME" ]]; then
+    exec "$PY" "$USAGE_HELPER" --engine claude --model "$METER_MODEL" -- claude "${ISO_ARGS[@]}" "${NEW_ARGS[@]}" --system-prompt "$AGENT_BODY"
+  else
+    exec "$PY" "$USAGE_HELPER" --engine claude --model "$METER_MODEL" -- claude "${ISO_ARGS[@]}" "${NEW_ARGS[@]}"
+  fi
+fi
+
 if [[ -n "$AGENT_NAME" ]]; then
   exec claude "${ISO_ARGS[@]}" "${NEW_ARGS[@]}" --system-prompt "$AGENT_BODY"
 else

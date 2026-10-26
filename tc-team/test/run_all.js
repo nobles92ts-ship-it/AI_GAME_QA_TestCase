@@ -13,6 +13,8 @@ const suites = [
   'snapshot_local.test.js',
   'regroup.test.js',
   'traceability.test.js',
+  'quality_report.test.js',
+  'quality_report_wiring.test.js',
   'dup_gate.test.js',
   'origin_gate.test.js',
   'item_dict.test.js',
@@ -30,8 +32,12 @@ const suites = [
   // resume_reset.test.js — 사내 기획 원문 픽스처라 공개 배포본 미포함
   'runagent_isolate.test.js',
   'runagent_codex.test.js',
+  'pipeline_retry.test.js',
+  'design_evidence_audit.test.js',
+  's1_evidence_wiring.test.js',
   's0_prepare.test.js',
   'impact_scope.test.js',
+  'cheat_memo.test.js',
   'phase0_spike.js',
 ];
 let allPass = true;

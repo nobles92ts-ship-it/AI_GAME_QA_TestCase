@@ -8,7 +8,7 @@
 #   exit 10 — 인증 만료 (사용자만 해결 가능)
 #   exit 13 — 같은 STEP 재시도 한도 도달 (transition rc=2, state=failed 마킹 후 중단)
 #   exit 14 — 무결성·수지 불일치 / 시트 부작용 검출 (계속하면 데이터 오염)
-#   exit 15 — CLI 쿼터 3회 실패 (pipeline_retry rc=11 — 재실행 대기)
+#   exit 15 — CLI 한도·모델 가용성 실패 (pipeline_retry rc=11 — 재실행 대기)
 #   그 외 오류 exit 1
 #   ※ STEP 5/6 완전 silent(step_recover rc=5)는 exit 16 즉시 멈춤이 아니라 자동 재시도
 #     — 한도 3회 소진 시 do_transition rc=2 → stop_attempts(state=failed, exit 13)로 멈춤.
@@ -31,6 +31,8 @@ RUNAGENT="$UTIL/run-agent.sh"
 if [[ "${TCTEAM_ENGINE:-claude}" == "codex" ]]; then RUNAGENT="$UTIL/run-agent-codex.sh"; fi
 RETRY="$UTIL/pipeline_retry.sh"
 GUARD="$UTIL/silent_exit_guard.sh"
+# Resolve executable code beside this script; TCTEAM_PROJECT_ROOT may isolate data.
+EVIDENCE_AUDIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && { pwd -W 2>/dev/null || pwd; })/design_evidence_audit.js"
 CLI_BASE='-p --permission-mode bypassPermissions'
 # 설계자(tc-team-designer) 호출 출력 상한 — 2026-09-12 오너 결정(a). CLI 기본 64000 은 대형 기획서에서
 # effort max 사고 한 턴만으로 넘친다(09-11 스킬_강화_시스템 508행: 64K 절단 5회 → 128K 재기동 최대 응답 85,077).
@@ -74,7 +76,8 @@ case "$RESUME" in
   *) echo "잘못된 --resume-from: $RESUME (step3-blocker|step4|step5|step6|final)" >&2; exit 1 ;;
 esac
 
-SPEC="$SPECS/$FEAT"
+SPEC="${TCTEAM_SPEC_DIR:-$SPECS/$FEAT}"
+STATEJSON="${TCTEAM_STATE_FILE:-$PROJECT_ROOT/team/state.json}"
 TAB="$FEAT"
 CHAIN_LOG="$SPEC/chain.log"
 [[ -f "$SPEC/confluence_raw.md" ]] || { echo "[CHAIN] confluence_raw.md 없음 — 셋업 먼저" >&2; exit 1; }
@@ -99,7 +102,7 @@ stop_auth()      { log "[STOP:인증] $1 — 재인증 후 재실행"; exit 10; 
 stop_attempts()  {
   log "[STOP:한도] $1 — 카운터 확인 후 재실행"
   # rc=2 (attempts 한도) → 사양: 현재 기능 state=failed 마킹 후 중단
-  FEATURE_NAME="$FEAT" TCTEAM_STATE_JSON="$PROJECT_ROOT/team/state.json" "$NODE" -e "
+  FEATURE_NAME="$FEAT" TCTEAM_STATE_JSON="$STATEJSON" "$NODE" -e "
 const fs=require('fs');const f=process.env.TCTEAM_STATE_JSON;
 const d=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):{specs:[]};
 const feat=process.env.FEATURE_NAME;
@@ -110,7 +113,7 @@ fs.writeFileSync(f,JSON.stringify(d,null,2));
 " >>"$CHAIN_LOG" 2>&1 || log "[STOP:한도][경고] state=failed 마킹 실패 — 무시하고 중단"
   exit 13
 }
-stop_quota()     { log "[STOP:쿼터] $1 — 쿼터 3회 실패, 재실행 대기"; exit 15; }
+stop_quota()     { log "[STOP:자원] $1 — 한도·모델 가용성 실패, 체인 로그 확인 후 재개"; exit 15; }
 stop_integrity() { log "[STOP:무결성] $1 — 사람 확인 필요 (백업탭 보존됨)"; exit 14; }
 
 # step_result 판정: ok / silent / fail:<error>
@@ -124,6 +127,16 @@ try{
   console.log('ok');
 }catch(e){console.log('silent');}
 "
+}
+
+audit_design_evidence() { # Current declared baseline only, never rewrite source/design.
+  "$NODE" "$EVIDENCE_AUDIT" "$SPEC" >>"$CHAIN_LOG" 2>&1
+  local erc=$?
+  [[ $erc -eq 0 || $erc -eq 4 ]] || stop_integrity "$1 근거/설정값 감사 입력·실행 오류"
+  EVIDENCE_HIGH=$("$NODE" -e "const d=JSON.parse(require('fs').readFileSync('$SPEC/design_evidence_audit.json','utf8'));console.log(d.summary.high)")
+  [[ "$EVIDENCE_HIGH" =~ ^[0-9]+$ ]] || stop_integrity "$1 근거/설정값 감사 결과 오류"
+  log "[$1] 설정값 전달 감사 HIGH=$EVIDENCE_HIGH (의미·픽셀·정책 확인은 C-06/C-16 검수)"
+  return "$erc"
 }
 
 # ── 인수 게이트 — 자식의 자기신고가 아니라 산출물 실물을 부모가 직접 본다 ──────
@@ -166,7 +179,7 @@ if [[ $START -eq 0 || ! -f "$SPEC/.pipeline_start_epoch" ]]; then date +%s > "$S
 if [[ $START -eq 0 ]]; then log "[CHAIN] 시작 — $FEAT (체인 모드)"; else log "[CHAIN] 재개 — $FEAT (resume-from=$RESUME)"; fi
 
 if [[ $START -eq 0 ]]; then
-FEATURE_NAME="$FEAT" TCTEAM_STATE_JSON="$PROJECT_ROOT/team/state.json" "$NODE" -e "
+FEATURE_NAME="$FEAT" TCTEAM_STATE_JSON="$STATEJSON" "$NODE" -e "
 const fs=require('fs');const f=process.env.TCTEAM_STATE_JSON;
 const d=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,'utf8')):{specs:[]};
 const feat=process.env.FEATURE_NAME;
@@ -194,12 +207,13 @@ fi
 #   에서 물려받음)을 걸기만 하고 푸는 코드가 없어 폴더마다 영구 잔존했다(실측 9곳·최고령 21일).
 #   편집 가드가 그 유령 락을 "실행 중"으로 오독해 끝난 런 뒤 3시간 동안 .sh 편집을 막았고,
 #   반대로 3시간 넘는 런은 보호를 잃었다. 정본 락은 SKILL.md S0-0 의 team/.pipeline.lock 하나뿐.
-TEAMLOCK="$PROJECT_ROOT/team/.pipeline.lock"
+TEAMLOCK="${TCTEAM_LOCK_FILE:-$PROJECT_ROOT/team/.pipeline.lock}"
 if [[ ! -f "$TEAMLOCK" ]]; then
   date +%s > "$TEAMLOCK"
   trap 'rm -f "$TEAMLOCK"' EXIT
 fi
 [[ $START -eq 0 ]] && do_transition designing 0 ""
+
 
 # ── STEP 0-사전 (조건부·결정론) — 아이템 실명 사전 생성 (2026-08-13 신설) ────────
 # 왜 STEP 1 앞인가: 아이템 실명은 tc_design.md 의 **leaf(확인 내용)** 에 박혀야 한다.
@@ -258,6 +272,7 @@ rc=$?
 [[ $rc -eq 10 ]] && stop_auth "STEP 1"
 [[ $rc -eq 11 ]] && stop_quota "STEP 1"
 [[ $rc -eq 12 ]] && stop_attempts "STEP 1 silent exit 3회 (GUARD)"
+[[ $rc -eq 0 ]] || { log "[STEP 1] 호출 실패 rc=$rc — 과거 success JSON 재사용 금지"; exit "$rc"; }
 [[ "$(check_step 1)" == "ok" ]] || { log "[STEP 1] 실패: $(check_step 1)"; exit 1; }
 handoff_md "$SPEC/analysis.md"  1024        || stop_integrity "STEP 1 인수게이트 — analysis.md (절단/미달)"
 handoff_md "$SPEC/tc_design.md" 2048 "## "  || stop_integrity "STEP 1 인수게이트 — tc_design.md (절단/미달)"
@@ -419,6 +434,7 @@ if [[ $IMG_RC -eq 3 ]]; then
 else
   log "[STEP 2] 이미지 마커 감사: 어긋남 없음 (rc=$IMG_RC)"
 fi
+audit_design_evidence "STEP 2-근거감사"
 log "[STEP 2] 설계검수 시작"
 HANDOFF="## HANDOFF
 - 기능명: $FEAT
@@ -429,6 +445,7 @@ HANDOFF="## HANDOFF
 $GATE_LINE
 $IMG_LINE
 - DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 소비 — discover→C-05/C-12 커버리지 분모 포함, apply/locate→중복 재지적 금지. 없으면 현행대로. 규칙 SSoT=tc-설계검수.md 'DXR 대조 연동')
+- 설정값 전달·근거 검토 위치: $SPEC/design_evidence_audit.json — C-06 명시값 대조와 C-16 근거 구분 검수에 소비. HIGH는 수정 대상, REVIEW는 원문·이미지·현재 승인 근거로 판단. 기계 일치를 기획·픽셀 검증 PASS로 보고하지 말 것.
 - ⚠ C-05 분모 완전성 교차 시 tc-학습.md P-18·P-19·P-20·P-22·P-23·**P-25·P-26·P-29**로 원문 대비 누락 확인."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
 RUNAGENT_DEBUG_FILE='$SPEC/step2_debug.log' bash '$RETRY' '$SPEC/step2_stderr.log' -- \
@@ -437,6 +454,7 @@ rc=$?
 [[ $rc -eq 10 ]] && stop_auth "STEP 2"
 [[ $rc -eq 11 ]] && stop_quota "STEP 2"
 [[ $rc -eq 12 ]] && stop_attempts "STEP 2 silent exit 3회"
+[[ $rc -eq 0 ]] || { log "[STEP 2] 호출 실패 rc=$rc — 과거 success JSON 재사용 금지"; exit "$rc"; }
 [[ "$(check_step 2)" == "ok" ]] || { log "[STEP 2] 실패"; exit 1; }
 NEEDS_FIX=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8'));const nf=(r.needs_fix??(r.review&&r.review.needs_fix)??(r.step2_review&&r.step2_review.needs_fix));console.log(nf===true?'1':'0')")
 GAP=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8'));const g=(r.analysis_gap??(r.review&&r.review.analysis_gap)??(r.step2_review&&r.step2_review.analysis_gap));console.log(Number(g)||0)")
@@ -445,6 +463,10 @@ GAP=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/step_resu
 if [[ -f "$SPEC/dxr_crossref.json" ]]; then
   XFIX=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;process.stdout.write((ap+di)>0?'1':'0')}catch(e){process.stdout.write('0')}" 2>/dev/null)
   if [[ "$XFIX" == "1" && "$NEEDS_FIX" != "1" ]]; then NEEDS_FIX=1; log "[STEP 2-대조] apply(approved)/discover ≥1 → needs_fix=1 강제 (STEP3 반영)"; fi
+fi
+if [[ "$EVIDENCE_HIGH" -gt 0 && "$NEEDS_FIX" != "1" ]]; then
+  NEEDS_FIX=1
+  log "[STEP 2-근거감사] 명시값 불일치 HIGH≥1 → needs_fix=1 강제 (기존 STEP3 반영)"
 fi
 log "[STEP 2] 완료 — needs_fix=$NEEDS_FIX analysis_gap=$GAP"
 fi
@@ -465,6 +487,7 @@ run_step3() { # $1=모드 라벨 (review|blocker)
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 - specs 경로: $SPEC
 - 검수 보고서: $SPEC/design_review.md
+- 설정값 전달·근거 감사: $SPEC/design_evidence_audit.json — HIGH를 현재 승인 근거/분석/설계와 대조해 수정. REVIEW·예시·복수값·단위 불명확은 임의 확정하지 말고 C-16대로 처리. 승인 note의 로컬 관측을 운영 정책으로 확대하지 말 것.
 - DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 직접 소비) — apply(approved:true)→커버리지 매핑표에 확정 규칙+출처, discover→TC 후보 추가. approved:false·locate·keep은 기획확인 블록 유지(설계 변경 아님). 규칙 SSoT=tc-대조.md §3. 분석누락 아닌 설계보강이라 sonnet.
 - 직변환 차단 보고서: $SPEC/conversion_blocker.json (존재 시 최우선 — 차단 항목 외과 수정)
 - 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭을 고칠 때 아이템 실명 병기 유지. 규칙 SSoT=tc-설계.md §아이템 실명 병기)
@@ -480,6 +503,7 @@ bash '$RUNAGENT' $CLI_BASE ${model_args[*]} --agent tc-team-designer \"\$0\"" "$
   [[ $rc -eq 10 ]] && stop_auth "STEP 3"
   [[ $rc -eq 11 ]] && stop_quota "STEP 3"
   [[ $rc -eq 12 ]] && stop_attempts "STEP 3 silent exit 3회"
+  [[ $rc -eq 0 ]] || { log "[STEP 3] 호출 실패 rc=$rc — 과거 success JSON 재사용 금지"; exit "$rc"; }
   [[ "$(check_step 3)" == "ok" ]] || { log "[STEP 3] 실패"; exit 1; }
   handoff_md "$SPEC/tc_design.md" 2048 "## " || stop_integrity "STEP 3 인수게이트 — tc_design.md (수정 중 절단)"
   log "[STEP 3] 완료"
@@ -498,6 +522,11 @@ if [[ -f "$SPEC/dxr_crossref.json" ]]; then
     || log "[STEP 3.5-대조주입][경고] crossref_annotate 실패 — 비차단"
 fi
 
+if [[ $START -le 4 ]]; then
+  audit_design_evidence "S1-최종근거감사"
+  erc=$?
+  [[ $erc -eq 0 ]] || stop_integrity "S1 최종 설정값 불일치 잔존 — design_evidence_audit.json 확인"
+fi
 
 log "[S1-ONLY] 설계 구간(STEP 1~3.5) 완료 — tc-v3 콜드런용 조기 종료"
 exit 0

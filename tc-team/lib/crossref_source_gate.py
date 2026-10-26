@@ -3,7 +3,8 @@
 
 왜 있나 (2026-08-23 진단):
   context-mode 지식베이스는 프로젝트 디렉터리마다 갈린다 —
-      ~/.claude/context-mode/content/<sha256(projectDir.replace('\\','/'))[:16]>.db
+      <엔진 home>/context-mode/content/<project hash>.db
+  Claude는 기존 raw 경로 해시, Codex 네이티브 context-mode는 정규화·case-fold 해시다.
   체인은 대조 에이전트를 {PROJECT_ROOT} 에서 돌리는데 뇌(brain-corpus-D)는
   {WORK_ROOT} KB 에만 색인돼 있었다. 그래서 질의가 아무리 정확해도 전량 "No results found" 였고,
   그 결과가 §1.6 의 정상 경로인 '무적중 → 전 항목 keep' 과 **같은 출력으로 뭉개져** 1년 가까이 안 보였다.
@@ -29,13 +30,22 @@ import os
 import sqlite3
 import sys
 
-CONTENT_DIR = os.path.join(
-    os.path.expanduser("~"), ".claude", "context-mode", "content")
+from brain_index_sync import context_mode_home, is_codex
 
 
 def kb_hash(project_dir: str) -> str:
-    """context-mode 와 동일 산식: 역슬래시 정규화 후 sha256 앞 16자."""
+    """선택한 context-mode 런타임과 동일 산식. 다른 홈/legacy DB로 대체하지 않는다."""
     norm = project_dir.replace("\\", "/")
+    if is_codex():
+        # 네이티브 Codex context-mode의 normalizeWorktreePath/hashProjectDirCanonical.
+        if norm and not norm.strip("/"):
+            norm = "/"
+        elif len(norm) > 2 and norm[1] == ":" and not norm[2:].strip("/"):
+            norm = norm[:2] + "/"
+        else:
+            norm = norm.rstrip("/")
+        if sys.platform in ("win32", "darwin"):
+            norm = norm.lower()
     return hashlib.sha256(norm.encode()).hexdigest()[:16]
 
 
@@ -48,7 +58,7 @@ def main() -> int:
     a = ap.parse_args()
 
     h = kb_hash(a.project_dir)
-    db = os.path.join(CONTENT_DIR, f"{h}.db")
+    db = os.path.join(context_mode_home(), "context-mode", "content", f"{h}.db")
     out = {
         "project_dir": a.project_dir,
         "kb_hash": h,
