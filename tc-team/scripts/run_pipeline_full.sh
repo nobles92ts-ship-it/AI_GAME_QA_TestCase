@@ -71,7 +71,7 @@ mkdir -p "$WORK"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$CHAIN_LOG"; }
 stop_auth()      { log "[STOP:인증] $1 — 재인증 후 재실행"; exit 10; }
-stop_quota()     { log "[STOP:쿼터] $1 — 쿼터 실패, 재실행 대기"; exit 15; }
+stop_quota()     { log "[STOP:자원] $1 — 한도·모델 가용성 실패, 체인 로그 확인 후 재개"; exit 15; }
 stop_integrity() { log "[STOP:무결성] $1 — 사람 확인 필요"; exit 14; }
 fail()           { log "[CHAIN-FULL][실패] $1"; exit 1; }
 logw()           { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$CHAIN_LOG" >&2; }  # 명령치환 안에서 쓰는 log — stdout 오염 금지
@@ -619,6 +619,16 @@ if [[ -f "$GOLDEN" && -f "$WORK/tcteam_tc_final.json" ]]; then
   fi
 else
   log "[골든] 기준선 없음 — 비교 생략 ($GOLDEN)"
+fi
+
+# 품질 뷰는 결정론 파생본이다. 기존 결과·게이트·실행 열을 변경하지 않는다.
+# --no-sheet와 S6/S7 재개에도 생성하고, 오류는 완료 보고 최상단으로 전달한다.
+rm -f "$WORK/.quality_report_alert.txt"
+if "$NODE" "$LIB/quality_report.js" "$WORK" >>"$CHAIN_LOG" 2>&1; then
+  log "[품질 보고서] quality_report.md/html/json 생성"
+else
+  printf '%s\n' '⚠ 품질 보고서 생성 실패 — 실행 메타데이터/입력 형식을 확인하세요. 기존 TC는 변경하지 않았습니다.' > "$WORK/.quality_report_alert.txt"
+  log "[품질 보고서][경고] .quality_report_alert.txt 확인"
 fi
 
 # ── 시트 없는 런(--no-sheet): S5 확정본에서 끝낸다 — S6 기록·S7 완료처리는 시트가 있어야 돈다 ──

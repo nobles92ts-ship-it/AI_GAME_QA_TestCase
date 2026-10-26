@@ -22,9 +22,19 @@ import os
 import subprocess
 import sys
 
-PLUGIN_GLOB = os.path.join(
-    os.path.expanduser("~"), ".claude", "plugins", "cache", "context-mode",
-    "context-mode", "*", "cli.bundle.mjs")
+def is_codex() -> bool:
+    return os.environ.get("TCTEAM_ENGINE", "claude") == "codex"
+
+
+def context_mode_home() -> str:
+    """체인과 검색 자식이 같은 런타임을 쓴다. Codex는 CODEX_HOME도 따른다."""
+    home = os.path.expanduser("~")
+    if not is_codex():
+        return os.path.join(home, ".claude")
+    value = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
+    if value.startswith("~"):
+        value = os.path.join(home, value[1:].lstrip("/\\"))
+    return os.path.abspath(value)
 
 # context-mode 가 프로젝트 경로를 고르는 우선순위 (cli.bundle.mjs 실측).
 # 우리가 지정한 값이 이기려면 앞쪽 변수들을 전부 비워야 한다.
@@ -35,7 +45,10 @@ HIGHER_PRECEDENCE = (
 
 
 def newest_cli() -> str:
-    hits = sorted(glob.glob(PLUGIN_GLOB))
+    pattern = os.path.join(
+        context_mode_home(), "plugins", "cache", "context-mode",
+        "context-mode", "*", "cli.bundle.mjs")
+    hits = sorted(glob.glob(pattern))
     return hits[-1] if hits else ""
 
 
@@ -46,6 +59,13 @@ class Stdio:
         env = dict(os.environ)
         for k in HIGHER_PRECEDENCE:
             env.pop(k, None)
+        if is_codex():
+            # run_agent_codex.env_for_child도 이 두 저장소 override를 전달하지 않는다.
+            # gate·색인·검색 자식 모두 CODEX_HOME의 같은 KB를 보게 한다.
+            env.pop("CONTEXT_MODE_DIR", None)
+            env.pop("CONTEXT_MODE_DATA_DIR", None)
+        # 부모 셸의 platform 식별자가 색인 홈을 바꾸지 않도록 엔진과 맞춘다.
+        env["CONTEXT_MODE_PLATFORM"] = "codex" if is_codex() else "claude-code"
         env["CONTEXT_MODE_PROJECT_DIR"] = project_dir
         self.p = subprocess.Popen(
             [node, cli], stdin=subprocess.PIPE, stdout=subprocess.PIPE,

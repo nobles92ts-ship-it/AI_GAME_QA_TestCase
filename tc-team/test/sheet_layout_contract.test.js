@@ -31,16 +31,20 @@ function positionalMemoIndex() {
   return { positional: Number(m[1]), tcData: Number(m[2]) };
 }
 
-// 패널 열 세대 — 프로젝트 정보 패널(add_project_info)과 라벨 블록(apply_labeling)은 한 칸 차이로 맞물린다.
-// 구 세대 K~O/L · 신 세대 L~P/M — 어느 쪽이든 `라벨 시작 = 패널 시작 + 1` 이 성립한다.
-// 2026-09-18: v4.3.3 이 패널만 신세대로 올리고 라벨은 두어, 둘 다 L 이 되며 라벨이 패널 제목 칸을 덮었다.
+// 패널 열 세대 — 프로젝트 정보 패널(add_project_info)과 라벨 블록(apply_labeling)은 세트로 움직인다.
+// 2026-09-18 이전: 라벨이 패널 바로 밑(12행~) 한 칸 오른쪽(M)에 있었다 — `라벨 시작 = 패널 시작 + 1`.
+//   v4.3.3 이 패널만 신세대로 올리고 라벨은 두어, 둘 다 L 이 되며 라벨이 패널 제목 칸을 덮었다.
+// 2026-10-14 R2 이동: 라벨이 패널 오른쪽(R/S, 2행~)으로 옮겨 **행이 겹친다**(둘 다 2~10행을 쓴다).
+//   그래서 계약이 「한 칸 차이」에서 「열이 겹치지 않고 한 칸 이상 띄운다」로 바뀌었다
+//   — 패널 끝 열 + 1 은 간격 열(Q), 라벨은 그 다음부터.
 function colIndex(letter) { return letter.charCodeAt(0) - 65; }
 
-function panelStartColumn() {
+// 패널이 쓰는 가장 오른쪽 열 — add_project_info.js 의 `!X1:Y<n>` 범위 전부의 Y 중 최댓값
+function panelEndColumn() {
   const src = fs.readFileSync(path.join(UTIL, 'add_project_info.js'), 'utf8');
-  const m = src.match(/!([A-Z])1:[A-Z]\d/);
-  assert.ok(m, 'add_project_info.js 에서 패널 범위(!X1:Y10)를 찾지 못했다 — 표현이 바뀌었으면 이 게이트부터 고칠 것');
-  return m[1];
+  const ends = [...src.matchAll(/!([A-Z])1:([A-Z])\d/g)].map(m => m[2]);
+  assert.ok(ends.length, 'add_project_info.js 에서 패널 범위(!X1:Y10)를 찾지 못했다 — 표현이 바뀌었으면 이 게이트부터 고칠 것');
+  return ends.reduce((a, b) => (colIndex(b) > colIndex(a) ? b : a));
 }
 
 function labelStartColumn() {
@@ -71,11 +75,11 @@ t('tc_data(7요소) 경로의 비고 인덱스는 시트 레이아웃과 무관�
   assert.strictEqual(idx.tcData, 6, `tc_data 비고=${idx.tcData} — 7요소 계약이 바뀌었으면 tc-생성.md 와 같이 볼 것`);
 });
 
-t('패널 시작 열과 라벨 블록 시작 열이 한 칸 차이다 (라벨이 패널 제목 칸을 덮지 않는다)', () => {
-  const panel = panelStartColumn(), label = labelStartColumn();
-  assert.strictEqual(
-    colIndex(label), colIndex(panel) + 1,
-    `패널 시작=${panel} · 라벨 시작=${label} — 두 파일이 다른 세대다. ` +
+t('라벨 블록이 패널 끝 열보다 한 칸 이상 띄워 오른쪽에 선다 (두 블록이 행을 공유해도 서로 덮지 않는다)', () => {
+  const panelEnd = panelEndColumn(), label = labelStartColumn();
+  assert.ok(
+    colIndex(label) >= colIndex(panelEnd) + 2,
+    `패널 끝=${panelEnd} · 라벨 시작=${label} — 라벨이 패널 열을 덮거나 간격 열이 없다. ` +
     `패널 열도 세트로 움직인다 (add_project_info · apply_labeling · jira_assignees)`);
 });
 

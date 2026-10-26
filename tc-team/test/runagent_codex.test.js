@@ -4,7 +4,7 @@
 // 가짜 codex(받은 인자·프롬프트를 JSON 으로 적고 -o 파일에 답을 쓴다)와 가짜 claude(불리면 표식)를 PATH 에 두고
 // 실제 run-agent-codex.sh 를 돌린다. LLM 호출 0. 확인하는 것:
 //   ① 체인 3종이 엔진 분기를 갖고 기본값은 claude 그대로  ② 에이전트 본문·도구 이름 대응표가 프롬프트에 실린다
-//   ③ ctx_search 를 요구한 에이전트에만 MCP 서버 하나 + 미리 승인  ④ 격리 플래그(사용자 설정·앱 커넥터 끔, workspace-write)
+//   ③ ctx_search 를 요구한 에이전트에만 MCP 서버 하나 + 미리 승인  ④ 격리 플래그(사용자 설정·앱 커넥터 끔, 샌드박스는 Claude 일꾼처럼 없음)
 //   ⑤ 실패 문구가 pipeline_retry.sh 분류(10=인증, 11=한도)로 이어진다  ⑥ 어떤 경우에도 claude 를 부르지 않는다
 const assert = require('assert');
 const fs = require('fs');
@@ -89,16 +89,17 @@ const BASE = ['-p', '--permission-mode', 'bypassPermissions', '--model', 'sonnet
 const has = (argv, s) => argv.some((a) => a.includes(s));
 const after = (argv, flag) => argv[argv.indexOf(flag) + 1];
 
-t('에이전트 없는 호출 — 격리 플래그·모델 고정·답이 stdout', () => {
+t('에이전트 없는 호출 — 격리 플래그·Sonnet→Luna·답이 stdout', () => {
   const { r, call } = run([...BASE, '작업 지시 TASK-7']);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.strictEqual(r.stdout.trim(), 'FAKE-ANSWER');
   const a = call.argv;
   assert.strictEqual(a[0], 'exec');
   for (const f of ['--ignore-user-config', '--ignore-rules']) assert.ok(a.includes(f), f);
-  assert.strictEqual(after(a, '-m'), 'gpt-5.6-sol');
-  assert.strictEqual(after(a, '-s'), 'workspace-write');
-  assert.ok(has(a, 'windows.sandbox="elevated"'));
+  assert.strictEqual(after(a, '-m'), 'gpt-6-luna');
+  assert.strictEqual(after(a, '-s'), 'danger-full-access');   // Claude 일꾼과 같은 조건(10-14 결정)
+  assert.ok(has(a, 'approval_policy="never"'));
+  assert.ok(!has(a, 'windows.sandbox'));
   const disabled = a.filter((x, i) => a[i - 1] === '--disable');
   for (const f of ['apps', 'plugins', 'memories', 'hooks', 'multi_agent']) assert.ok(disabled.includes(f), f);
   assert.ok(!a.includes('--dangerously-bypass-approvals-and-sandbox'));
@@ -113,6 +114,11 @@ t('ctx_search 에이전트 — 본문 주입 + MCP 서버 하나 + 미리 승인
   assert.ok(!call.stdin.includes('tools:'), 'frontmatter 는 떼어낸다');
   assert.ok(has(call.argv, 'mcp_servers.ctx.command'));
   assert.ok(has(call.argv, 'mcp_servers.ctx.default_tools_approval_mode="approve"'));
+  // 이름을 «MCP 서버 ctx 의 ctx_search» 로만 적으면 모델이 3번 중 2번 못 찾았다(10-14 실측) — 노출 이름을 그대로 적는다
+  assert.ok(call.stdin.includes('mcp__ctx__ctx_search'));
+  // 서버가 뜨기 전에 첫 턴이 시작되던 문제(10-14 실측) — 도구 목록까지 받고 시작, 못 받으면 실패
+  assert.ok(has(call.argv, 'mcp_servers.ctx.required=true'));
+  assert.ok(has(call.argv, 'mcp_servers.ctx.startup_readiness="catalog"'));
 });
 
 t('ctx 를 안 쓰는 에이전트엔 MCP 를 붙이지 않는다', () => {
@@ -133,10 +139,39 @@ t('Codex 자식 프로세스에는 봇 자격 환경변수가 전달되지 않�
   }
 });
 
-t('effort max → xhigh, 모델은 env 로만 바뀐다', () => {
-  const { call } = run([...BASE, '--effort', 'max', 'H'], { TCTEAM_CODEX_MODEL: 'gpt-x' });
-  assert.ok(has(call.argv, 'model_reasoning_effort="xhigh"'));
-  assert.strictEqual(after(call.argv, '-m'), 'gpt-x');
+t('Opus → gpt-6.1-sol (Sol 급), effort max 는 그대로 max', () => {
+  const { call } = run(['-p', '--model', 'opus', '--effort', 'max', 'H']);
+  assert.strictEqual(after(call.argv, '-m'), 'gpt-6.1-sol');
+  assert.ok(has(call.argv, 'model_reasoning_effort="max"'));
+});
+
+t('TCTEAM_CODEX_MODEL 이 있으면 등급과 무관하게 그 모델 하나', () => {
+  for (const tier of ['opus', 'sonnet']) {
+    const { call } = run(['-p', '--model', tier, 'H'], { TCTEAM_CODEX_MODEL: 'gpt-x' });
+    assert.strictEqual(after(call.argv, '-m'), 'gpt-x', tier);
+  }
+});
+
+t('CLI 고르기 — CODEX_CMD 가 없으면 앱 bin 의 가장 새 codex.exe, 앱이 없으면 PATH', () => {
+  const PY = process.env.TCTEAM_PYTHON || 'python';
+  const app = tmp();
+  const recentExe = path.join(app, 'OpenAI', 'Codex', 'bin', 'aaa', 'codex.exe');
+  const staleExe = path.join(app, 'OpenAI', 'Codex', 'bin', 'bbb', 'codex.exe');
+  W(recentExe, ''); W(staleExe, '');
+  fs.utimesSync(recentExe, new Date(2026, 0, 2), new Date(2026, 0, 2));
+  fs.utimesSync(staleExe, new Date(2026, 0, 1), new Date(2026, 0, 1));   // 이름이 아니라 수정 시각으로 고른다
+  const pick = (extra) => {
+    const env = { ...process.env, ...extra };
+    delete env.CODEX_CMD;
+    if (extra.CODEX_CMD) env.CODEX_CMD = extra.CODEX_CMD;
+    const r = spawnSync(PY, ['-c', 'import run_agent_codex as m; print(m.codex_cmd())'],
+                        { cwd: path.join(ROOT, 'scripts', 'util'), encoding: 'utf8', env });
+    assert.strictEqual(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  assert.strictEqual(pick({ LOCALAPPDATA: app }), recentExe);
+  assert.strictEqual(pick({ LOCALAPPDATA: app, CODEX_CMD: 'X:\\custom\\codex.exe' }), 'X:\\custom\\codex.exe');
+  assert.notStrictEqual(pick({ LOCALAPPDATA: tmp() }), recentExe, '앱이 없으면 PATH 쪽');
 });
 
 t('빈 에이전트 본문·없는 에이전트·모르는 인자 = codex 호출 전 실패', () => {
