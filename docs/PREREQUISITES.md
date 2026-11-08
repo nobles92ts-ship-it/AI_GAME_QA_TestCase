@@ -119,6 +119,8 @@ A spec page almost never defines every value it relies on. Without a brain, thos
 **Preparation ladder** — every rung is a usable state:
 
 1. **No index** (default). Pipeline fully works; ambiguous items are simply flagged for humans. Zero setup.
+> ⭐ **Recommended path:** build the brain with the kit in [`brain/`](../brain/README.md) — it produces the layered bundle of rung 3 directly — and follow the author's setup on AI TRY: [aitryed.com/en/built/second-brain](https://aitryed.com/en/built/second-brain/). tc-team runs fully only with a brain.
+
 2. **Flat index.** Index your design docs with `context-mode` under one source name, put that name in `crossref_source`, set `crossref_brain: "on"`. Lookups work. One caveat: the anti-circular-citation guard keys off layered section headers, so with a flat index some evidence is conservatively downgraded to `keep`. The built-in fail-safe (no match / error → everything `keep`, non-blocking) means a rough index **degrades quietly — it never breaks the run**.
 3. **Layered index.** Structure chunk headers by tier — design wiki vs. past TC output vs. working notes — so the guard can reject past TC output as evidence. This prevents the failure mode where a TC cites an older TC as if it were spec. This is the configuration the pipeline was validated with, and where the feature pays off fully.
 

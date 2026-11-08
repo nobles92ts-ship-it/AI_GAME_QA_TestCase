@@ -8,6 +8,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.9] — 2026-11-08
+
+### Added
+
+- **Second-brain kit (`brain/`).** `build_bundle.py` gathers your own docs into one layered bundle (`# [layer/domain] path` per document); versioned spec folders keep only the latest version, and archive copies are excluded by `deny` globs. `brain_search.py` searches the bundle from any folder with SQLite FTS5 (standard library only). `brain_manifest.example.json` is the template; the real manifest is git-ignored.
+- **`crossref_bundle` in `team/tc_config.json.example`.** When it points at the bundle, the S1 chain re-indexes it into context-mode on its own if the index is missing or older than the file (the gate and indexer already shipped in v4.2.3).
+
+### Changed
+
+- **The knowledge index is now recommended, not just optional.** README, PREREQUISITES and `brain/README.md` say plainly that tc-team runs fully only with a second brain, and point to the author's setup walkthrough on AI TRY. `crossref_brain` is still `off` by default, so a fresh clone behaves exactly as before.
+
 ## [v4.3.8] — 2026-10-26
 
 ### Added
