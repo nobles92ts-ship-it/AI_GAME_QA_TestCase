@@ -50,3 +50,9 @@ node-v20*/
 .DS_Store
 Thumbs.db
 .code-review-graph/
+
+# 세컨브레인 — 실제 매니페스트·번들·검색 색인은 머신-로컬 (example 만 추적)
+brain/brain_manifest.json
+brain/*.md
+!brain/README.md
+brain/*.search.db

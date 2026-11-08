@@ -43,6 +43,7 @@ This release replaces the `tc-팀-v2` multi-agent orchestrator with **tc-team**,
 - **4 input formats** — Confluence URL / PDF / Word / Excel, auto-detected
 - **No external API** — all model calls go through the Claude Code CLI
 - **Isolated model calls** — each `claude -p` child starts without your personal settings, plugins, MCP connectors, global rules or auto-memory; the tools declared in its agent file are the only tools it gets (`TCTEAM_ISOLATE=0` opts a run out)
+- **Runs fully with a second brain (new in v4.3.9)** — a kit in [`brain/`](brain/README.md) turns your own docs into a searchable brain the S1 chain uses to settle under-specified values ([details](#-recommended--connect-a-second-brain-this-is-how-tc-team-runs-at-100))
 - **An AI edition (new in v4.3.6)** — the same S1–S5 engine without a sheet: a spec goes in, and a Markdown bundle an AI agent can execute as QA comes out ([details](#-ai-edition--tc-team-ai))
 
 ---
@@ -213,13 +214,18 @@ node scripts/util/ssot_drift_check.js
 
 ---
 
-## 🧠 Optional — plug in your own knowledge index
+## 🧠 Recommended — connect a second brain (this is how tc-team runs at 100%)
 
-Specs reference values they never define — a drop rate that lives in a table doc, a status effect defined on another team's page. The S1 chain can look those up in a **knowledge index of your project's own design docs** and resolve them instead of guessing: definition found → folded into the design · data-table location cited on the TC · **missing spec area discovered → added to the coverage denominator** · no evidence → flagged for spec confirmation rather than invented.
+**tc-team works without a brain. It works fully only with one.**
 
-This is a **socket, not a shipped component**: `crossref_brain` is off by default and the pipeline is 100% identical without it. Turning it on takes three things — your own design docs, a one-time `context-mode` indexing pass, and two lines in `team/tc_config.json`. The docs must be *your project's* (the whole point is testing TCs against the design world they belong to); resemblance to anyone else's wiki is irrelevant.
+Specs reference values they never define — a drop rate that lives in a table doc, a status effect defined on another team's page. Without a brain, every one of those becomes a TC flagged "needs spec confirmation". With a **second brain of your project's own docs**, the S1 chain looks each one up and resolves it instead of guessing: definition found → folded into the design · data-table location cited on the TC · **missing spec area discovered → added to the coverage denominator** · no evidence → still flagged rather than invented.
 
-The better the index, the more the pipeline resolves on its own instead of flagging for humans — see the **preparation ladder** in [PREREQUISITES](docs/PREREQUISITES.md).
+The kit ships in [`brain/`](brain/README.md): `build_bundle.py` gathers your docs into one layered bundle (latest spec version only), `brain_search.py` searches it from any folder, and three lines in `team/tc_config.json` (`crossref_brain`, `crossref_source`, `crossref_bundle`) connect it — the chain indexes the bundle itself. `crossref_brain` stays `off` by default, so a fresh clone runs safely with no setup.
+
+> ⭐ **Set it up the way the author does** — layers, the latest-version rule, how planner answers flow back in, what to leave out:
+> **[aitryed.com/en/built/second-brain](https://aitryed.com/en/built/second-brain/)** · 한국어 [aitryed.com/ko/built/second-brain](https://aitryed.com/ko/built/second-brain/)
+
+The docs must be *your project's* (the whole point is testing TCs against the design world they belong to). A rough brain never breaks a run — no match or no index ends in `keep` — but the better it is, the more the pipeline settles on its own. See the **preparation ladder** in [PREREQUISITES](docs/PREREQUISITES.md).
 
 ---
 
@@ -282,6 +288,11 @@ AI_GAME_QA_TestCase/
 │   ├── lib/                      # Rewrite stage + preservation gate, Markdown export, sheet-free confidence
 │   ├── scripts/run_ai.js         # The runner
 │   └── test/                     # 6 suites (synthetic fixtures)
+│
+├── brain/                        # Second-brain kit — bundle your docs, search them, connect to S1
+│   ├── build_bundle.py           # Layered bundle, latest spec version only
+│   ├── brain_search.py           # Search the bundle from any folder (SQLite FTS5)
+│   └── brain_manifest.example.json
 │
 ├── scripts/
 │   ├── handoff_gate.py           # Between-step markdown integrity gate
