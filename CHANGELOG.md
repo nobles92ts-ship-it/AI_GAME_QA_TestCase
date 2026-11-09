@@ -8,6 +8,16 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.10] — 2026-11-09
+
+### Changed
+- **The project name the rules were validated on is gone from the public repo.** It is now the placeholder `MYGAME` / `mygame` everywhere. Rule text, agent prompts, comments and tests change together, so behaviour inside the repo is unchanged (test suites give the same results as v4.3.9).
+- **⚠ Two runtime names changed — check this if you already set `crossref_brain: "on"`.**
+  - The crossref output file is now `brain_crossref.json`. Crossref files written by v4.3.9 or earlier are ignored. Rerun S1 to regenerate.
+  - Evidence headers are now `[D/MYGAME]`. Set `"domain": "MYGAME"` in `brain_manifest.json` and rebuild the bundle, or rename `MYGAME` to your project name in `skills/tc-team/rules/tc-대조.md`.
+
+---
+
 ## [v4.3.9] — 2026-11-08
 
 ### Added
