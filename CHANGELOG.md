@@ -8,6 +8,14 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.13] — 2026-11-09
+
+### Fixed
+- **`appscript/dashboard_share.gs` shipped a real Slack channel ID and channel name.** `SLACK_CHANNEL` is now `YOUR_SLACK_CHANNEL_ID`. Set it to your own channel before deploying the Apps Script, or the share checkbox has nowhere to post.
+- Build and command names from the original project (trunk branch name, a milestone build label, a cheat-command prefix, a dashboard title) are replaced with neutral ones in a rule example, a comment and a test fixture. No behaviour change: test results match v4.3.12.
+
+---
+
 ## [v4.3.12] — 2026-11-09
 
 ### Fixed
