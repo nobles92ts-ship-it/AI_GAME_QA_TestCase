@@ -7,7 +7,7 @@
  *      → 담당자 displayName에서 이름만("시스템/강현규"→"강현규"). **[QA] 하위 업무는 제외**.
  *
  * 사용법:
- *   node jira_assignees.js <confluence_raw.md 경로 | DX-1234>
+ *   node jira_assignees.js <confluence_raw.md 경로 | PROJ-1234>
  *
  * 출력(stdout): {"기획":"...","서버":"...","클라":"...","UI":"..."}  (미발견=빈 문자열)
  * 종료 코드: 0=정상(키 미발견 포함 — 빈값 JSON) / 1=Jira 접근 실패(호출자는 '{}' 폴백)
@@ -63,7 +63,7 @@ function nameOnly(displayName) {
 async function main() {
     const arg = process.argv[2];
     if (!arg) {
-        console.error('사용법: node jira_assignees.js <confluence_raw.md 경로 | DX-1234>');
+        console.error('사용법: node jira_assignees.js <confluence_raw.md 경로 | PROJ-1234>');
         process.exit(1);
     }
 

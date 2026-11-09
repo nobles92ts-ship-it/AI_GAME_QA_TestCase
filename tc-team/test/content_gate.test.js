@@ -104,12 +104,12 @@ t('G열 enum 위반 차단 / 3종 허용', () => {
   for (const g of ['PC', '모바일', 'PC/모바일']) assert.ok(checkContent([row({ G: g })]).pass, g);
 });
 
-t('J열 화이트리스트 — 4종+빈값+DXBUG 허용, 그외 차단', () => {
-  for (const j of ['', '추후 구현', '구현 우선순위 낮음', '기획 확인 필요', 'DXBUG-123', 'DXBUG-9']) {
+t('J열 화이트리스트 — 4종+빈값+BUG 허용, 그외 차단', () => {
+  for (const j of ['', '추후 구현', '구현 우선순위 낮음', '기획 확인 필요', 'BUG-123', 'BUG-9']) {
     assert.ok(checkContent([row({ J: j })]).pass, 'allow: ' + j);
   }
   assert.strictEqual(checkContent([row({ J: '아무 메모' })]).byType.j_whitelist, 1);
-  assert.strictEqual(checkContent([row({ J: 'DXBUG-abc' })]).byType.j_whitelist, 1, 'DXBUG 뒤 숫자 아니면 위반');
+  assert.strictEqual(checkContent([row({ J: 'BUG-abc' })]).byType.j_whitelist, 1, 'BUG 뒤 숫자 아니면 위반');
 });
 
 t('위반 리포트에 row index + tc_id 포함', () => {

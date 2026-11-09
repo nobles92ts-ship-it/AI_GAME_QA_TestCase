@@ -30,8 +30,8 @@ try {
                                after: '이 규칙은 기획 확인이 필요하다.', reason: '근거 없음' }], false);
   check('add_row J prose rejected', [{ op: 'add_row', after_tc_id: '019',
                                        row: { j: '기획 확인이 필요하다.' }, reason: '근거 없음' }], false);
-  check('DXBUG id accepted', [{ op: 'edit_cell', col: 'J', tc_id: '019',
-                                after: 'DXBUG-123', reason: '기등록 버그' }], true);
+  check('BUG id accepted', [{ op: 'edit_cell', col: 'J', tc_id: '019',
+                                after: 'BUG-123', reason: '기등록 버그' }], true);
   console.log(`결과: ${pass} PASS / 0 FAIL`);
 } finally {
   fs.rmSync(path.join(dir, 'plan.json'), { force: true });

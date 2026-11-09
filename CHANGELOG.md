@@ -12,7 +12,9 @@ All notable changes to this project are documented here.
 
 ### Fixed
 - **`appscript/dashboard_share.gs` shipped a real Slack channel ID and channel name.** `SLACK_CHANNEL` is now `YOUR_SLACK_CHANNEL_ID`. Set it to your own channel before deploying the Apps Script, or the share checkbox has nowhere to post.
-- Build and command names from the original project (trunk branch name, a milestone build label, a cheat-command prefix, a dashboard title) are replaced with neutral ones in a rule example, a comment and a test fixture. No behaviour change: test results match v4.3.12.
+- **The bug-key check in column J now expects `BUG-<number>`.** It used the original project's issue key. If your tracker uses another key, change `J_BUG_RE` in `scripts/util/validate_tc_rows.js` and the matching rule lines. Example keys elsewhere are now `PROJ-1234`.
+- `dashboard_share.gs`: the web-report link now points at `https://YOUR_REPORT_SITE/` (it pointed at the original project's report site).
+- Build and command names from the original project, real page IDs and a page title in a test fixture, and a few real UI string keys and in-game messages in rule examples are replaced with neutral ones. These were a trunk branch name, a milestone build label, a cheat-command prefix and a dashboard title. No behaviour change: test results match v4.3.12.
 
 ---
 
@@ -103,7 +105,7 @@ All notable changes to this project are documented here.
 
 - **S7 looks for the answer before it asks.** FINAL-5a used to turn every design-time open point into a planning-confirmation question. It now searches other sections of the spec, linked pages and extracted game-data descriptions first, then drops a candidate that is already answered, that a TC can be written without, or that repeats another question's axis. Dropped candidates go to `_labels_dropped.json` and appear in the completion report, so nothing disappears silently.
 - **Confidence no longer reads S7's delta cross-reference items** (`excludeS7Delta`, on by default). S7 merges them after FINAL-0 has scored, so a normal run never saw them; a later FINAL-0 re-run did, and pushed grades down to D. Both runs now score the same input.
-- **Column J takes status flags only.** S4's edits and added rows may write empty, `추후 구현`, `구현 우선순위 낮음`, `기획 확인 필요` or `DXBUG-N` in column J, and the fix-plan validator rejects anything else.
+- **Column J takes status flags only.** S4's edits and added rows may write empty, `추후 구현`, `구현 우선순위 낮음`, `기획 확인 필요` or `BUG-N` in column J, and the fix-plan validator rejects anything else.
 
 ### Fixed
 

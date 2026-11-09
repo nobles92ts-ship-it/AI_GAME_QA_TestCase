@@ -18,7 +18,7 @@ const fs = require('fs');
 const ABSTRACT = /올바르게|(?<!비)정상적으로|적절히|제대로|문제없이/;   // run_pipeline.sh:442 정확 승계
 const G_ENUM = ['PC', '모바일', 'PC/모바일'];                            // tc-생성.md:60 / :444
 const J_WHITELIST = ['', '추후 구현', '구현 우선순위 낮음', '기획 확인 필요']; // :445
-const DXBUG = /^DXBUG-\d+/;
+const BUG = /^BUG-\d+/;
 // ── v2 규칙 (2026-07-12, A/B 주변감지 환류) ──
 // 위임표현: 미확정 스펙을 외부 문서에 위임 — J='기획 확인 필요' 플래그 없으면 차단, 있으면 경고(의도적 잔존 허용)
 const DELEGATION = /스펙대로|규칙대로|정책대로|기준대로/;
@@ -60,7 +60,7 @@ function checkContent(rows) {
     if (r.some(v => typeof v === 'string' && v.includes('Output Format:')))
       violations.push({ row: i, tc_id: tcId, type: 'output_format_residue', cell: '*' });
     if (!G_ENUM.includes(G)) violations.push({ row: i, tc_id: tcId, type: 'g_enum', cell: 'G', value: G });
-    if (!(J_WHITELIST.includes(J) || DXBUG.test(J))) violations.push({ row: i, tc_id: tcId, type: 'j_whitelist', cell: 'J', value: J });
+    if (!(J_WHITELIST.includes(J) || BUG.test(J))) violations.push({ row: i, tc_id: tcId, type: 'j_whitelist', cell: 'J', value: J });
     if (DELEGATION.test(F)) {
       if (J === J_PLAN_FLAG) warnings.push({ row: i, tc_id: tcId, type: 'delegation_flagged', cell: 'F', value: F });
       else violations.push({ row: i, tc_id: tcId, type: 'delegation_unflagged', cell: 'F', value: F });

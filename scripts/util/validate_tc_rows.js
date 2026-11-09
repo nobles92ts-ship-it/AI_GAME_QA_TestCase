@@ -33,9 +33,9 @@ const COL_B = 0; // 대분류 (tc_data idx 0, 시트 B열)
 
 const PLATFORM_ENUM = ['PC', '모바일', 'PC/모바일'];
 const STAGE_ENUM = ['정상', '부정', '예외'];
-// J열 화이트리스트 — 리터럴 4종 + DXBUG 패턴 (플레이스홀더 'DXBUG-XXXX' 자체는 위반 — L4-09)
+// J열 화이트리스트 — 리터럴 4종 + BUG 패턴 (플레이스홀더 'BUG-XXXX' 자체는 위반 — L4-09)
 const J_WHITELIST = ['', '추후 구현', '구현 우선순위 낮음', '기획 확인 필요'];
-const J_DXBUG_RE = /^DXBUG-\d+$/;
+const J_BUG_RE = /^BUG-\d+$/;
 
 // 분류 컬럼(B/C/D)에 동작/동사 표현 금지 — EVAL-19 ①②
 const FORBIDDEN_VERBS_IN_CATEGORY = [
@@ -74,7 +74,7 @@ const TAG_SPLIT_RE = /\[(사전\s*조건|사전\s*상태|행동|기대\s*결과)
 //     기능AE_v2 실측 — 정상 17행 중 11행은 인용할 식별자가 아예 없다
 //     (`확인 버튼 입력 시 세공이 진행되는지`). 전 행 강제는 65%를 헛되이 막고,
 //     통과시키려고 가짜 식별자를 붙이게 만든다. 규칙은 존재 강제가 아니라 **위치 강제**다.
-//   식별자 = 밑줄 포함(StatRoll_UI_StatMax) 또는 CamelCase 2혹 이상(CompoundProbTable).
+//   식별자 = 밑줄 포함(Sample_UI_StatMax) 또는 CamelCase 2혹 이상(CompoundProbTable).
 //     Max·Lock·UI·On·Tab·PC 같은 일반 영단어는 식별자가 아니다 (오탐 방지).
 const BASIC_ID_RE = /[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]*[A-Za-z0-9]|[A-Z][a-z]+[A-Z][A-Za-z]*/;
 // 합법 위치를 도려낸 뒤 남은 곳에 식별자가 있으면 위반.
@@ -108,7 +108,7 @@ function normJ(v) { return s(v); }
 function isJAllowed(j) {
   const n = normJ(j);
   if (J_WHITELIST.includes(n)) return true;
-  return J_DXBUG_RE.test(n);
+  return J_BUG_RE.test(n);
 }
 
 /**
@@ -116,7 +116,7 @@ function isJAllowed(j) {
  * 생성(create_gsheet)과 검증(validateFull/precheck)이 반드시 이 함수를 공유한다.
  *  - 기본기능 행: G=PC 강제 전제 → H=미진행, I=N/A
  *  - J='추후 구현': 플랫폼 무관 H/I 모두 N/A
- *  - 그 외(빈값·구현 우선순위 낮음·기획 확인 필요·DXBUG-####):
+ *  - 그 외(빈값·구현 우선순위 낮음·기획 확인 필요·BUG-####):
  *    플랫폼 파생 — PC 포함 시 H=미진행 아니면 N/A / 모바일 포함 시 I=미진행 아니면 N/A
  */
 function expectedHI(j, platform, isBasic) {
@@ -598,7 +598,7 @@ function validateFull(filePath, opts = {}) {
 
     // V-19 J 화이트리스트
     if (!isJAllowed(r.J)) {
-      violations.push({ sev: 'HIGH', rule: 'V-19', row: r.sheetRow, msg: `${loc} J열 "${r.J}" — 화이트리스트 외${normJ(r.J) === 'DXBUG-XXXX' ? ' (플레이스홀더 리터럴 금지)' : ''}` });
+      violations.push({ sev: 'HIGH', rule: 'V-19', row: r.sheetRow, msg: `${loc} J열 "${r.J}" — 화이트리스트 외${normJ(r.J) === 'BUG-XXXX' ? ' (플레이스홀더 리터럴 금지)' : ''}` });
     }
     // V-20/V-09 H/I 정합 (시트 덤프만)
     if (caps.hasHI) {

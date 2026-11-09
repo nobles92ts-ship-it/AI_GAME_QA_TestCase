@@ -79,7 +79,7 @@ https://{CONFLUENCE_SITE}/wiki/spaces/{SPACE_KEY}/pages/{PAGE_ID}?preview=/{PAGE
 | ⑤ 기존 다른 HYPERLINK (다른 URL) | ⏸ **보류** | 셀 유지, 보고서에 "사용자 확인 필요" |
 | ⑥ 이미 동일 URL HYPERLINK | ⚠️ **스킵** | 변경 없음, 보고서에 "중복 없음 확인" |
 
-**비고(J열)는 절대 건드리지 않음** — 기존 "기획 논의 중", "DXBUG-xxxx" 등 보존.
+**비고(J열)는 절대 건드리지 않음** — 기존 "기획 논의 중", "BUG-xxxx" 등 보존.
 
 **핵심 원칙**: **데이터 손실 절대 X**. ③④⑤ 케이스는 무조건 보류하고 사용자에게 결정 위임.
 

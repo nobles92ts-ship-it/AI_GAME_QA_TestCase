@@ -429,7 +429,7 @@ findings 3파일을 Read하라: "__WORK__/lens_structure.json" · "__WORK__/lens
 "__WORK__/tcteam_snapshot.json" 을 Read해 실제 tc_id(A열)와 현재 셀값 확인. 규칙:
 - edit_cell: {"op":"edit_cell","tc_id":"...","col":"F|J|E|G","before":"현재값 그대로","after":"...","reason":"..."}. F/E의 after는 추상표현 금지·사람언어·단일문장.
 - add_row: {"op":"add_row","after_tc_id":"앵커","row":{"b":"","c":"","d":"","e":"","f":"","g":"","j":""},"reason":"..."}. 커버리지 누락 신규행. g는 정확히 PC|모바일|PC/모바일. ⚠ 앵커는 같은 소분류(d)의 마지막 행으로 골라 그룹 분산(V-17) 방지.
-- J열은 설명문이 아닌 상태 플래그다. edit_cell.after(J)와 add_row.row.j는 빈값|추후 구현|구현 우선순위 낮음|기획 확인 필요|DXBUG-N 중 하나만 정확히 써라. 기획 확인 사유의 문장은 reason에 쓴다.
+- J열은 설명문이 아닌 상태 플래그다. edit_cell.after(J)와 add_row.row.j는 빈값|추후 구현|구현 우선순위 낮음|기획 확인 필요|BUG-N 중 하나만 정확히 써라. 기획 확인 사유의 문장은 reason에 쓴다.
 - delete_row: {"op":"delete_row","tc_id":"...","reason":"..."}. 무의미 중복만.
 - 확신 없으면 배제. patches 비어도 정상.
 결과는 "__WORK__/fix_plan.json" 에 {"rationale":"...","patches":[...]} JSON으로 Write하라(다른 파일 금지). 저장 후 "JUDGE_DONE"만 출력.

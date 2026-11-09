@@ -31,7 +31,7 @@ user-invocable: false
 예시:
 ```
 마나가 0인 상태에서 소모량 50의 스킬을 사용하면 시전이 차단되는지 확인
-친구가 50명(Friend_Relationship_MaxCount)인 상태에서 추가 요청 시 차단 메시지가 표시되는지 확인
+친구가 50명(Sample_Relationship_MaxCount)인 상태에서 추가 요청 시 차단 메시지가 표시되는지 확인
 ```
 
 ---

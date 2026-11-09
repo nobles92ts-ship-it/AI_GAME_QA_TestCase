@@ -186,7 +186,7 @@ if (cmd === 'extract-s3-rules') {
     if (!Array.isArray(j.patches)) bad('patches 배열 아님');
     const validJ = v => typeof v === 'string' &&
       (['', '추후 구현', '구현 우선순위 낮음', '기획 확인 필요'].includes(v.trim()) ||
-       /^DXBUG-\d+$/.test(v.trim()));
+       /^BUG-\d+$/.test(v.trim()));
     for (const p of j.patches) {
       if (!['edit_cell', 'add_row', 'delete_row'].includes(p.op)) bad('op 불량: ' + p.op);
       if (!p.reason) bad('reason 누락');

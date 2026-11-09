@@ -1,6 +1,6 @@
 'use strict';
 // impact_scope.js self 노드 해결 — 그 문서 **자신의 머리말 출처 줄**에서만 self 를 잡고, id 를 언급만 한 문서로 되돌아가지 않는다
-// (2026-09-11 실측: Vault 미등재 기능X(424509531)이 그 id 를 본문 근거로 적은 「아이템 Index 사용 및 구분 정책」으로
+// (2026-09-11 실측: Vault 미등재 기능X(900000001)이 그 id 를 본문 근거로 적은 「샘플 정책 문서」으로
 //  오해결 → 남의 이웃 23건이 접점 축으로 승격. 경고는 `self 제목 불일치 의심` 한 줄뿐이었다)
 // 스크립트를 실제로 돌린다 — Vault·그래프·스펙은 전부 임시 폴더 픽스처(실제 MYGAME_Vault·그래프·스펙 폴더 무접촉).
 const assert = require('assert');
@@ -25,15 +25,15 @@ console.log('impact_scope 테스트 (self 노드 해결 — 머리말 출처 줄
 // ── Vault 픽스처 — a_ref/ 가 b_own/ 보다 먼저 읽힌다(옛 fallback 은 먼저 읽힌 참조 문서를 골랐다) ──
 // Vault 실측 머리말 출처 줄 형식(2026-09-11 · 453문서)
 const FORMATS = [
-  ['A_confluence', '> Confluence: https://x.atlassian.net/wiki/spaces/DX/pages/700000001'],
-  ['A_live', '> Confluence (live): https://x.atlassian.net/spaces/DX/pages/700000002 · v35'],
+  ['A_confluence', '> Confluence: https://x.atlassian.net/wiki/spaces/PROJ/pages/700000001'],
+  ['A_live', '> Confluence (live): https://x.atlassian.net/spaces/PROJ/pages/700000002 · v35'],
   ['B_page_id', '- page_id: 700000003'],
   ['B_bold_page_id', '- **page_id**: 700000004'],
-  ['B_url', '- URL: https://x.atlassian.net/wiki/spaces/DX/pages/700000005/Title'],
+  ['B_url', '- URL: https://x.atlassian.net/wiki/spaces/PROJ/pages/700000005/Title'],
   ['B_space_ID', '- **Page ID**: 700000006'],   // 이름을 B_page_id 와 대소문자만 다르게 두면 Windows 에선 같은 파일이다
-  ['B_source', '- source: https://x.atlassian.net/wiki/spaces/DX/pages/700000007'],
-  ['B_원본', '- **원본**: https://x.atlassian.net/wiki/spaces/DX/pages/700000008'],
-  ['B_출처', '- **출처**: https://x.atlassian.net/wiki/spaces/DX/pages/700000009'],
+  ['B_source', '- source: https://x.atlassian.net/wiki/spaces/PROJ/pages/700000007'],
+  ['B_원본', '- **원본**: https://x.atlassian.net/wiki/spaces/PROJ/pages/700000008'],
+  ['B_출처', '- **출처**: https://x.atlassian.net/wiki/spaces/PROJ/pages/700000009'],
   ['B_bare_bold', '**page_id**: 700000010'],
 ];
 const fmtId = (i) => String(700000001 + i);
@@ -41,12 +41,12 @@ W(path.join(VAULT, 'a_ref', '형식 참조 모음.md'),
   `# 형식 참조 모음\n> Confluence: https://x/pages/700000099\n\n${filler}\n${FORMATS.map((_, i) => `- 연관 문서 ${fmtId(i)}`).join('\n')}\n`);
 FORMATS.forEach(([name, line]) => W(path.join(VAULT, 'b_own', `fmt_${name}.md`), `# 형식 ${name}\n\n## 관련 시스템\n- [[이웃]]\n\n${line}\n\n${filler}\n`));
 
-// 실측 재현: 이 문서 자신은 285016066 이고, 424509531 은 15줄 밖 본문 근거 줄에만 있다(그 줄에 'Confluence' 도 있다)
-W(path.join(VAULT, 'a_ref', '아이템 Index 사용 및 구분 정책.md'),
-  `# 아이템 Index 사용 및 구분 정책\n\n## 관련 시스템\n- [[기능S]]\n\n**page_id**: 285016066\n**URL**: https://x/pages/285016066/Index\n\n${filler}\n> 근거: [[기능X]] (Confluence 424509531 — vault 미등재, 검토위임 백로그).\n`);
+// 실측 재현: 이 문서 자신은 900000002 이고, 900000001 은 15줄 밖 본문 근거 줄에만 있다(그 줄에 'Confluence' 도 있다)
+W(path.join(VAULT, 'a_ref', '샘플 정책 문서.md'),
+  `# 샘플 정책 문서\n\n## 관련 시스템\n- [[기능S]]\n\n**page_id**: 900000002\n**URL**: https://x/pages/900000002/Index\n\n${filler}\n> 근거: [[기능X]] (Confluence 900000001 — vault 미등재, 검토위임 백로그).\n`);
 // 기능Y 실측: 먼저 읽히는 문서가 id 를 언급 → 옛 fallback 이 그걸 self 로 골랐다
-W(path.join(VAULT, 'a_ref', '중간 보스 HP바.md'), `# 중간 보스 HP바\n> Confluence: https://x/pages/222000001\n\n${filler}\n- 부위 파괴 연동은 311853067 참조\n`);
-W(path.join(VAULT, 'b_own', '부위파괴 시스템.md'), `# 부위파괴 시스템\n\n## 관련 시스템\n- [[Boss_0002]]\n\n- **page_id**: 311853067\n- **URL**: https://x/pages/311853067\n`);
+W(path.join(VAULT, 'a_ref', '샘플 보스 UI.md'), `# 샘플 보스 UI\n> Confluence: https://x/pages/222000001\n\n${filler}\n- 부위 파괴 연동은 900000003 참조\n`);
+W(path.join(VAULT, 'b_own', '기능Y.md'), `# 기능Y\n\n## 관련 시스템\n- [[Boss_A]]\n\n- **page_id**: 900000003\n- **URL**: https://x/pages/900000003\n`);
 // 2026-09-05 회귀: 부모 컨테이너가 자식 목록에 자식 id 를 적었다(머리말 안이지만 출처 줄이 아니다)
 W(path.join(VAULT, 'a_ref', '버프_디버프.md'), `# 버프/디버프\n> Confluence: https://x/pages/111000001\n\n## 하위 문서\n- 버프/디버프 정의 (111000002)\n`);
 W(path.join(VAULT, 'b_own', '기능BD.md'), `# 버프/디버프 정의\n> Confluence: https://x/pages/111000002\n`);
@@ -56,10 +56,10 @@ W(path.join(VAULT, 'a_ref', '기능AW.md'),
 // 숫자 경계: 555666777 안에 55666777 이 들어 있다
 W(path.join(VAULT, 'a_ref', '경계 문서.md'), `# 경계 문서\n> Confluence: https://x/pages/555666777\n`);
 
-const nodes = ['아이템 Index 사용 및 구분 정책', '샘플보스 Index 사용 및 구분 정책', '아바타 Index 사용 및 구분 정책',
-  '부위파괴 시스템', 'Boss_0002', '중간 보스 HP바', 'HP바 UI', '기능BD', '보스 CC 면역', '기능AW', '이펙트 목록'];
-const edges = [['아이템 Index 사용 및 구분 정책', '샘플보스 Index 사용 및 구분 정책'], ['아이템 Index 사용 및 구분 정책', '아바타 Index 사용 및 구분 정책'],
-  ['부위파괴 시스템', 'Boss_0002'], ['중간 보스 HP바', 'HP바 UI'], ['기능BD', '보스 CC 면역'], ['기능AW', '이펙트 목록']];
+const nodes = ['샘플 정책 문서', '샘플보스 Index 사용 및 구분 정책', '아바타 Index 사용 및 구분 정책',
+  '기능Y', 'Boss_A', '샘플 보스 UI', 'HP바 UI', '기능BD', '보스 CC 면역', '기능AW', '이펙트 목록'];
+const edges = [['샘플 정책 문서', '샘플보스 Index 사용 및 구분 정책'], ['샘플 정책 문서', '아바타 Index 사용 및 구분 정책'],
+  ['기능Y', 'Boss_A'], ['샘플 보스 UI', 'HP바 UI'], ['기능BD', '보스 CC 면역'], ['기능AW', '이펙트 목록']];
 W(GRAPH, JSON.stringify({ generated: 'fixture', nodes: nodes.map((id) => ({ id })), edges: edges.map(([s, t]) => ({ s, t, type: 'wikilink' })) }));
 
 function run(spec, id, extra = []) {
@@ -74,16 +74,16 @@ function run(spec, id, extra = []) {
 const warned = (j, prefix) => j.warnings.some((w) => w.startsWith(prefix));
 
 t('본문에서만 id 를 언급한 문서는 self 가 아니다 → 미해결 · 후보 0 · 참조 문서를 경고로 (기능X 실측)', () => {
-  const j = run('기능X', '424509531');
+  const j = run('기능X', '900000001');
   assert.strictEqual(j.self_node, null, `self=${j.self_node}`);
   assert.deepStrictEqual(j.counts, { hop1: 0, hop2: 0, promoted: 0, alias_promoted: 0, reference: 0 });
-  assert.ok(warned(j, 'self 노드 미해결 (pageId=424509531)'), j.warnings.join(' | '));
-  assert.ok(warned(j, '본문 참조만 발견: 아이템 Index 사용 및 구분 정책 —'), j.warnings.join(' | '));
+  assert.ok(warned(j, 'self 노드 미해결 (pageId=900000001)'), j.warnings.join(' | '));
+  assert.ok(warned(j, '본문 참조만 발견: 샘플 정책 문서 —'), j.warnings.join(' | '));
 });
 
 t('출처 줄이 있는 문서가 id 를 먼저 언급한 문서를 이긴다 (기능Y 실측)', () => {
-  const j = run('기능Y', '311853067');
-  assert.strictEqual(j.self_node, '부위파괴 시스템');
+  const j = run('기능Y', '900000003');
+  assert.strictEqual(j.self_node, '기능Y');
   assert.strictEqual(j.counts.hop1, 1);
   assert.ok(!warned(j, '본문 참조만 발견'), j.warnings.join(' | '));
 });
@@ -111,7 +111,7 @@ t('id 는 숫자 경계로 맞춘다 — 짧은 id 가 긴 id 의 일부로 잡�
 });
 
 t('--node 강제 지정은 해결을 건너뛴다 (참조 경고도 없다)', () => {
-  const j = run('강제_지정', '424509531', ['--node', '강제노드']);
+  const j = run('강제_지정', '900000001', ['--node', '강제노드']);
   assert.strictEqual(j.self_node, '강제노드');
   assert.ok(!warned(j, '본문 참조만 발견'), j.warnings.join(' | '));
 });

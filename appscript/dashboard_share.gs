@@ -227,7 +227,7 @@ function buildDashboardBlocks(stat, feats, milestone, url) {
     : '';
 
   const links = (milestone
-      ? '📋 <https://qa-report-deploy-phi.vercel.app/' + encodeURIComponent(milestone) + '/|'
+      ? '📋 <https://YOUR_REPORT_SITE/' + encodeURIComponent(milestone) + '/|'
         + milestone + ' 웹 리포트 보기>　　'
       : '')
     + '📊 <' + url + '|TC 시트 열기>';

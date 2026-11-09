@@ -32,7 +32,7 @@ t('탭이 있으면 _v2, _v2 도 있으면 _v3', () => {
 t('--preflight: 올바른 URL 은 ok, 깨진 URL 은 실패', () => {
   const env = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
   const ok = spawnSync('python', [S0, '--preflight', '--sheet-url', 'https://docs.google.com/spreadsheets/d/abcDEF_123/edit',
-    '--conf-url', 'https://x.atlassian.net/wiki/spaces/DX/pages/123456/T'], { encoding: 'utf8', env });
+    '--conf-url', 'https://x.atlassian.net/wiki/spaces/PROJ/pages/123456/T'], { encoding: 'utf8', env });
   assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);
   const bad = spawnSync('python', [S0, '--preflight', '--sheet-url', 'nope', '--conf-url', 'nope'], { encoding: 'utf8', env });
   assert.strictEqual(bad.status, 1);
