@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # crossref_delta.sh — 델타 대조 함수 정의 (source 전용 — 직접 실행하지 않는다)
 #
-# 늦게 태어난 「기획 확인 필요」를 사람에게 내보내기 전에 뇌(DXR 위키 색인)에 먼저 물어본다.
-# 2026-09-09 오너 지시: "최근에 생기는 것들은 dxr 검색 부터". 본 대조는 S1→S2 사이 1회뿐이라
+# 늦게 태어난 「기획 확인 필요」를 사람에게 내보내기 전에 뇌(MYGAME 위키 색인)에 먼저 물어본다.
+# 2026-09-09 오너 지시: "최근에 생기는 것들은 mygame 검색 부터". 본 대조는 S1→S2 사이 1회뿐이라
 # 그 뒤에 태어난 질의는 뇌에 한 번도 안 물어본 채 사람에게 나갔다. 두 지점이 이 정의 하나를 쓴다:
 #   crossref_delta fixplan S4 — run_pipeline_full.sh S4→S5 사이. 리뷰가 새로 단 「기획 확인 필요」
 #   crossref_delta final   S7 — finalize.sh FINAL-5a(패널 도출·검증) 직후 · 5b(시트 기재) 직전.
@@ -53,7 +53,7 @@ crossref_delta() {
 - 산출: $XOUT — {\"items\":[{id,term,branch,source,note,approved}]} (tc-대조.md §2.1 items 스키마)
 
 ## 작업 지시
-$XIN 의 items 각 항목을 tc-대조.md 지침대로 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC2\")에 대조하라.
+$XIN 의 items 각 항목을 tc-대조.md 지침대로 제2의 뇌(MYGAME 위키 색인, ctx_search source=\"$XSRC2\")에 대조하라.
 입력 item 의 id 를 **그대로 유지**해 결과 items 에 담을 것 — 병합기가 id 로 멱등 처리한다.
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep).
 로컬 데이터테이블 값: $SPEC/xlsx_extract.md 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
@@ -72,8 +72,8 @@ $XIN 의 items 각 항목을 tc-대조.md 지침대로 제2의 뇌(DXR 위키 �
 
     if [[ -f "$XOUT" ]]; then
       # --input: term·tc_id·context 는 수집 원문으로 되돌린다 — 에이전트가 고쳐 쓴 term 은 주입 매칭을 조용히 끊는다
-      "$NODE" "$LIB/crossref_delta_merge.js" "$WORK/dxr_crossref.json" "$XOUT" --origin "$ORIGIN" --input "$XIN" >>"$CHAIN_LOG" 2>&1 \
-        || log "[$ORIGIN-델타대조][경고] 병합 실패 — dxr_crossref.json 미갱신(비차단)"
+      "$NODE" "$LIB/crossref_delta_merge.js" "$WORK/brain_crossref.json" "$XOUT" --origin "$ORIGIN" --input "$XIN" >>"$CHAIN_LOG" 2>&1 \
+        || log "[$ORIGIN-델타대조][경고] 병합 실패 — brain_crossref.json 미갱신(비차단)"
     else
       log "[$ORIGIN-델타대조][경고] 산출 없음 — 병합 스킵(비차단)"
     fi
@@ -86,7 +86,7 @@ $XIN 의 items 각 항목을 tc-대조.md 지침대로 제2의 뇌(DXR 위키 �
   [[ "$MODE" == "final" ]] || return 0
   local AOUT ARC AQ=0 AJ=0 AR=0 AM=0
   local RE_Q='질의 ([0-9]+)건' RE_J='판정 ([0-9]+)건' RE_R='제거 ([0-9]+)건' RE_M='남음 ([0-9]+)건'
-  AOUT=$("$NODE" "$LIB/crossref_labels_annotate.js" "$SPEC/_labels.json" "$WORK/dxr_crossref.json" 2>&1)
+  AOUT=$("$NODE" "$LIB/crossref_labels_annotate.js" "$SPEC/_labels.json" "$WORK/brain_crossref.json" 2>&1)
   ARC=$?
   [[ -n "$AOUT" ]] && printf '%s\n' "$AOUT" >>"$CHAIN_LOG"
   if [[ $ARC -ne 0 ]]; then

@@ -1,12 +1,12 @@
 {
-  "_comment": "Copy to brain_manifest.json (git-ignored) and point the paths at YOUR docs. layer: D = design wiki (the only layer the pipeline may cite as spec) · R = past TC output · P = personal notes · E = reviews. The shipped crossref rule (skills/tc-team/rules/tc-대조.md) accepts '[D/DXR]' headers as evidence — DXR is the project it was validated on. Keep domain 'DXR' for your design wiki, or rename it in that rule file too.",
+  "_comment": "Copy to brain_manifest.json (git-ignored) and point the paths at YOUR docs. layer: D = design wiki (the only layer the pipeline may cite as spec) · R = past TC output · P = personal notes · E = reviews. The shipped crossref rule (skills/tc-team/rules/tc-대조.md) accepts '[D/MYGAME]' headers as evidence — MYGAME is a placeholder project name. Keep domain 'MYGAME' for your design wiki, or rename it to your project in that rule file too.",
   "bundle": "~/tc-work/brain/brain_bundle.md",
   "sources": [
     {
       "label": "wiki",
       "path": "~/tc-work/design-wiki",
       "layer": "D",
-      "domain": "DXR",
+      "domain": "MYGAME",
       "include": ["**/*.md"],
       "deny": ["**/_archive/**", "**/*.bak*"]
     },

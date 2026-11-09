@@ -2,7 +2,7 @@
 /**
  * crossref_delta_merge.js — 델타 대조 결과 병합기 (결정론·멱등)
  *
- * 델타 대조 에이전트가 낸 결과를 원본 dxr_crossref.json 에 흡수한다.
+ * 델타 대조 에이전트가 낸 결과를 원본 brain_crossref.json 에 흡수한다.
  * 원본이 없으면 새로 만든다(대조 스킵 런에서 델타만 도는 경우 대비).
  *
  * 멱등: item.id 기준. 같은 id 가 이미 있으면 덮어쓴다(재실행 안전).
@@ -13,7 +13,7 @@
  *   term 완전일치로 답 있는 질문을 빼므로, 한 글자만 달라져도 그 질문은 답이 있는데도 조용히 남는다
  *   (실측: 과거 델타 114건 중 1건 변형).
  *
- * usage: crossref_delta_merge.js <dxr_crossref.json> <delta_result.json> [--origin S4|S7] [--input <delta_in.json>]
+ * usage: crossref_delta_merge.js <brain_crossref.json> <delta_result.json> [--origin S4|S7] [--input <delta_in.json>]
  * exit: 0=병합 완료 / 1=오류(호출측이 비차단 처리)
  */
 'use strict';
@@ -45,7 +45,7 @@ function main() {
   const input = ii >= 0 && process.argv[ii + 1] ? readJSON(process.argv[ii + 1], null) : null;
 
   if (!target || !deltaPath) {
-    console.error('usage: crossref_delta_merge.js <dxr_crossref.json> <delta_result.json> [--origin S4|S7] [--input <delta_in.json>]');
+    console.error('usage: crossref_delta_merge.js <brain_crossref.json> <delta_result.json> [--origin S4|S7] [--input <delta_in.json>]');
     process.exit(1);
   }
   if (!fs.existsSync(deltaPath)) {

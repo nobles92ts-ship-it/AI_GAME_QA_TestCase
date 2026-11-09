@@ -146,7 +146,7 @@ function provenanceHints(inputs) {
 
 /** Compare declared baseline values only; never edit inputs or settle source semantics. */
 function auditEvidence({ analysis, design, crossref = { items: [] }, raw = '' }) {
-  if (!crossref || !Array.isArray(crossref.items)) throw new Error('dxr_crossref.items must be an array');
+  if (!crossref || !Array.isArray(crossref.items)) throw new Error('brain_crossref.items must be an array');
   const findings = [];
   const a = baselineRows(analysis, 'analysis.md', findings);
   const d = baselineRows(design, 'tc_design.md', findings);
@@ -173,7 +173,7 @@ function auditEvidence({ analysis, design, crossref = { items: [] }, raw = '' })
 /** Re-read current artifacts and write only the audit report beside them. */
 function runAudit(spec) {
   const inputs = {}, inputHashes = {};
-  for (const name of ['analysis.md', 'tc_design.md', 'confluence_raw.md', 'dxr_crossref.json']) {
+  for (const name of ['analysis.md', 'tc_design.md', 'confluence_raw.md', 'brain_crossref.json']) {
     const file = path.join(spec, name);
     if (!fs.existsSync(file)) {
       if (name === 'analysis.md' || name === 'tc_design.md') throw new Error('필수 입력 없음: ' + name);
@@ -183,7 +183,7 @@ function runAudit(spec) {
     inputHashes[name] = crypto.createHash('sha256').update(bytes).digest('hex');
     inputs[name] = bytes.toString('utf8');
   }
-  const crossref = inputs['dxr_crossref.json'] === undefined ? { items: [] } : JSON.parse(inputs['dxr_crossref.json']);
+  const crossref = inputs['brain_crossref.json'] === undefined ? { items: [] } : JSON.parse(inputs['brain_crossref.json']);
   const result = auditEvidence({ analysis: inputs['analysis.md'], design: inputs['tc_design.md'], raw: inputs['confluence_raw.md'] || '', crossref });
   result.input_hashes = inputHashes;
   fs.writeFileSync(path.join(spec, 'design_evidence_audit.json'), JSON.stringify(result, null, 2) + '\n', 'utf8');

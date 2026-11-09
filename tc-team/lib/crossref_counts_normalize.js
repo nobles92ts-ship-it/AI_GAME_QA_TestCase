@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * crossref_counts_normalize.js — dxr_crossref.json 의 `counts` 를 소비부와 같은 식으로 다시 센다 (2026-09-07 신설)
+ * crossref_counts_normalize.js — brain_crossref.json 의 `counts` 를 소비부와 같은 식으로 다시 센다 (2026-09-07 신설)
  *
  * 배경: 대조 에이전트(LLM)가 `counts` 를 직접 써 넣는데, **발굴 항목을 `discovered[]` 배열에만 담고
  *   `counts.discover` 는 0 으로 남긴다.** 소비부(`run_pipeline_s1only.sh` 의 XC/XFIX)는
@@ -17,14 +17,14 @@
  *
  * ⚠ 판정은 손대지 않는다. 각 항목의 `branch` 는 그대로 두고 **집계 숫자만** 맞춘다.
  *
- * 사용: node crossref_counts_normalize.js <dxr_crossref.json> [--quiet]
+ * 사용: node crossref_counts_normalize.js <brain_crossref.json> [--quiet]
  * exit 0=정상(변경 없음 포함) / 2=인자·입력 오류
  */
 
 const fs = require('fs');
 
 const src = process.argv[2];
-if (!src || src.startsWith('--')) { console.error('[counts_norm] 사용: node crossref_counts_normalize.js <dxr_crossref.json>'); process.exit(2); }
+if (!src || src.startsWith('--')) { console.error('[counts_norm] 사용: node crossref_counts_normalize.js <brain_crossref.json>'); process.exit(2); }
 if (!fs.existsSync(src)) { console.error(`[counts_norm] 입력 없음: ${src}`); process.exit(2); }
 
 let cx;

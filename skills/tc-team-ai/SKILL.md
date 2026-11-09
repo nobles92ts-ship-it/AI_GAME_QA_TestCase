@@ -83,7 +83,7 @@ node "$ROOT/tc-team-ai/scripts/run_ai.js" --feature "$FEAT" --conf-url "<기획�
 
 1. `AI_DONE` 요약 그대로 — TC · 그룹 · 판정 보류 · 구조화 · 원문대로 · 질문 수 · 확신도 유무 · 못 이은 근거 규칙 연결 수(`rule_links_unmapped` — `null` 이면 원장이 없어 근거 규칙 줄이 하나도 없다).
 2. **원문대로(폴백) 비율과 사유 분포** — `ai_rewrite.json` 의 `fallback` 사유를 센다. 게이트 문턱(`rewrite_gate.js` `COVERAGE_MIN=0.6`)은 아직 실측 전이다 — 비율이 높으면 문턱부터 의심한다.
-3. 체인 관측 — 참조 문서 선수집(`linked/` 파일 수 vs `confluence_source_meta.json` 의 본문 참조 수 — 어긋나면 그 사실을 쓴다) · 이미지 마커 감사(`chain.log` `[STEP 2] 이미지 마커 감사:` 줄) · DXR 대조를 켰으면 crossref 4분기 비율 · 확신도 분포.
+3. 체인 관측 — 참조 문서 선수집(`linked/` 파일 수 vs `confluence_source_meta.json` 의 본문 참조 수 — 어긋나면 그 사실을 쓴다) · 이미지 마커 감사(`chain.log` `[STEP 2] 이미지 마커 감사:` 줄) · MYGAME 대조를 켰으면 crossref 4분기 비율 · 확신도 분포.
 4. **바깥 호출 0 확인** — `chain.log` 에 `[S6]`·`[S7]`·`[SLACK] 착수 공지 OK` 가 없고 `[SLACK] 시트 없는 런(--local) — 착수 공지 생략` 이 있다. 설계자 `drive_links` 는 빈 배열.
 
 ## 노브 (env)

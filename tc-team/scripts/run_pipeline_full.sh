@@ -326,7 +326,7 @@ PEOF
 fi
 
 # ══ 델타 대조 — 늦게 태어난 「기획 확인 필요」를 뇌에 먼저 물어본다 ═════════════
-# 2026-09-09 오너 지시: "최근에 생기는 것들은 dxr 검색 부터". 정의는 crossref_delta.sh 한 곳이다.
+# 2026-09-09 오너 지시: "최근에 생기는 것들은 mygame 검색 부터". 정의는 crossref_delta.sh 한 곳이다.
 #   crossref_delta fixplan S4 — 여기(S4→S5). 리뷰가 새로 단 「기획 확인 필요」 (답이 S5 적용 경로를 탄다)
 #   crossref_delta final   S7 — finalize.sh FINAL-5a↔5b 사이 (2026-09-11 이관 — 구 자리인 finalize 앞은
 #                                주입 대상 _labels.json 이 태어나기 전이라 전 런 주입 0건이었다)
@@ -656,7 +656,7 @@ if [[ $ST -le 7 ]]; then
   RTAB=$(resolved_tab)
   CURL2=$(grep -m1 '^CONFLUENCE_URL=' "$SPEC/sheet_info.txt" | cut -d= -f2- | tr -d '"\r'); [[ -z "$CURL2" ]] && CURL2="$CONF_URL"
 
-  # DXR 델타 대조(S7)는 finalize.sh 안 FINAL-5a↔5b 사이에서 돈다 — 여기(finalize 앞)는 _labels.json 이
+  # MYGAME 델타 대조(S7)는 finalize.sh 안 FINAL-5a↔5b 사이에서 돈다 — 여기(finalize 앞)는 _labels.json 이
   # 태어나기 전이라 주입이 전 런 0건이었다(2026-09-11 이관, backlog §5).
 
   log "[S7] 완료처리 시작 (finalize.sh — 규칙서 순서·문구 참조)"

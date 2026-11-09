@@ -187,7 +187,7 @@ t('crossref 산출물이 없어도 채점한다 (crossref_brain=off 환경)', ()
   const os = require('os'), fsx = require('fs');
   const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-off-'));
   ['tc_design.md', 'coverage_gaps.json'].forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
-  const r = computeItems(d);   // dxr_crossref.json · tc_skeleton.json 없음
+  const r = computeItems(d);   // brain_crossref.json · tc_skeleton.json 없음
   assert.strictEqual(r.items.length, 9);
   assert.ok(!r.items.some((i) => i.reasons.some((x) => x.id === 'R3' || x.id === 'R4')), 'crossref 없이 R3/R4 발화');
   fsx.rmSync(d, { recursive: true, force: true });
@@ -222,7 +222,7 @@ t("용어 이름에 ' / ' 가 있어도 항목 감점이 소분류 감점을 넘
   const os = require('os'), fsx = require('fs');
   const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-slash-'));
   fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
-  fsx.writeFileSync(path.join(d, 'dxr_crossref.json'), JSON.stringify({
+  fsx.writeFileSync(path.join(d, 'brain_crossref.json'), JSON.stringify({
     items: [{ term: '우편함 등급표 / 보상 수량 상한 / 환전 수수료', branch: 'keep' }],
   }), 'utf8');
   const lf = compute(d).scored.find((x) => x.name.startsWith('우편함 보상'));
@@ -466,11 +466,11 @@ t('기본기능 섹션은 매핑 대상이 아니다 (드리프트로도 안 잡
   const os = require('os'), fsx = require('fs');
   const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-sent-'));
   fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
-  const xr = JSON.parse(fsx.readFileSync(path.join(d, 'dxr_crossref.json'), 'utf8'));
+  const xr = JSON.parse(fsx.readFileSync(path.join(d, 'brain_crossref.json'), 'utf8'));
   const OWN = '등급표에 따른 보상 수량이 지급되는지 확인';               // 자기 TC = 우편함 정상-1
   const ORPHAN = '우편함이 가득 찬 상태에서 보상을 수령하면 대기열에 쌓이는지 확인'; // 자기 TC 없음
   xr.items.push({ term: OWN, branch: 'keep', source: '' }, { term: ORPHAN, branch: 'keep', source: '' });
-  fsx.writeFileSync(path.join(d, 'dxr_crossref.json'), JSON.stringify(xr), 'utf8');
+  fsx.writeFileSync(path.join(d, 'brain_crossref.json'), JSON.stringify(xr), 'utf8');
   const on = computeItems(d);
   const off = computeItems(d, { sentenceOwnOnly: false });
   fsx.rmSync(d, { recursive: true, force: true });
@@ -508,9 +508,9 @@ t('기본기능 섹션은 매핑 대상이 아니다 (드리프트로도 안 잡
   const run = (extra, override) => {
     const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-s7-'));
     fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
-    const xr = JSON.parse(fsx.readFileSync(path.join(d, 'dxr_crossref.json'), 'utf8'));
+    const xr = JSON.parse(fsx.readFileSync(path.join(d, 'brain_crossref.json'), 'utf8'));
     xr.items.push(...extra);
-    fsx.writeFileSync(path.join(d, 'dxr_crossref.json'), JSON.stringify(xr), 'utf8');
+    fsx.writeFileSync(path.join(d, 'brain_crossref.json'), JSON.stringify(xr), 'utf8');
     const res = computeItems(d, override);
     fsx.rmSync(d, { recursive: true, force: true });
     return res;

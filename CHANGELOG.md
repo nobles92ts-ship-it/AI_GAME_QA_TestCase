@@ -8,6 +8,16 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.10] — 2026-11-09
+
+### Changed
+- **The project name the rules were validated on is gone from the public repo.** It is now the placeholder `MYGAME` / `mygame` everywhere. Rule text, agent prompts, comments and tests change together, so behaviour inside the repo is unchanged (test suites give the same results as v4.3.9).
+- **⚠ Two runtime names changed — check this if you already set `crossref_brain: "on"`.**
+  - The crossref output file is now `brain_crossref.json`. Crossref files written by v4.3.9 or earlier are ignored. Rerun S1 to regenerate.
+  - Evidence headers are now `[D/MYGAME]`. Set `"domain": "MYGAME"` in `brain_manifest.json` and rebuild the bundle, or rename `MYGAME` to your project name in `skills/tc-team/rules/tc-대조.md`.
+
+---
+
 ## [v4.3.9] — 2026-11-08
 
 ### Added
@@ -157,7 +167,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
-- **Questions reached the planner without ever having been asked of the wiki.** The DXR crossref step runs once, between S1 and S2, so it can only see the confirmation items that exist at that moment. The adversarial review at S4 creates more of them, and those reached a human unqueried — the single largest source of questions whose answers were already written down somewhere. Two delta passes now close it: one at S4→S5, the only point where an answer can still flow through the apply path into a test's expected value, and one at S6→S7, the last net before the request panel is written. The crossref input also widened from the unspecified-value checklist and the external-dependency table to the **entire** confirmation block, which had quietly been carrying analyst ambiguity notes and missing-interaction items that no lens ever queried. Each question now leaves with one of three verdicts attached — defined, located, or **no basis found**. The third is the point: it is what distinguishes a question that was researched from one that was merely asked.
+- **Questions reached the planner without ever having been asked of the wiki.** The MYGAME crossref step runs once, between S1 and S2, so it can only see the confirmation items that exist at that moment. The adversarial review at S4 creates more of them, and those reached a human unqueried — the single largest source of questions whose answers were already written down somewhere. Two delta passes now close it: one at S4→S5, the only point where an answer can still flow through the apply path into a test's expected value, and one at S6→S7, the last net before the request panel is written. The crossref input also widened from the unspecified-value checklist and the external-dependency table to the **entire** confirmation block, which had quietly been carrying analyst ambiguity notes and missing-interaction items that no lens ever queried. Each question now leaves with one of three verdicts attached — defined, located, or **no basis found**. The third is the point: it is what distinguishes a question that was researched from one that was merely asked.
 
 - **Rapid-click cases were being generated for buttons that grant nothing.** The repetition lens produced a "click twice within 500ms" candidate for every subcategory that accepts input, a worked example in the design rules demonstrated it on a button whose only effect is opening a window, and the design review gate then required the pattern at 100%. Three layers reinforcing a case that verifies nothing: a window cannot be opened twice in a way anyone can observe. The pattern is now scoped to buttons where a single click actually grants a reward. Duplicate resource spend — the real risk on purchase and upgrade buttons — stays on the concurrency axis, which already owned it.
 
@@ -349,7 +359,7 @@ The tooling that found this — a corpus of planted, format-valid fake credentia
 The confidence score (stamped at S7, non-blocking) was shipped without a test suite and without ever being measured against real runs. This release closes both gaps. All findings below come from measurement over live pipeline output, not review.
 
 ### Fixed
-- **Confidence scoring crashed under the default config.** `crossref_brain: "off"` is the shipped default, and it means `dxr_crossref.json` is never written — but the scorer read it (plus `coverage_gaps.json`, `tc_skeleton.json`) with an unguarded `JSON.parse`, so it threw `ENOENT` instead of degrading. Missing inputs now fall back to empty and scoring proceeds on the rules that still have data.
+- **Confidence scoring crashed under the default config.** `crossref_brain: "off"` is the shipped default, and it means `brain_crossref.json` is never written — but the scorer read it (plus `coverage_gaps.json`, `tc_skeleton.json`) with an unguarded `JSON.parse`, so it threw `ENOENT` instead of degrading. Missing inputs now fall back to empty and scoring proceeds on the rules that still have data.
 - **`crossref_source` was a documented-but-dead config key.** v4.0.1 added it to `tc_config.json.example`, but `run_pipeline_s1only.sh` hardcoded the index name in the agent prompt, so setting it did nothing. Now read from config, with the previous value as fallback.
 - **`run-agent.sh` silently produced nothing under git-bash.** A git-bash `$HOME` — a POSIX path of the form `/c/<user-dir>` — was handed straight to a Windows-native `node`, which resolved it relative to the drive root as a nonexistent `C:\c\...` and failed. The failure mode was the bad part: the agent kept running and reported success while writing no file. Now converts via `cygpath` (with a manual `/c/x` → `C:/x` fallback), passes the path as `process.argv[1]` instead of interpolating it into JS source, and exits non-zero when the agent file is missing.
 - **Item-level cross-reference matching leaked the section name into the haystack.** A term that appeared only in the screen/section title — not in the test case line — still penalized that line. 199 TC lines (6.1%) in measurement.

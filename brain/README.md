@@ -53,7 +53,7 @@ The "brain" is just your own docs, gathered into one layered markdown file the p
 
 ## The three rules that make it work
 
-**Layers decide what counts as evidence.** `D` = design wiki, the only layer the pipeline may cite. `R` = past TC output, `P` = personal notes, `E` = reviews — searchable, never cited. Without layers, a TC can cite an older TC as if it were spec and copy its mistakes forward. The shipped crossref rule (`skills/tc-team/rules/tc-대조.md`) accepts `[D/DXR]` headings as evidence — DXR is the project it was validated on. Keep `"domain": "DXR"` for your design wiki, or rename it in that rule file too.
+**Layers decide what counts as evidence.** `D` = design wiki, the only layer the pipeline may cite. `R` = past TC output, `P` = personal notes, `E` = reviews — searchable, never cited. Without layers, a TC can cite an older TC as if it were spec and copy its mistakes forward. The shipped crossref rule (`skills/tc-team/rules/tc-대조.md`) accepts `[D/MYGAME]` headings as evidence — `MYGAME` is a placeholder project name. Keep `"domain": "MYGAME"` for your design wiki, or rename it to your project in that rule file too.
 
 **Latest version only.** When a spec is re-run as `_v2`, `_v3`, the old folders stay on disk. If they are indexed, a lookup can return a value that has since changed. `latest_version_only` keeps one folder per feature (a `draft_` prefix and a trailing ticket key like `_ABC123` are ignored when grouping); `deny` keeps archive copies such as `retired_*` out.
 

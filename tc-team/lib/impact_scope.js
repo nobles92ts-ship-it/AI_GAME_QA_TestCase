@@ -2,9 +2,9 @@
 /**
  * impact_scope.js — 기획서 영향 범위(접점 축) 결정론 추출기 (2026-09-05 신설)
  *
- * 배경: tc-team 의 뇌 대조(tc-대조)는 `ctx_search` **FTS 텍스트 검색만** 쓴다. DXR_관리가 이미
+ * 배경: tc-team 의 뇌 대조(tc-대조)는 `ctx_search` **FTS 텍스트 검색만** 쓴다. MYGAME_관리가 이미
  *   결정론으로 만들어 두는 **위키링크 그래프**(`_그래프.json` 397노드/2193 wikilink 엣지)와
- *   **2-hop 영향도**(`_DXR_영향도.md`)는 파이프라인에 배선된 적이 없다. 그래서 "이 기획서가 바뀌면
+ *   **2-hop 영향도**(`_MYGAME_영향도.md`)는 파이프라인에 배선된 적이 없다. 그래서 "이 기획서가 바뀌면
  *   어떤 시스템과 만나는가"가 **LLM 질의 운**에 걸려 있었다(2026-08-19 실측: 24질의 전멸 → 짧게
  *   재질의하니 keep 25 → locate 17/discover 2 로 판정이 통째로 뒤집힘).
  *
@@ -36,7 +36,7 @@
  *   (2026-09-05 실측: 「버프/디버프 정의」가 인박스에 14일 대기 중이라 노드 자체가 없었다).
  *
  * 사용: node impact_scope.js <SPEC_DIR> [--out <impact_scope.json>] [--node <노드id 강제지정>]
- *                            [--graph <_그래프.json>] [--vault <DXR_Vault>] [--aliases <impact_aliases.json>]
+ *                            [--graph <_그래프.json>] [--vault <MYGAME_Vault>] [--aliases <impact_aliases.json>]
  *                            [--max-df 12] [--min-hits2 3] [--hop1-only] [--hub-warn 25] [--quiet]
  * exit 0=정상(후보 0건 포함) / 2=인자·입력 오류
  */
@@ -45,7 +45,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_GRAPH = '{WORK_ROOT}/<프로젝트>_관리/_그래프.json';
-const DEFAULT_VAULT = '{WORK_ROOT}/DXR_Vault';
+const DEFAULT_VAULT = '{WORK_ROOT}/MYGAME_Vault';
 const DEFAULT_ALIASES = '{PROJECT_ROOT}/team/impact_aliases.json';
 
 // 제목에 흔한 범용어 — 이것만 맞았다고 접점이라 할 수 없다.

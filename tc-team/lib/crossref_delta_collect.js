@@ -2,9 +2,9 @@
 /**
  * crossref_delta_collect.js — 델타 대조 입력 수집기 (결정론)
  *
- * 배경(2026-09-09 오너 지시 "최근에 생기는 것들은 dxr 검색 부터"):
- *   DXR 뇌 대조는 S1→S2 사이에 딱 한 번 돈다. 그런데 「기획 확인 필요」 항목은
- *   S4 적대 리뷰에서도 새로 태어나고, 그것들은 이미 끝난 dxr_crossref.json 에
+ * 배경(2026-09-09 오너 지시 "최근에 생기는 것들은 mygame 검색 부터"):
+ *   MYGAME 뇌 대조는 S1→S2 사이에 딱 한 번 돈다. 그런데 「기획 확인 필요」 항목은
+ *   S4 적대 리뷰에서도 새로 태어나고, 그것들은 이미 끝난 brain_crossref.json 에
  *   존재할 수가 없다 — 즉 **뇌에 한 번도 안 물어본 채 사람에게 질의로 나간다.**
  *   이 스크립트는 그 신규분만 골라내 델타 대조의 입력으로 만든다.
  *
@@ -15,7 +15,7 @@
  *                    출처가 어디든 100% 걸리는 마지막 그물(사람에게 나가기 직전). 5a 뒤라야 패널 문장이
  *                    그대로 term 이 되어 주입기의 완전일치가 성립한다(구 자리 S6→S7 은 패널이 태어나기 전).
  *
- * id: 원장(dxr_crossref.json)의 같은 접두(D4-/D7-) 최대 번호 다음부터 매긴다. 병합기가 id 로 덮어쓰므로
+ * id: 원장(brain_crossref.json)의 같은 접두(D4-/D7-) 최대 번호 다음부터 매긴다. 병합기가 id 로 덮어쓰므로
  *   매번 1부터 매기면 재실행(finalize --only 5 등)이 이전 델타의 다른 질의 결과를 지운다(2026-09-11).
  *
  * 출력: {mode, generated_at, items:[{id, tc_id, term, context}]}
@@ -38,14 +38,14 @@ function readJSON(p) {
 }
 
 /**
- * 구 런의 대조 결과 꼬리표(`→ [DXR] …`)를 떼어낸다. 2026-09-11 이후 꼬리표는 새로 붙지 않지만
+ * 구 런의 대조 결과 꼬리표(`→ [MYGAME] …`)를 떼어낸다. 2026-09-11 이후 꼬리표는 새로 붙지 않지만
  *   (crossref_labels_annotate.js 가 주입기 → 필터로 전환) 그 전 산출물을 재처리할 때를 위해 남긴다.
  * ⚠ 이게 없으면 꼬리표가 붙은 문장이 원장 term 과 달라져
  *   **이미 물어본 항목을 매번 새 항목으로 다시 묻는다** (2026-09-09 음성 대조에서 실측: 33건이 그대로 재수집).
  *   질의문으로도 부적절하다 — 우리가 붙인 답을 뇌에 되묻게 된다.
  */
 function stripAnn(s) {
-  return String(s == null ? '' : s).split('\n→ [DXR')[0].trim();
+  return String(s == null ? '' : s).split('\n→ [MYGAME')[0].trim();
 }
 
 /** 대조 중복 판정용 정규화 — 공백·문장부호·따옴표 제거 후 비교 */
@@ -177,7 +177,7 @@ function main() {
     process.exit(1);
   }
 
-  const crossref = readJSON(path.join(work, 'dxr_crossref.json'));
+  const crossref = readJSON(path.join(work, 'brain_crossref.json'));
   const seen = alreadyAsked(crossref);
 
   const prefix = mode === 'fixplan' ? 'D4-' : 'D7-';

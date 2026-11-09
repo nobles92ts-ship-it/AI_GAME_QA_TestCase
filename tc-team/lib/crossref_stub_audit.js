@@ -10,7 +10,7 @@
  *     · 버프_디버프_아이콘_UI.md      887B / 본문  7줄                                → 진짜 스텁(가드 정당)
  *   문구는 이미 있었으므로 **문구를 더 쓰는 것으로는 안 고쳐진다.** 실제 파일을 재어 기계가 반증한다.
  *
- * 하는 일: `dxr_crossref.json` 에서 **branch=keep 이면서 note 가 스텁을 사유로 든 항목**을 뽑아,
+ * 하는 일: `brain_crossref.json` 에서 **branch=keep 이면서 note 가 스텁을 사유로 든 항목**을 뽑아,
  *   note 가 지목한 `.md` 를 Vault 에서 찾아 **본문 줄 수**(메타 줄 제외)를 잰다. 본문이 충분하면 오판 후보다.
  *   크기(B)가 아니라 **본문 줄 수**로 재는 이유 — Vault 문서는 머리말(제목·Confluence·카테고리·⚠주석)이
  *   길어서 바이트만 보면 스텁도 900B 를 넘긴다. 실측 분리도: 진짜 스텁 7줄 vs 오판 28·76줄.
@@ -18,7 +18,7 @@
  * ⚠ **비차단이다.** 오판 후보를 알릴 뿐 대조 결과를 고치지 않는다 — 최종 판정은 사람·설계자가 한다.
  *   (자동으로 keep→apply 로 승격시키면 §1.4 가드를 무력화하는 반대편 사고가 난다)
  *
- * 사용: node crossref_stub_audit.js <dxr_crossref.json> [--vault <DXR_Vault>] [--out <audit.json>]
+ * 사용: node crossref_stub_audit.js <brain_crossref.json> [--vault <MYGAME_Vault>] [--out <audit.json>]
  *                                   [--min-body 15] [--quiet]
  * exit 0=오판 후보 없음 / 3=후보 있음(신호, 차단 아님) / 2=인자·입력 오류
  */
@@ -26,7 +26,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_VAULT = '{WORK_ROOT}/DXR_Vault';
+const DEFAULT_VAULT = '{WORK_ROOT}/MYGAME_Vault';
 // 머리말로 취급해 본문에서 제외하는 줄 — 제목·인용 메타·구분선·빈 줄
 const META_LINE = /^\s*$|^\s*>|^\s*#|^\s*---\s*$|^\s*관련:/;
 // note 가 스텁을 사유로 들었는지
@@ -57,7 +57,7 @@ function bodyLines(file) {
 }
 
 const src = process.argv[2];
-if (!src || src.startsWith('--')) die('사용: node crossref_stub_audit.js <dxr_crossref.json> [--vault <dir>]');
+if (!src || src.startsWith('--')) die('사용: node crossref_stub_audit.js <brain_crossref.json> [--vault <dir>]');
 if (!fs.existsSync(src)) die(`입력 없음: ${src}`);
 
 const vault = arg('--vault', DEFAULT_VAULT);

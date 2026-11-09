@@ -62,7 +62,7 @@ if (!BASH_OK) {
   const r = spawnSync('bash', [fwd(S1), '--feature', sb.feat, '--sheet-id', 'TEST'], { encoding: 'utf8', env, cwd: caller });
   const out = (r.stdout || '') + (r.stderr || '');
   const chainLog = () => { try { return fs.readFileSync(path.join(sb.spec, 'chain.log'), 'utf8'); } catch { return ''; } };
-  const cwdFile = path.join(sb.spec, 'dxr_crossref.json.cwd');
+  const cwdFile = path.join(sb.spec, 'brain_crossref.json.cwd');
 
   t('스텁 체인이 S1 끝까지 완주한다 (exit 0 · 대조 에이전트 호출됨)', () => {
     assert.strictEqual(r.status, 0, (out + chainLog()).slice(-1500));
@@ -80,7 +80,7 @@ if (!BASH_OK) {
   });
 
   t('대조 인계서 입력 = tc_design.md 「기획 확인 필요 항목」 전량 ∪ analysis.md C-1·B-2 (tc-대조.md §1.1)', () => {
-    const h = fs.readFileSync(path.join(sb.spec, 'dxr_crossref.json.handoff'), 'utf8');
+    const h = fs.readFileSync(path.join(sb.spec, 'brain_crossref.json.handoff'), 'utf8');
     const spec = fwd(sb.spec);
     assert.ok(h.includes(`${spec}/tc_design.md`), `인계서에 tc_design.md 경로 없음\n${h}`);
     assert.ok(h.split('\n').some(l => l.includes('기획 확인 필요 항목') && l.includes('전량')), `인계서에 「기획 확인 필요 항목 전량」 지시 없음\n${h}`);

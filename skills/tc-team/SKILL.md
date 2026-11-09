@@ -112,8 +112,8 @@ bash "$TCTEAM/scripts/run_pipeline_full.sh" --feature "$FEATURE_NAME" --sheet-id
    ```bash
    "$NODE" "$LIB/impact_scope.js" "$SPEC"       # → $SPEC/impact_scope.json (exit 0 고정)
    ```
-   DXR 위키링크 그래프(`{WORK_ROOT}/<프로젝트>_관리/_그래프.json`)에서 self 의 **1-hop ∪ 2-hop** 을 뽑아, 그중 **본문에 근거가 있는 것만** 접점 축 후보로 승격한다. 소비처는 S1 설계(`$RULES/tc-분석.md §3.11`)와 S2 검수(분모 교차 확인).
-   - ⚠ **self 미해결·미색인이면 후보 0건이 정상이다.** 경고만 남기고 진행한다(파이프라인 차단 금지). 이때 선행 과제는 Vault 색인 — `{WORK_ROOT}\<프로젝트>_관리\dxr_new_pages_inbox.md` 의 검토위임 판정이다. 실측 2026-09-05: 「버프/디버프 정의」가 인박스에 14일 대기 중이라 **노드 자체가 없었다.**
+   MYGAME 위키링크 그래프(`{WORK_ROOT}/<프로젝트>_관리/_그래프.json`)에서 self 의 **1-hop ∪ 2-hop** 을 뽑아, 그중 **본문에 근거가 있는 것만** 접점 축 후보로 승격한다. 소비처는 S1 설계(`$RULES/tc-분석.md §3.11`)와 S2 검수(분모 교차 확인).
+   - ⚠ **self 미해결·미색인이면 후보 0건이 정상이다.** 경고만 남기고 진행한다(파이프라인 차단 금지). 이때 선행 과제는 Vault 색인 — `{WORK_ROOT}\<프로젝트>_관리\new_pages_inbox.md` 의 검토위임 판정이다. 실측 2026-09-05: 「버프/디버프 정의」가 인박스에 14일 대기 중이라 **노드 자체가 없었다.**
    - ⚠ 승격 목록은 **자동 확정이 아니다**(실측 정밀도 약 71%). 근거(`term×횟수`)를 달고 나오는 **순위 후보**이며, 채택은 설계자가 근거를 보고 한다.
    - ⚠ 승격이 `--hub-warn`(기본 25) 초과면 **허브형 기획서**다(실측: PK_시스템 hop2=98 → 승격 56). 경고가 뜨면 `--hop1-only` 로 다시 돌리거나 근거 상위만 채택한다.
    - **착수 보고에 `hop1/hop2/승격/참고` 4수치와 경고 전문을 포함한다.** 이 4수치가 배선이 실제로 돌았는지의 유일한 기계 판별식이다(`jq .counts impact_scope.json`).
@@ -124,11 +124,11 @@ bash "$TCTEAM/scripts/run_pipeline_full.sh" --feature "$FEATURE_NAME" --sheet-id
 ```bash
 bash "$TCTEAM/scripts/run_pipeline_s1only.sh" --feature <기능명> --sheet-id "$SHEET" --conf-url "<URL>"
 # 산출: $SPEC/analysis.md, $SPEC/tc_design.md
-#       (+ item_dict.json item_dict on일 때 · dxr_crossref.json crossref on일 때)
+#       (+ item_dict.json item_dict on일 때 · brain_crossref.json crossref on일 때)
 ```
 > `run_pipeline_s1only.sh` = 설계 체인(아이템사전→설계→검수→수정→대조주입) 전용 스크립트 — **tc-team 소유**(`$TCTEAM/scripts`, 07-27 이주). 내부 에이전트: tc-team-designer · tc-team-설계검수 · tc-team-대조 (규칙은 전부 rules 서랍 참조 — v2 비의존).
 > **모델 (2026-09-24 오너 결정 · next_run_verify ㉑)**: 설계자(STEP 1)·분석 공백 시 설계수정(STEP 3) = `TCTEAM_OPUS_MODEL` — 이 스크립트가 기본값 `claude-opus-5-5` 를 준다(명시 env 가 이김). `run-agent.sh` 의 opus 기본 `claude-opus-5` 는 v2 엔진 공용이라 불변. 검수·대조·일반 설계수정은 sonnet. 테스트 `tc-team/test/s1_opus_pin.test.js` · 근거 `사내 감사 문서(공개 배포본 미포함)`.
-> **STEP 0-사전 (결정론 · 2026-08-13)**: STEP 1 앞에서 `lib/item_dict.js` 가 DXR 테이블 → `$SPEC/item_dict.json`(아이템 실명 사전)을 뽑는다. 재현스탭 문장은 tc_design.md 에서 태어나 하류로 흐르므로 설계 앞이 유일한 주입 지점이다. 소비처 = 설계·수정 핸드오프 + S4 quality 렌즈($WORK=$SPEC이라 cp 불필요). 토글 `team/tc_config.json` `item_dict`, 원본 없는 머신은 exit 4로 조용히 스킵(비차단). 규칙 SSoT=`rules/tc-설계.md` §아이템 실명 병기.
+> **STEP 0-사전 (결정론 · 2026-08-13)**: STEP 1 앞에서 `lib/item_dict.js` 가 MYGAME 테이블 → `$SPEC/item_dict.json`(아이템 실명 사전)을 뽑는다. 재현스탭 문장은 tc_design.md 에서 태어나 하류로 흐르므로 설계 앞이 유일한 주입 지점이다. 소비처 = 설계·수정 핸드오프 + S4 quality 렌즈($WORK=$SPEC이라 cp 불필요). 토글 `team/tc_config.json` `item_dict`, 원본 없는 머신은 exit 4로 조용히 스킵(비차단). 규칙 SSoT=`rules/tc-설계.md` §아이템 실명 병기.
 
 ### S2 — 격리 게이트 + 슬라이스 (결정론)
 ```bash

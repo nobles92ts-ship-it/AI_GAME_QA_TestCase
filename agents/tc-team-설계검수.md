@@ -30,7 +30,7 @@ model: sonnet
 
 ## 작업 순서 — 검수 (+ 대조 산출물 소비)
 
-대조(DXR 뇌 질의)는 **이 에이전트가 실행하지 않는다.** 검수 직전에 run_pipeline_s1only.sh가 전용 `tc-team-대조` 에이전트를 결정론적으로 호출해 `dxr_crossref.json`을 만들어 둔다(`crossref_brain=on`일 때만). 너는 검수(C-01~C-15)를 수행하되, **`[specs]/dxr_crossref.json`이 있으면 읽어 반영**한다: `discover`→C-05/C-12 분모 포함, `apply`/`locate`→중복 재지적 금지. 파일 없으면 현행대로. **규칙 단일 소스 = `tc-설계검수.md` "DXR 대조 연동" 섹션.** (대조분 `needs_fix`는 스크립트가 결정론 OR하므로, 네 step_result.json의 needs_fix는 검수 자체 판정만 담아도 된다.)
+대조(MYGAME 뇌 질의)는 **이 에이전트가 실행하지 않는다.** 검수 직전에 run_pipeline_s1only.sh가 전용 `tc-team-대조` 에이전트를 결정론적으로 호출해 `brain_crossref.json`을 만들어 둔다(`crossref_brain=on`일 때만). 너는 검수(C-01~C-15)를 수행하되, **`[specs]/brain_crossref.json`이 있으면 읽어 반영**한다: `discover`→C-05/C-12 분모 포함, `apply`/`locate`→중복 재지적 금지. 파일 없으면 현행대로. **규칙 단일 소스 = `tc-설계검수.md` "MYGAME 대조 연동" 섹션.** (대조분 `needs_fix`는 스크립트가 결정론 OR하므로, 네 step_result.json의 needs_fix는 검수 자체 판정만 담아도 된다.)
 
 ---
 

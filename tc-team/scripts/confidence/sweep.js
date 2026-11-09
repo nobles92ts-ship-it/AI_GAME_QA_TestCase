@@ -21,9 +21,9 @@ const SPECS_DIR = arg('--specs', process.env.TCV2_SPECS_DIR
 const ONLY_XREF = process.argv.includes('--with-crossref');
 const SPECS = (fs.existsSync(SPECS_DIR) ? fs.readdirSync(SPECS_DIR) : []).filter((d) =>
   fs.existsSync(path.join(SPECS_DIR, d, 'tc_design.md'))
-  && (!ONLY_XREF || fs.existsSync(path.join(SPECS_DIR, d, 'dxr_crossref.json'))));
+  && (!ONLY_XREF || fs.existsSync(path.join(SPECS_DIR, d, 'brain_crossref.json'))));
 if (!SPECS.length) { console.error(`런을 찾지 못함: ${SPECS_DIR}`); process.exit(1); }
-const NX = SPECS.filter((d) => fs.existsSync(path.join(SPECS_DIR, d, 'dxr_crossref.json'))).length;
+const NX = SPECS.filter((d) => fs.existsSync(path.join(SPECS_DIR, d, 'brain_crossref.json'))).length;
 
 // 비교할 변형. 키 = 라벨, 값 = compute() 오버라이드.
 const VARIANTS = {

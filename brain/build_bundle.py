@@ -6,7 +6,7 @@ index of YOUR project's docs. context-mode indexes a markdown file by headings, 
 script gathers every document listed in brain_manifest.json into one markdown file where
 each document starts with a layered header:
 
-    # [D/DXR] wiki/combat/status_effects.md
+    # [D/MYGAME] wiki/combat/status_effects.md
 
 The layer letter is what the anti-circular-citation guard reads
 (skills/tc-team/rules/tc-대조.md): only `[D/...]` chunks may be cited as evidence.

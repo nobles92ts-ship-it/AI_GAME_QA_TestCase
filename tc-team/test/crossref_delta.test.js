@@ -1,7 +1,7 @@
 'use strict';
 // crossref_delta — S7 델타 대조(뇌 대조 → 답이 있는 질문을 기획확인 패널에서 뺀다) 회귀 테스트
 //
-// 2026-09-11 전환(오너 지시 "물어볼 거 없으면 질문하지 않아야 해 · [dxr] 이런 건 필요 없어"):
+// 2026-09-11 전환(오너 지시 "물어볼 거 없으면 질문하지 않아야 해 · [mygame] 이런 건 필요 없어"):
 // 소비처가 「꼬리표 주입」에서 「필터」로 바뀌었다 — 답을 찾은 질문(apply·approved:true)은 빼고,
 // 남는 질문은 5a 가 쓴 문장 그대로 나간다. 아래 매칭·자리 이력은 필터에도 똑같이 걸린다.
 //
@@ -28,7 +28,7 @@ const fwd = p => p.replace(/\\/g, '/');
 const NODE = fwd(process.execPath);
 const COLLECT = path.join(LIB, 'crossref_delta_collect.js');
 const MERGE = path.join(LIB, 'crossref_delta_merge.js');
-const MARK = '\n→ [DXR';
+const MARK = '\n→ [MYGAME';
 
 let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  PASS ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + ' — ' + e.message); } }
@@ -52,7 +52,7 @@ console.log('crossref_delta 테스트 (S7 델타 대조 · 수집 id · 병합 t
 // ── 수집기 ────────────────────────────────────────────────────────────────
 t('수집(final): 패널 문장이 꼬리표를 뗀 채 그대로 term — 주입기가 완전일치로 찾을 키', () => {
   const d = tmp();
-  W(path.join(d, '_labels.json'), { 기획확인: [PANEL[0], PANEL[1] + '\n→ [DXR] 근거 없음 (뇌 대조 완료 — 기획 확인 필요)'] });
+  W(path.join(d, '_labels.json'), { 기획확인: [PANEL[0], PANEL[1] + '\n→ [MYGAME] 근거 없음 (뇌 대조 완료 — 기획 확인 필요)'] });
   W(path.join(d, 'tcteam_tc_final.json'), { headers: HEAD, rows: [] });
   const out = path.join(d, 'in.json');
   const r = node([COLLECT, '--work', d, '--mode', 'final', '--out', out]);
@@ -64,7 +64,7 @@ t('수집: id 는 원장의 같은 접두 최대 번호 다음부터 — 재실�
   const d = tmp();
   W(path.join(d, '_labels.json'), { 기획확인: PANEL });
   W(path.join(d, 'tcteam_tc_final.json'), { headers: HEAD, rows: [] });
-  W(path.join(d, 'dxr_crossref.json'), { items: [
+  W(path.join(d, 'brain_crossref.json'), { items: [
     { id: 'D7-3', term: '예전 질의 A', branch: 'keep' },
     { id: 'D7-12', term: '예전 질의 B', branch: 'keep' },
     { id: 'D4-40', term: '리뷰 질의', branch: 'keep' },
@@ -78,7 +78,7 @@ t('수집: id 는 원장의 같은 접두 최대 번호 다음부터 — 재실�
 t('수집: 접두는 모드별로 따로 센다 (fixplan → D4, 원장의 D7 번호와 무관)', () => {
   const d = tmp();
   W(path.join(d, 'fix_plan.json'), { patches: [{ op: 'edit_cell', tc_id: '001', before: '', after: '기획 확인 필요', reason: '잠금 던전 자동 선택 여부가 원문에 없다' }] });
-  W(path.join(d, 'dxr_crossref.json'), { items: [{ id: 'D7-9', term: 'x', branch: 'keep' }, { id: 'D4-2', term: 'y', branch: 'keep' }] });
+  W(path.join(d, 'brain_crossref.json'), { items: [{ id: 'D7-9', term: 'x', branch: 'keep' }, { id: 'D4-2', term: 'y', branch: 'keep' }] });
   const out = path.join(d, 'in.json');
   const r = node([COLLECT, '--work', d, '--mode', 'fixplan', '--out', out]);
   assert.strictEqual(r.status, 0, r.stderr);
@@ -88,7 +88,7 @@ t('수집: 접두는 모드별로 따로 센다 (fixplan → D4, 원장의 D7 �
 // ── 병합기 ────────────────────────────────────────────────────────────────
 t('병합 --input: 에이전트가 term 을 고쳐 써도 id 로 입력 원문을 되돌린다 (판단 필드는 에이전트 것)', () => {
   const d = tmp();
-  const xin = path.join(d, 'in.json'), xout = path.join(d, 'out.json'), cross = path.join(d, 'dxr_crossref.json');
+  const xin = path.join(d, 'in.json'), xout = path.join(d, 'out.json'), cross = path.join(d, 'brain_crossref.json');
   W(xin, { items: [{ id: 'D7-1', tc_id: '', term: PANEL[0], context: '_labels.json 기획확인 패널' }] });
   W(xout, { items: [{ id: 'D7-1', term: '주간 초기화 요일?', branch: 'keep', source: '', note: '', approved: false }] });
   const r = node([MERGE, cross, xout, '--origin', 'S7', '--input', xin]);
@@ -101,7 +101,7 @@ t('병합 --input: 에이전트가 term 을 고쳐 써도 id 로 입력 원문�
 
 t('병합: --input 이 없으면 종전대로 에이전트 term 유지 (호출측 호환)', () => {
   const d = tmp();
-  const xout = path.join(d, 'out.json'), cross = path.join(d, 'dxr_crossref.json');
+  const xout = path.join(d, 'out.json'), cross = path.join(d, 'brain_crossref.json');
   W(xout, { items: [{ id: 'D4-1', term: '에이전트 문장', branch: 'keep' }] });
   const r = node([MERGE, cross, xout, '--origin', 'S4']);
   assert.strictEqual(r.status, 0, r.stderr);
@@ -127,8 +127,8 @@ t('필터: 답을 찾은 질문(apply·approved:true)만 빠지고 나머지는 
   assert.deepStrictEqual({ q: r.queried, j: r.judged, rm: r.removed }, { q: 5, j: 4, rm: 1 });
 });
 
-t('필터: 옛 꼬리표(→ [DXR …])가 붙은 입력도 떼고 비교·출력한다 — 남는 질문에 꼬리표가 남지 않는다', () => {
-  const tailed = Q.map(s => s + '\n→ [DXR] 근거 없음 (뇌 대조 완료 — 기획 확인 필요)');
+t('필터: 옛 꼬리표(→ [MYGAME …])가 붙은 입력도 떼고 비교·출력한다 — 남는 질문에 꼬리표가 남지 않는다', () => {
+  const tailed = Q.map(s => s + '\n→ [MYGAME] 근거 없음 (뇌 대조 완료 — 기획 확인 필요)');
   const r = loadFilter()(tailed, JUDGED);
   assert.deepStrictEqual(r.kept, Q.slice(1));
   assert.ok(r.kept.every(s => marks(s) === 0));
@@ -153,7 +153,7 @@ t('필터: 뺀 질문은 근거(id·출처·메모)와 함께 dropped 로 남는
 
 t('필터 CLI: 뺀 질문을 _labels_removed.json 에 남긴다 (재실행 때 덮어써 지난 런 기록이 섞이지 않는다)', () => {
   const d = tmp();
-  const lp = path.join(d, '_labels.json'), cp = path.join(d, 'dxr_crossref.json');
+  const lp = path.join(d, '_labels.json'), cp = path.join(d, 'brain_crossref.json');
   W(lp, { 기획확인: Q }); W(cp, { items: JUDGED });
   const r = node([path.join(LIB, 'crossref_labels_annotate.js'), lp, cp]);
   assert.strictEqual(r.status, 0, r.stderr);
@@ -166,7 +166,7 @@ t('필터 CLI: 뺀 질문을 _labels_removed.json 에 남긴다 (재실행 때 �
 
 t('필터 CLI: 뺀 질문이 있으면 완주 보고용 알림(.final5_removed.txt)을 쓰고, 없으면 지운다', () => {
   const d = tmp();
-  const lp = path.join(d, '_labels.json'), cp = path.join(d, 'dxr_crossref.json'), np = path.join(d, '.final5_removed.txt');
+  const lp = path.join(d, '_labels.json'), cp = path.join(d, 'brain_crossref.json'), np = path.join(d, '.final5_removed.txt');
   W(lp, { 기획확인: Q }); W(cp, { items: JUDGED });
   node([path.join(LIB, 'crossref_labels_annotate.js'), lp, cp]);
   const txt = fs.readFileSync(np, 'utf8');
@@ -307,7 +307,7 @@ if (!BASH_OK) {
   });
 
   t('finalize --only 5: 원장에 남는 term 은 에이전트가 줄여 쓴 것이 아니라 수집 원문', () => {
-    const items = R(path.join(on.spec, 'dxr_crossref.json')).items;
+    const items = R(path.join(on.spec, 'brain_crossref.json')).items;
     const terms = items.map(x => x.term).sort();
     assert.deepStrictEqual(terms, [...PANEL, TC_F].sort());
     assert.ok(items.every(x => /^D7-\d+$/.test(x.id)), items.map(x => x.id).join(','));
@@ -336,7 +336,7 @@ if (!BASH_OK) {
     assert.strictEqual(secondAp.r.status, 0, secondAp.out.slice(-1500));
     assert.deepStrictEqual(secondAp.applied, [PANEL[1]], '재실행에서 답 있는 질문이 되살아났다');
     assert.strictEqual(agentCalls(ap), 1, '이미 물어본 항목을 다시 물었다');
-    assert.strictEqual(R(path.join(ap.spec, 'dxr_crossref.json')).items.length, PANEL.length + 1, '원장 항목 수가 바뀌었다');
+    assert.strictEqual(R(path.join(ap.spec, 'brain_crossref.json')).items.length, PANEL.length + 1, '원장 항목 수가 바뀌었다');
   });
 
   t('finalize --only 5 (대조 off): 조용히 스킵 — 패널은 그대로 기재되고 exit 0 · 지난 런의 뺀 질문 알림은 지운다', () => {

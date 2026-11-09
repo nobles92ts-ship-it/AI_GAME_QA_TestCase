@@ -2,7 +2,7 @@
 // impact_scope.js self 노드 해결 — 그 문서 **자신의 머리말 출처 줄**에서만 self 를 잡고, id 를 언급만 한 문서로 되돌아가지 않는다
 // (2026-09-11 실측: Vault 미등재 스킬_강화_시스템(424509531)이 그 id 를 본문 근거로 적은 「아이템 Index 사용 및 구분 정책」으로
 //  오해결 → 남의 이웃 23건이 접점 축으로 승격. 경고는 `self 제목 불일치 의심` 한 줄뿐이었다)
-// 스크립트를 실제로 돌린다 — Vault·그래프·스펙은 전부 임시 폴더 픽스처(실제 DXR_Vault·그래프·스펙 폴더 무접촉).
+// 스크립트를 실제로 돌린다 — Vault·그래프·스펙은 전부 임시 폴더 픽스처(실제 MYGAME_Vault·그래프·스펙 폴더 무접촉).
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');

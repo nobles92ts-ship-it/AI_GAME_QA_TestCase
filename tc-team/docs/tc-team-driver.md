@@ -42,7 +42,7 @@ LLM 단계(S1 설계 / S3 F열 문장화 / S4 리뷰·판정)는 agent/Workflow 
 |---|---|---|---|
 | S0 | main | Confluence fetch(제목 CQL 선조회+본문 lazy)·자가검증·Slack kickoff(`send_slack_tc_request.js` 재사용) | 절차 정의 / MCP는 라이브 |
 | S1 | agent | 설계(opus, SSoT+P-18/19/20)·해시 스킵 게이트 | **LLM 대기**(스키마 계약만) |
-| S2 | main+agent | **`design_gate.js`**(격리 convert)∥검수 agent·DXR대조(crossref on)·수정 루프(카운터 `tcteam_s2_attempts.txt`) | 게이트 빌드 / 검수 LLM 대기 / **C-12 미배선** |
+| S2 | main+agent | **`design_gate.js`**(격리 convert)∥검수 agent·MYGAME대조(crossref on)·수정 루프(카운터 `tcteam_s2_attempts.txt`) | 게이트 빌드 / 검수 LLM 대기 / **C-12 미배선** |
 | S3 | main+WF | convert(골격)→F열 문장화(Workflow 팬아웃·25행 청크·해시키 `v3_fmap_part_*`)→**merge**(`tc_f_map.json` 조립) | 결정론 빌드 / 문장화 LLM 대기 |
 | S4 | WF+agent | **`slicer.js`**(원문 슬라이스)→3렌즈 팬아웃→기계 병합→판정자(fix_plan·`tc-수정.md` 준수)·**`traceability.js`** 게이트 | 슬라이서·원장 빌드 / 렌즈·판정 LLM 대기 |
 | S5 | main | **`apply_fix_plan.js`**→**`content_gate.js`**(차단)→`tc_final.json`+`tc_final.ok` | **빌드·QA 완료** |
@@ -112,7 +112,7 @@ NODE="{NODE_PATH}"
 | 작업 폴더 못박기 | 같은 블록 | 대조 에이전트를 서브셸에서 `cd "$XPROJ"`(=`$PROJECT_ROOT`) 한 뒤 띄워 게이트가 검사한 KB와 에이전트가 뒤지는 KB를 일치시킨다. ⚠ 환경변수(`CLAUDE_PROJECT_DIR`/`CONTEXT_MODE_PROJECT_DIR`)만으로는 안 맞는다 — 에이전트의 context-mode 는 claude 작업 폴더로 KB 를 고른다(2026-09-11 실측 · `next_run_verify.md` ①). 환경변수는 같은 값이라 남겨 둠 |
 | 설정 | `team/tc_config.json` `crossref_bundle` | 번들 원본 경로(머신마다 다름). 빈 값이면 STALE 판정·복구 스킵(비차단) |
 
-**핵심 계약**: 게이트 차단 시 `dxr_crossref.json`에 `skipped:true` + `skip_reason`을 적고 **대조를 아예 실행하지 않는다.**
+**핵심 계약**: 게이트 차단 시 `brain_crossref.json`에 `skipped:true` + `skip_reason`을 적고 **대조를 아예 실행하지 않는다.**
 에이전트를 부르면 그 결과가 '무적중 keep'으로 위장되기 때문이다. 상세는 `$SPEC/crossref_gate.json`.
 
 ⚠ 저해소(20% 미만) 경고 문구에서 **'뇌 미탑재'는 원인 후보에서 제거됐다** — 게이트가 먼저 걸러내므로,

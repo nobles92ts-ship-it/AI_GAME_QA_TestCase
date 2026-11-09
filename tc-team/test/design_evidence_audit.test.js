@@ -51,7 +51,7 @@ test('example or struck values inside approved notes are not promoted', () => {
   assert.strictEqual(struck.approved_values.length, 1); assert.strictEqual(blockers(struck).length, 0);
 });
 test('mixed example/resolved cell requires review instead of choosing one number', () => {
-  const r = run([['MinLevel', '원문 가데이터 30; DXR 확정 20']], [['MinLevel', '20']], [item('MinLevel=20')]);
+  const r = run([['MinLevel', '원문 가데이터 30; MYGAME 확정 20']], [['MinLevel', '20']], [item('MinLevel=20')]);
   assert.strictEqual(blockers(r).length, 0); assert.ok(r.findings.some(x => x.severity === 'REVIEW'));
 });
 test('conflicting approved pairs require review, never pick one', () => {
@@ -128,11 +128,11 @@ test('struck AS-IS and unresolved values are not confirmed', () => {
 test('CLI rejects malformed crossref and does not change source files', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tc-evidence-'));
   try {
-    for (const [name, value] of Object.entries({ 'analysis.md': analysis([['MinLevel', '20']]), 'tc_design.md': design([['MinLevel', '20']]), 'confluence_raw.md': '# source', 'dxr_crossref.json': '{broken' })) fs.writeFileSync(path.join(tmp, name), value);
+    for (const [name, value] of Object.entries({ 'analysis.md': analysis([['MinLevel', '20']]), 'tc_design.md': design([['MinLevel', '20']]), 'confluence_raw.md': '# source', 'brain_crossref.json': '{broken' })) fs.writeFileSync(path.join(tmp, name), value);
     const cli = path.resolve(__dirname, '../lib/design_evidence_audit.js');
     let r = spawnSync(process.execPath, [cli, tmp], { encoding: 'utf8' }); assert.strictEqual(r.status, 1);
     assert.strictEqual(fs.readFileSync(path.join(tmp, 'analysis.md'), 'utf8'), analysis([['MinLevel', '20']]));
-    fs.writeFileSync(path.join(tmp, 'dxr_crossref.json'), JSON.stringify({ items: [item('MinLevel=20')] }));
+    fs.writeFileSync(path.join(tmp, 'brain_crossref.json'), JSON.stringify({ items: [item('MinLevel=20')] }));
     r = spawnSync(process.execPath, [cli, tmp], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr);
     const first = JSON.parse(fs.readFileSync(path.join(tmp, 'design_evidence_audit.json'), 'utf8'));
     fs.writeFileSync(path.join(tmp, 'tc_design.md'), design([['MinLevel', '30']]));

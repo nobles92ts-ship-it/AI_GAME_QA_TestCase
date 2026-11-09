@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * crossref_annotate.js — dxr_crossref.json 의 locate·apply(approved:false) 출처를
- * tc_design.md "기획 확인 필요 항목 (DXR 대조)" 블록에 결정론적으로 주입한다.
+ * crossref_annotate.js — brain_crossref.json 의 locate·apply(approved:false) 출처를
+ * tc_design.md "기획 확인 필요 항목 (MYGAME 대조)" 블록에 결정론적으로 주입한다.
  *
  * 배경 (적대리뷰 #9): locate/keep 은 needs_fix 트리거가 아니라, locate-only 런에서는
  * STEP 3가 안 돌아 대조 산출물이 tc_design 에 전혀 반영되지 않았다("완료 locate=N" 로그만
@@ -9,13 +9,13 @@
  * 위치·출처를 설계에 기계 삽입해 QA 가 "어디 보면 됨"을 받게 한다.
  *
  * 원칙: LLM 불요·멱등(마커 키로 중복 삽입 차단)·best-effort(어떤 실패도 파이프라인 비차단).
- * 사용: node crossref_annotate.js <dxr_crossref.json> <tc_design.md>
+ * 사용: node crossref_annotate.js <brain_crossref.json> <tc_design.md>
  */
 'use strict';
 const fs = require('fs');
 
 const [, , crossPath, designPath] = process.argv;
-const SECTION = '## 기획 확인 필요 항목 (DXR 대조)';
+const SECTION = '## 기획 확인 필요 항목 (MYGAME 대조)';
 const MARK = '<!-- crossref-annotate -->';
 
 function main() {
@@ -49,7 +49,7 @@ function main() {
   });
 
   const block = `${SECTION} ${MARK}\n\n`
-    + `> DXR 뇌 대조가 값의 **위치·출처**만 안내한 항목(값은 원본에서 확인). 스코프 경계상 값을 지어내지 않음. 대조 산출: \`dxr_crossref.json\`.\n\n`
+    + `> MYGAME 뇌 대조가 값의 **위치·출처**만 안내한 항목(값은 원본에서 확인). 스코프 경계상 값을 지어내지 않음. 대조 산출: \`brain_crossref.json\`.\n\n`
     + bullets.join('\n') + '\n';
 
   const markIdx = design.indexOf(SECTION + ' ' + MARK);

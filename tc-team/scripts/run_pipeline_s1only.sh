@@ -25,7 +25,7 @@ PROJECT_ROOT="${TCTEAM_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 NODE="${TCTEAM_NODE:-node}"
 UTIL="$PROJECT_ROOT/scripts/util"
 SPECS="$PROJECT_ROOT/team/specs"
-CONFIG="$PROJECT_ROOT/team/tc_config.json"   # DXR 대조 토글 (crossref_brain: off|on)
+CONFIG="$PROJECT_ROOT/team/tc_config.json"   # MYGAME 대조 토글 (crossref_brain: off|on)
 RUNAGENT="$UTIL/run-agent.sh"
 # 엔진 선택 (2026-10-01, Loki Codex 이식) — TCTEAM_ENGINE=codex 면 LLM 단계 전부 codex exec(run-agent-codex.sh). 기본·그 밖의 값 = claude 그대로.
 if [[ "${TCTEAM_ENGINE:-claude}" == "codex" ]]; then RUNAGENT="$UTIL/run-agent-codex.sh"; fi
@@ -283,7 +283,7 @@ fi
 NEEDS_FIX=0; GAP=0
 if [[ $START -le 2 ]]; then
 do_transition design_reviewing 0 1
-# ── STEP 2-대조 (조건부·결정론) — bash가 DXR 뇌 대조를 강제 호출 (LLM 자율 의존 제거, 2026-06-19) ──
+# ── STEP 2-대조 (조건부·결정론) — bash가 MYGAME 뇌 대조를 강제 호출 (LLM 자율 의존 제거, 2026-06-19) ──
 # off/파일없음/뇌 미탑재 = 스킵(현행 동작 100% 동일). on = 전용 tc-team-대조 에이전트 무조건 호출 + fail-safe(비차단).
 CROSSREF=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_brain==='on'?'on':'off')}catch(e){process.stdout.write('off')}" 2>/dev/null)
 [[ -z "$CROSSREF" ]] && CROSSREF=off
@@ -291,9 +291,9 @@ CROSSREF=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFI
 # 규칙은 config 를 읽으라고 했는데 아래 핸드오프가 "brain-corpus" 를 리터럴로 박아 config 가 무력했다).
 XSRC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_source||'brain-corpus')}catch(e){process.stdout.write('brain-corpus')}" 2>/dev/null)
 [[ -z "$XSRC" ]] && XSRC=brain-corpus
-"$NODE" -e "require('fs').rmSync('$SPEC/dxr_crossref.json',{force:true})" 2>/dev/null || true
+"$NODE" -e "require('fs').rmSync('$SPEC/brain_crossref.json',{force:true})" 2>/dev/null || true
 if [[ "$CROSSREF" == "on" ]]; then
-  log "[STEP 2-대조] DXR 뇌 대조 시작 (crossref_brain=on)"
+  log "[STEP 2-대조] MYGAME 뇌 대조 시작 (crossref_brain=on)"
 
   # ── xlsx 원본 추출 (결정론 · 비차단) — 2026-09-11 신설 ──────────────────────────────
   # 대조가 xlsx 값을 apply 하려면 원본을 열어야 하는데, LLM 에게 코드를 돌리라고 부탁하는 구조는
@@ -348,7 +348,7 @@ if [[ "$CROSSREF" == "on" ]]; then
   fi
   # 게이트 실패 = 에이전트를 부르지 않는다. 부르면 그 결과가 '무적중 keep' 으로 위장된다.
   if [[ -n "$XSKIP" ]]; then
-    "$NODE" -e "require('fs').writeFileSync('$SPEC/dxr_crossref.json',JSON.stringify({source_run:'$FEAT',items:[],discovered:[],counts:{in:0,apply:0,locate:0,discover:0,keep:0},skipped:true,skip_reason:'$XSKIP',_note:'대조 미실행 — 색인 게이트 차단. 무적중이 아니다(crossref_gate.json 참조).'},null,2))" 2>/dev/null || true
+    "$NODE" -e "require('fs').writeFileSync('$SPEC/brain_crossref.json',JSON.stringify({source_run:'$FEAT',items:[],discovered:[],counts:{in:0,apply:0,locate:0,discover:0,keep:0},skipped:true,skip_reason:'$XSKIP',_note:'대조 미실행 — 색인 게이트 차단. 무적중이 아니다(crossref_gate.json 참조).'},null,2))" 2>/dev/null || true
   else
 
   # 입력 범위 = tc-대조.md §1.1(09-09 확장): tc_design.md 「기획 확인 필요 항목」 전량 ∪ C-1 ∪ B-2 (2026-09-25 수리).
@@ -359,10 +359,10 @@ if [[ "$CROSSREF" == "on" ]]; then
 - specs 경로: $SPEC
 - 설계 파일: $SPEC/tc_design.md (입력 = 「기획 확인 필요 항목」 블록 전량 — C-1 승급분만이 아니라 C-2 분석자 코멘트 유래도 여기 있다)
 - 분석 파일: $SPEC/analysis.md (입력 = C-1 미지정값 '필수' + B-2 외부 의존성)
-- 산출: $SPEC/dxr_crossref.json (tc-대조.md §2.1 스키마)
+- 산출: $SPEC/brain_crossref.json (tc-대조.md §2.1 스키마)
 
 ## 작업 지시
-tc-대조.md §1.1 입력 범위대로 tc_design.md 「기획 확인 필요 항목」 전량 ∪ analysis.md C-1·B-2(같은 항목은 한 번만)를 제2의 뇌(DXR 위키 색인, ctx_search source=\"$XSRC\")에 대조 → dxr_crossref.json 생성. 입력 항목마다 결과 1건(무적중도 keep).
+tc-대조.md §1.1 입력 범위대로 tc_design.md 「기획 확인 필요 항목」 전량 ∪ analysis.md C-1·B-2(같은 항목은 한 번만)를 제2의 뇌(MYGAME 위키 색인, ctx_search source=\"$XSRC\")에 대조 → brain_crossref.json 생성. 입력 항목마다 결과 1건(무적중도 keep).
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep).
 로컬 데이터테이블 값: $SPEC/xlsx_extract.md 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
 §1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."
@@ -376,16 +376,16 @@ tc-대조.md §1.1 입력 범위대로 tc_design.md 「기획 확인 필요 항�
     RUNAGENT_DEBUG_FILE="$SPEC/crossref_debug.log" bash "$RUNAGENT" $CLI_BASE --model sonnet --agent tc-team-대조 "$XHANDOFF" ) >>"$CHAIN_LOG" 2>&1 \
     || log "[STEP 2-대조][경고] 대조 에이전트 비정상 종료 — fail-safe 스킵(비차단)"
   fi   # XSKIP 분기 종료
-  if [[ -f "$SPEC/dxr_crossref.json" ]]; then
-    XC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const lo=it.filter(x=>x.branch==='locate').length+it.filter(x=>x.branch==='apply'&&x.approved!==true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;const ke=it.filter(x=>x.branch==='keep').length;process.stdout.write('apply='+ap+' locate='+lo+' discover='+di+' keep='+ke)}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)
+  if [[ -f "$SPEC/brain_crossref.json" ]]; then
+    XC=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/brain_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const lo=it.filter(x=>x.branch==='locate').length+it.filter(x=>x.branch==='apply'&&x.approved!==true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;const ke=it.filter(x=>x.branch==='keep').length;process.stdout.write('apply='+ap+' locate='+lo+' discover='+di+' keep='+ke)}catch(e){process.stdout.write('파싱불가')}" 2>/dev/null)
     log "[STEP 2-대조] 완료 — $XC"
     # counts 정규화 (2026-09-07) — 에이전트가 발굴을 discovered[] 에만 담고 counts.discover=0 으로 남겨
     # 사람이 JSON 만 보면 오독한다(실측: 로그 discover=1 vs 파일 0). 판정은 안 건드리고 집계만 맞춘다.
-    "$NODE" "$PROJECT_ROOT/tc-team/lib/crossref_counts_normalize.js" "$SPEC/dxr_crossref.json" --quiet >>"$CHAIN_LOG" 2>&1 || true
+    "$NODE" "$PROJECT_ROOT/tc-team/lib/crossref_counts_normalize.js" "$SPEC/brain_crossref.json" --quiet >>"$CHAIN_LOG" 2>&1 || true
     # 스텁 가드 오판 검사 (2026-09-07, 비차단) — tc-대조.md §1.4·§1.5 는 "스텁 판정 전 ⓑ 내용어 재질의"를
     # 이미 규정하고 2026-07-31 사고까지 적어 두었는데 2026-09-06 에 재발했다(스텁 사유 3건 중 2건 오판).
     # 문구로는 안 고쳐지므로 실제 Vault 파일 본문 줄 수로 기계가 반증한다. exit 3=후보 있음(신호).
-    XSTUB=$("$NODE" "$PROJECT_ROOT/tc-team/lib/crossref_stub_audit.js" "$SPEC/dxr_crossref.json" --quiet 2>/dev/null; echo "rc=$?")
+    XSTUB=$("$NODE" "$PROJECT_ROOT/tc-team/lib/crossref_stub_audit.js" "$SPEC/brain_crossref.json" --quiet 2>/dev/null; echo "rc=$?")
     if [[ "$XSTUB" == *"rc=3"* ]]; then
       XSN=$("$NODE" -e "try{const a=JSON.parse(require('fs').readFileSync('$SPEC/crossref_stub_audit.json','utf8'));process.stdout.write(a.suspects.map(s=>s.id+':'+s.doc+'('+s.body_lines+'줄)').join(', '))}catch(e){process.stdout.write('')}" 2>/dev/null)
       log "[STEP 2-대조][경고] 스텁 가드 오판 후보 — $XSN · 본문이 있는 문서를 스텁으로 보고 keep 처리했다. ⓑ 내용어 재질의 필요(비차단)"
@@ -393,7 +393,7 @@ tc-대조.md §1.1 입력 범위대로 tc_design.md 「기획 확인 필요 항�
     # 해소율 경고 (비차단, 2026-07-31) — 전 항목 keep 이어도 파이프라인은 정상 종료하므로
     # 무인 런에서는 이 한 줄이 "뇌가 헛돌았다"는 유일한 단서다. 임계 20%·최소 5건은 실측 기준
     # (07-31 재료_아이템 런: 해소 2/15 = 13% 인데 아무 경고 없이 완주 → 확신도 항목 18건 불필요 감점).
-    XW=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const n=it.length;const r=it.filter(x=>x.branch!=='keep').length;process.stdout.write(n>=5&&r*5<n?(r+'/'+n):'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+    XW=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/brain_crossref.json','utf8'));const it=c.items||[];const n=it.length;const r=it.filter(x=>x.branch!=='keep').length;process.stdout.write(n>=5&&r*5<n?(r+'/'+n):'')}catch(e){process.stdout.write('')}" 2>/dev/null)
     # 2026-08-23: 사전 게이트가 '색인 부재/이름 오류/STALE' 를 이미 걸러내므로, 여기까지 온 저해소는
     # 색인 문제가 아니라 질의·문서 쪽이다. 원인 후보에서 색인을 뺀다(오진 유도 방지).
     [[ -n "$XW" ]] && log "[STEP 2-대조][경고] 해소 $XW — 20% 미만. 색인은 게이트 통과했으므로 질의 헛돔(제목형 질의가 메타데이터 헤더 청크만 물어옴) 또는 원문 미수록 의심. tc-대조.md §1.5 ⓑ 내용어 질의 확인"
@@ -444,7 +444,7 @@ HANDOFF="## HANDOFF
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 $GATE_LINE
 $IMG_LINE
-- DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 소비 — discover→C-05/C-12 커버리지 분모 포함, apply/locate→중복 재지적 금지. 없으면 현행대로. 규칙 SSoT=tc-설계검수.md 'DXR 대조 연동')
+- MYGAME 대조 결과: $SPEC/brain_crossref.json (있으면 소비 — discover→C-05/C-12 커버리지 분모 포함, apply/locate→중복 재지적 금지. 없으면 현행대로. 규칙 SSoT=tc-설계검수.md 'MYGAME 대조 연동')
 - 설정값 전달·근거 검토 위치: $SPEC/design_evidence_audit.json — C-06 명시값 대조와 C-16 근거 구분 검수에 소비. HIGH는 수정 대상, REVIEW는 원문·이미지·현재 승인 근거로 판단. 기계 일치를 기획·픽셀 검증 PASS로 보고하지 말 것.
 - ⚠ C-05 분모 완전성 교차 시 tc-학습.md P-18·P-19·P-20·P-22·P-23·**P-25·P-26·P-29**로 원문 대비 누락 확인."
 bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
@@ -460,8 +460,8 @@ NEEDS_FIX=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/ste
 GAP=$("$NODE" -e "const r=JSON.parse(require('fs').readFileSync('$SPEC/step_result.json','utf8'));const g=(r.analysis_gap??(r.review&&r.review.analysis_gap)??(r.step2_review&&r.step2_review.analysis_gap));console.log(Number(g)||0)")
 [[ "$GAP" =~ ^[0-9]+$ ]] || { log "[STEP 2][경고] analysis_gap 추출 실패(GAP='$GAP') — 0 으로 간주(모델 강등)"; GAP=0; }
 # 대조 결정론 OR: apply(approved:true) 또는 discover ≥1 → needs_fix 강제 (검수 LLM 누락 방지). locate/keep은 트리거 아님.
-if [[ -f "$SPEC/dxr_crossref.json" ]]; then
-  XFIX=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/dxr_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;process.stdout.write((ap+di)>0?'1':'0')}catch(e){process.stdout.write('0')}" 2>/dev/null)
+if [[ -f "$SPEC/brain_crossref.json" ]]; then
+  XFIX=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$SPEC/brain_crossref.json','utf8'));const it=c.items||[];const ap=it.filter(x=>x.branch==='apply'&&x.approved===true).length;const di=it.filter(x=>x.branch==='discover').length+(c.discovered||[]).length;process.stdout.write((ap+di)>0?'1':'0')}catch(e){process.stdout.write('0')}" 2>/dev/null)
   if [[ "$XFIX" == "1" && "$NEEDS_FIX" != "1" ]]; then NEEDS_FIX=1; log "[STEP 2-대조] apply(approved)/discover ≥1 → needs_fix=1 강제 (STEP3 반영)"; fi
 fi
 if [[ "$EVIDENCE_HIGH" -gt 0 && "$NEEDS_FIX" != "1" ]]; then
@@ -488,12 +488,12 @@ run_step3() { # $1=모드 라벨 (review|blocker)
 - specs 경로: $SPEC
 - 검수 보고서: $SPEC/design_review.md
 - 설정값 전달·근거 감사: $SPEC/design_evidence_audit.json — HIGH를 현재 승인 근거/분석/설계와 대조해 수정. REVIEW·예시·복수값·단위 불명확은 임의 확정하지 말고 C-16대로 처리. 승인 note의 로컬 관측을 운영 정책으로 확대하지 말 것.
-- DXR 대조 결과: $SPEC/dxr_crossref.json (있으면 직접 소비) — apply(approved:true)→커버리지 매핑표에 확정 규칙+출처, discover→TC 후보 추가. approved:false·locate·keep은 기획확인 블록 유지(설계 변경 아님). 규칙 SSoT=tc-대조.md §3. 분석누락 아닌 설계보강이라 sonnet.
+- MYGAME 대조 결과: $SPEC/brain_crossref.json (있으면 직접 소비) — apply(approved:true)→커버리지 매핑표에 확정 규칙+출처, discover→TC 후보 추가. approved:false·locate·keep은 기획확인 블록 유지(설계 변경 아님). 규칙 SSoT=tc-대조.md §3. 분석누락 아닌 설계보강이라 sonnet.
 - 직변환 차단 보고서: $SPEC/conversion_blocker.json (존재 시 최우선 — 차단 항목 외과 수정)
 - 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭을 고칠 때 아이템 실명 병기 유지. 규칙 SSoT=tc-설계.md §아이템 실명 병기)
 
 ## 작업 지시
-design_review.md 이슈(존재 시) + DXR 대조 결과(apply/discover, 존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.
+design_review.md 이슈(존재 시) + MYGAME 대조 결과(apply/discover, 존재 시) + conversion_blocker.json 차단(존재 시) 반영하여 analysis.md/tc_design.md 외과 수정.
 수정 후 직변환 사전 게이트(tc-설계.md Step 11.5) 재실행 — exit 0 필수 (배분표 3자 동치 재계산).
 $DRIVE_STEP3"
   bash "$GUARD" "$SPEC/step_result.json" -- bash -c "
@@ -517,8 +517,8 @@ if [[ $START -eq 4 && -f "$SPEC/step3_result.json" ]]; then PREV_FOR_4=3; fi
 # ── locate/apply(외부) 출처 주입 (결정론·멱등, 2026-06 배선 보강 / 2026-07-12 적대리뷰 #9) ──
 # needs_fix 와 무관하게(=STEP 3가 안 돌아도) locate·apply(approved:false) 위치·출처를 tc_design 에 삽입.
 # 이전엔 locate-only 런에서 대조 산출물이 설계에 전혀 반영 안 돼 '완료 locate=N' 로그만 남던 문제(#9).
-if [[ -f "$SPEC/dxr_crossref.json" ]]; then
-  "$NODE" "$UTIL/crossref_annotate.js" "$SPEC/dxr_crossref.json" "$SPEC/tc_design.md" >>"$CHAIN_LOG" 2>&1 \
+if [[ -f "$SPEC/brain_crossref.json" ]]; then
+  "$NODE" "$UTIL/crossref_annotate.js" "$SPEC/brain_crossref.json" "$SPEC/tc_design.md" >>"$CHAIN_LOG" 2>&1 \
     || log "[STEP 3.5-대조주입][경고] crossref_annotate 실패 — 비차단"
 fi
 

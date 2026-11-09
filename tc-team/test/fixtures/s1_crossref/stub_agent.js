@@ -1,7 +1,7 @@
 'use strict';
 // 테스트 스텁 에이전트 — run_pipeline_s1only.sh 의 에이전트 호출 3종을 --agent 이름으로 가른다.
 //   tc-team-designer : 설계 산출물(analysis.md · tc_design.md) + step_result(HANDOFF 의 STEP — 1 설계 / 3 설계수정)
-//   tc-team-대조      : dxr_crossref.json(keep 1건) + 작업 폴더 기록(.cwd) — KB 선택이 작업 폴더를 탄다
+//   tc-team-대조      : brain_crossref.json(keep 1건) + 작업 폴더 기록(.cwd) — KB 선택이 작업 폴더를 탄다
 //                        + 받은 인계서 원문(.handoff) — 인계서 입력 범위가 규칙(tc-대조.md §1.1)만큼 넓은지 본다
 //   tc-team-설계검수  : step_result(step 2 · needs_fix = env STUB_NEEDS_FIX 가 '1' 일 때만 true → STEP 3 진입
 //                        · analysis_gap = env STUB_ANALYSIS_GAP(기본 0 — 1 이상이면 STEP 3 설계자가 opus 자리로 탄다))

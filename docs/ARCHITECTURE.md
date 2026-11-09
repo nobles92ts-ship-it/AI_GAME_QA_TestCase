@@ -119,7 +119,7 @@ After the sealing loop inserts rows, the ID column is renumbered — so ledger `
 
 ## Confidence scoring — deterministic
 
-`tc-team/scripts/confidence/` scores each row with rules R1–R7 (spec-confirmation flag, image-only reference, unresolved cross-reference, weak anchor, coverage gap, design-technique bonus), reading `tc_design.md`, `dxr_crossref.json`, and `coverage_gaps.json`.
+`tc-team/scripts/confidence/` scores each row with rules R1–R7 (spec-confirmation flag, image-only reference, unresolved cross-reference, weak anchor, coverage gap, design-technique bonus), reading `tc_design.md`, `brain_crossref.json`, and `coverage_gaps.json`.
 
 **Zero LLM calls.** Identical input always yields an identical score, so the number is a stable signal about where a reviewer should look — not a second opinion from a model.
 

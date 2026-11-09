@@ -220,7 +220,7 @@ $vout"
   # 구버전 validate_labels.js(이 필드 없음)로 롤백돼도 매칭 실패 → 0 유지(fail-safe).
   LABEL_BANNED=$(grep -o '금지 어휘 [0-9]\+' <<< "$vout" | head -1 | grep -o '[0-9]\+')
   LABEL_BANNED=${LABEL_BANNED:-0}
-  # 5a↔5b 사이 — DXR 델타 대조·주입 (2026-09-11 이관 · 규칙 tc-대조.md §1.1-a). 5a 가 방금 쓴 문장을
+  # 5a↔5b 사이 — MYGAME 델타 대조·주입 (2026-09-11 이관 · 규칙 tc-대조.md §1.1-a). 5a 가 방금 쓴 문장을
   # 그대로 질의 키로 뇌에 묻고, 답을 그 문장 끝에 붙인 뒤 5b 가 기재한다. 비차단 — 결과와 무관하게 5b 진행.
   # 구 자리(run_pipeline_full.sh, finalize 앞)는 _labels.json 이 태어나기 전이라 전 런 주입 0건이었다.
   crossref_delta final S7
@@ -311,7 +311,7 @@ final_3() {
   fi
 }
 
-# ── FINAL-7: 볼트 임베드 (DXR_Vault 노트에 이 기능의 분석본 임베드 삽입) ──────
+# ── FINAL-7: 볼트 임베드 (MYGAME_Vault 노트에 이 기능의 분석본 임베드 삽입) ──────
 # 사본을 만들지 않는다 — Obsidian transclusion 으로 specs 원본을 끌어온다.
 # 조인 키는 이름이 아니라 Confluence page_id. 대응 노트/앵커가 없으면 스킵(fail-closed).
 final_7() {

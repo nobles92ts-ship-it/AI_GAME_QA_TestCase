@@ -7,7 +7,7 @@
  *
  * 신호 출처 (판단은 S1~S2에서 이미 끝나 있고, 여기는 집계만):
  *   R1·R2·R6·R7 ← tc_design.md (S1 설계·검수)
- *   R3·R4       ← dxr_crossref.json (S1 대조)
+ *   R3·R4       ← brain_crossref.json (S1 대조)
  *   R5          ← coverage_gaps.json (S2 결정론 게이트)
  *
  * ⚠ 적대 리뷰 반영 (2026-07-29):
@@ -143,7 +143,7 @@ function compute(SPEC, override) {
   const { rules, tuning } = resolve(override);
   const pen = (id, n) => penaltyOf(rules, id, n);
   const read = (f) => fs.readFileSync(path.join(SPEC, f), 'utf8');
-  // 설계서만 필수. 나머지는 선택 — crossref_brain=off 환경에서는 dxr_crossref.json 자체가
+  // 설계서만 필수. 나머지는 선택 — crossref_brain=off 환경에서는 brain_crossref.json 자체가
   // 생성되지 않는다(run_pipeline_s1only.sh 가 스킵 시 삭제). 없으면 해당 규칙만 쉬고 나머지는 채점한다.
   const readJson = (f, dflt) => {
     try { return JSON.parse(read(f)); } catch (e) { if (e.code === 'ENOENT') return dflt; throw e; }
@@ -151,7 +151,7 @@ function compute(SPEC, override) {
 
   const L = read('tc_design.md').split('\n');
   const gaps = readJson('coverage_gaps.json', {});
-  const crossref = readJson('dxr_crossref.json', { items: [] });
+  const crossref = readJson('brain_crossref.json', { items: [] });
   const candidates = readJson('candidates.json', null);
   const skeleton = readJson('tc_skeleton.json', null);
 

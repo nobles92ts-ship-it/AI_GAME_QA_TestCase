@@ -58,24 +58,24 @@ STEP 1(설계) 결과물이 tc-설계.md 기준에 부합하는지 검수.
 - ⛔ **검수자가 마커를 직접 달거나 떼지 않는다.** 지적만 하고 실제 수정은 STEP 3(설계 수정)이 한다 — 검수가 설계를 고치면 "설계기가 판단했다"는 R2 의 전제 자체가 무너진다.
 - ⛔ 이 감사는 **확신도를 고치지 않는다.** R2 표시는 종전대로 마커에만 반응한다(2026-09-11부터 점수 0 · 표시 전용). 감사는 마커가 틀렸을 가능성을 알릴 뿐이다.
 
-## DXR 대조 연동 (조건부 · 기본 off) — STEP 2 대조→검수 [SSoT]
+## MYGAME 대조 연동 (조건부 · 기본 off) — STEP 2 대조→검수 [SSoT]
 
-**대조 실행은 검수와 분리된 별도 단계다 (2026-06-19 결정론화).** STEP 2 직전에 **run_pipeline_s1only.sh가 bash로 `crossref_brain`을 확인해 전용 `tc-team-대조` 에이전트를 결정론적으로 호출**한다. (검수 LLM에게 "조건 되면 대조도 해줘"라고 부탁하던 구조 폐기 — 검수원이 자기 핵심 업무에 집중하며 대조를 자율 스킵 → **미발화하던 버그 픽스**.) 대조 규칙 자체는 `tc-대조.md`가 SSoT. 검수 에이전트(tc-team-설계검수.md)는 그 산출물 `dxr_crossref.json`을 **소비만** 한다.
+**대조 실행은 검수와 분리된 별도 단계다 (2026-06-19 결정론화).** STEP 2 직전에 **run_pipeline_s1only.sh가 bash로 `crossref_brain`을 확인해 전용 `tc-team-대조` 에이전트를 결정론적으로 호출**한다. (검수 LLM에게 "조건 되면 대조도 해줘"라고 부탁하던 구조 폐기 — 검수원이 자기 핵심 업무에 집중하며 대조를 자율 스킵 → **미발화하던 버그 픽스**.) 대조 규칙 자체는 `tc-대조.md`가 SSoT. 검수 에이전트(tc-team-설계검수.md)는 그 산출물 `brain_crossref.json`을 **소비만** 한다.
 
-**① DXR 대조 (검수 前, bash 결정론 호출 — 검수 에이전트가 직접 실행하지 않음)** — `{PROJECT_ROOT}/team/tc_config.json`의 `crossref_brain`:
-- `on` 아님 / 파일 없음 / 뇌 미탑재 → 대조 SKIP, `dxr_crossref.json` 없음 (현행 동작 100% 동일).
-- `on` → `tc-team-대조`가 `tc-대조.md` 규칙대로: **tc_design.md "기획 확인 필요 항목" 전량** ∪ analysis.md C-1 미지정·B-2 → `ctx_search(source="brain-corpus")` 배치 질의 → §1.3 4분기 + §1.4 가드(스텁·`(작성중)`·애매→keep) + §1.6 fail-safe(뇌 미탑재·에러·무적중→전부 keep·비차단) → `dxr_crossref.json` 저장.
-- ⚠ **미대조 기획확인 검출 [HIGH] (2026-09-09 오너 지시)**: `dxr_crossref.json`이 있는데(=대조가 돌았는데) tc_design.md "기획 확인 필요 항목" 중 **JSON에 대응 항목이 없는 것**이 있으면 그 건수를 HIGH 이슈로 등재하고 재대조를 지시한다 — 사람에게 "기획 확인 요청"으로 나가는 항목은 **전부 뇌에 한 번은 물어본 것**이어야 한다. `keep`(무적중)은 물어본 것이므로 정상이다. **대조 SKIP(파일 없음)일 땐 이 항목 자체를 적용하지 않는다**(뇌 미보유 환경 = 현행 동작 유지).
+**① MYGAME 대조 (검수 前, bash 결정론 호출 — 검수 에이전트가 직접 실행하지 않음)** — `{PROJECT_ROOT}/team/tc_config.json`의 `crossref_brain`:
+- `on` 아님 / 파일 없음 / 뇌 미탑재 → 대조 SKIP, `brain_crossref.json` 없음 (현행 동작 100% 동일).
+- `on` → `tc-team-대조`가 `tc-대조.md` 규칙대로: **tc_design.md "기획 확인 필요 항목" 전량** ∪ analysis.md C-1 미지정·B-2 → `ctx_search(source="brain-corpus")` 배치 질의 → §1.3 4분기 + §1.4 가드(스텁·`(작성중)`·애매→keep) + §1.6 fail-safe(뇌 미탑재·에러·무적중→전부 keep·비차단) → `brain_crossref.json` 저장.
+- ⚠ **미대조 기획확인 검출 [HIGH] (2026-09-09 오너 지시)**: `brain_crossref.json`이 있는데(=대조가 돌았는데) tc_design.md "기획 확인 필요 항목" 중 **JSON에 대응 항목이 없는 것**이 있으면 그 건수를 HIGH 이슈로 등재하고 재대조를 지시한다 — 사람에게 "기획 확인 요청"으로 나가는 항목은 **전부 뇌에 한 번은 물어본 것**이어야 한다. `keep`(무적중)은 물어본 것이므로 정상이다. **대조 SKIP(파일 없음)일 땐 이 항목 자체를 적용하지 않는다**(뇌 미보유 환경 = 현행 동작 유지).
 
-- ⚠ **재질의 게이트 미발화 검출 [HIGH] (2026-09-10 신설)**: `dxr_crossref.json`의 `counts`에서 **`keep / in ≥ 0.8`** 인데 재질의를 돈 흔적(로그 또는 items note 의 `재질의:` 기록)이 **없으면** HIGH 로 등재하고 재대조를 지시한다. 근거 — 구 게이트는 발동 조건이 `keep == in`(100%)이라 **93% 전멸도 조용히 통과**했다(HUD_네비_속성_표현 2026-09-09: `in 29 / keep 27 / locate 2` → 재질의 0회 → xlsx 에 답이 있던 항목이 그대로 사람에게 나가고 TC 5건이 틀린 기대값으로 굳음). 규칙 SSoT=`tc-대조.md §1.6`. **이 검사는 게이트가 «돌았는지»를 보는 것이지 «적중률»을 보는 것이 아니다** — 재질의를 돌고도 여전히 keep 90% 면 정상이다(그건 진짜 없는 것). **대조 SKIP·`in=0`이면 적용하지 않는다.**
+- ⚠ **재질의 게이트 미발화 검출 [HIGH] (2026-09-10 신설)**: `brain_crossref.json`의 `counts`에서 **`keep / in ≥ 0.8`** 인데 재질의를 돈 흔적(로그 또는 items note 의 `재질의:` 기록)이 **없으면** HIGH 로 등재하고 재대조를 지시한다. 근거 — 구 게이트는 발동 조건이 `keep == in`(100%)이라 **93% 전멸도 조용히 통과**했다(HUD_네비_속성_표현 2026-09-09: `in 29 / keep 27 / locate 2` → 재질의 0회 → xlsx 에 답이 있던 항목이 그대로 사람에게 나가고 TC 5건이 틀린 기대값으로 굳음). 규칙 SSoT=`tc-대조.md §1.6`. **이 검사는 게이트가 «돌았는지»를 보는 것이지 «적중률»을 보는 것이 아니다** — 재질의를 돌고도 여전히 keep 90% 면 정상이다(그건 진짜 없는 것). **대조 SKIP·`in=0`이면 적용하지 않는다.**
 
-**② 설계 검수 (대조 산출물 소비)** — C-01~C-16 + Pass Gate 수행. `dxr_crossref.json`이 있으면 읽어:
+**② 설계 검수 (대조 산출물 소비)** — C-01~C-16 + Pass Gate 수행. `brain_crossref.json`이 있으면 읽어:
 - (a) 대조 `discover`(누락 교차규칙)를 **C-05·C-12 커버리지 분모에 포함** — 검수의 자기참조 사각(C-05 분모에 없으면 100%여도 못 잡음, Boss_0011 v2 사례)을 외부 시점으로 보강.
 - (b) `apply`/`locate`로 해소 예정인 기획확인은 "해소 예정"으로 인지 → **중복 재지적 금지**(C-11 미지정 승급 이중 카운트 방지).
 - 단 C-01~C-16 **자체 판정은 독립**(대조 맹신 금지 — 대조가 틀려도 검수가 잡음).
 - 파일 없으면(off/SKIP/뇌 미탑재) 이 반영 없이 **현행대로** 검수.
 
-**③ 결합 → STEP 3**: `needs_fix` = (검수 CRITICAL>0 또는 HIGH≥1) **또는** (대조 **apply(approved:true) 또는 discover** ≥1건). `locate`/`apply(approved:false)`는 needs_fix 트리거 아님 — 대신 **STEP4 직전 `crossref_annotate.js`가 결정론적으로 tc_design에 출처 주입**(2026-07-12 #9, "STEP4 흡수"라는 옛 애매 문구 폐기). `keep`은 전환 없음. ⚠ 대조분 needs_fix는 **run_pipeline_s1only.sh가 `dxr_crossref.json`에서 결정론적으로 OR**한다(검수 LLM이 빠뜨려도 보장) — 검수 step_result.json의 needs_fix는 검수 자체 판정만 담아도 무방. ⚠ `analysis_gap`은 **C-13만**(대조 미반영 → opus 재분석 트리거 아님). apply는 **`approved:true`만 확정 스펙**, `approved:false`(외부값)는 locate 처리(㉠ 사람 승인 보존). STEP3는 `dxr_crossref.json`을 **직접 소비**(tc-대조.md §3).
+**③ 결합 → STEP 3**: `needs_fix` = (검수 CRITICAL>0 또는 HIGH≥1) **또는** (대조 **apply(approved:true) 또는 discover** ≥1건). `locate`/`apply(approved:false)`는 needs_fix 트리거 아님 — 대신 **STEP4 직전 `crossref_annotate.js`가 결정론적으로 tc_design에 출처 주입**(2026-07-12 #9, "STEP4 흡수"라는 옛 애매 문구 폐기). `keep`은 전환 없음. ⚠ 대조분 needs_fix는 **run_pipeline_s1only.sh가 `brain_crossref.json`에서 결정론적으로 OR**한다(검수 LLM이 빠뜨려도 보장) — 검수 step_result.json의 needs_fix는 검수 자체 판정만 담아도 무방. ⚠ `analysis_gap`은 **C-13만**(대조 미반영 → opus 재분석 트리거 아님). apply는 **`approved:true`만 확정 스펙**, `approved:false`(외부값)는 locate 처리(㉠ 사람 승인 보존). STEP3는 `brain_crossref.json`을 **직접 소비**(tc-대조.md §3).
 
 ---
 
@@ -144,7 +144,7 @@ confluence_raw.md와 tc_design.md 분류 트리 비교 → 아래 10개 영역 �
 
 기획서에 해당 영역 존재 + 분류 트리에 없음 → HIGH 1건씩 기록.
 
-> ⚠ **분모 완전성 교차 확인 (자기참조 사각 방지, 2026-06-12)**: 위 10개 영역과 커버리지 매핑은 "설계자가 추출한 목록"이 분모이므로, 추출 단계에서 빠진 항목은 매핑률 100%여도 검출되지 않는다. 반드시 tc-학습.md 활성 설계 패턴(특히 **P-18** 상호작용 매트릭스 / **P-19** 서술형 섹션 분해 / **P-20** BVA 상·하한 분리 / **P-22** 자원 증감 예외 4유형 / **P-23** 열거값 개별 전개)으로 confluence_raw.md 원문 대비 분모 자체의 누락을 교차 검사할 것 — 위반 시 HIGH (근거: Boss_0011 v2 — 자동사냥 섹션 통째 누락·상태이상 매트릭스 전멸이 C-05/C-12 전부 통과 / 인벤토리_1차_개선 v2 — 예외 4유형만 선택적 손실인데 검증단계 비율 게이트 통과). **추가 채널**: `crossref_brain=on` + `dxr_crossref.json` 존재 시 대조 `discover` 항목을 분모에 포함(위 'DXR 대조 연동' 섹션). **그리고 `$SPEC/impact_scope.json` 이 있으면 `promoted` 접점 축이 tc_design 에 반영됐는지 교차 확인한다** — 미반영 축은 그 축 이름과 근거(`term×횟수`)를 들어 지적한다(설계 규칙 = `tc-분석.md §3.11`). 접점 축은 "기능 하나가 도는가"가 아니라 **다른 시스템과 만나는 지점**이라 설계자가 구조적으로 빠뜨리는 자리다. 파일이 없거나 `promoted` 0건이면 현행 규칙 100% 동일.
+> ⚠ **분모 완전성 교차 확인 (자기참조 사각 방지, 2026-06-12)**: 위 10개 영역과 커버리지 매핑은 "설계자가 추출한 목록"이 분모이므로, 추출 단계에서 빠진 항목은 매핑률 100%여도 검출되지 않는다. 반드시 tc-학습.md 활성 설계 패턴(특히 **P-18** 상호작용 매트릭스 / **P-19** 서술형 섹션 분해 / **P-20** BVA 상·하한 분리 / **P-22** 자원 증감 예외 4유형 / **P-23** 열거값 개별 전개)으로 confluence_raw.md 원문 대비 분모 자체의 누락을 교차 검사할 것 — 위반 시 HIGH (근거: Boss_0011 v2 — 자동사냥 섹션 통째 누락·상태이상 매트릭스 전멸이 C-05/C-12 전부 통과 / 인벤토리_1차_개선 v2 — 예외 4유형만 선택적 손실인데 검증단계 비율 게이트 통과). **추가 채널**: `crossref_brain=on` + `brain_crossref.json` 존재 시 대조 `discover` 항목을 분모에 포함(위 'MYGAME 대조 연동' 섹션). **그리고 `$SPEC/impact_scope.json` 이 있으면 `promoted` 접점 축이 tc_design 에 반영됐는지 교차 확인한다** — 미반영 축은 그 축 이름과 근거(`term×횟수`)를 들어 지적한다(설계 규칙 = `tc-분석.md §3.11`). 접점 축은 "기능 하나가 도는가"가 아니라 **다른 시스템과 만나는 지점**이라 설계자가 구조적으로 빠뜨리는 자리다. 파일이 없거나 `promoted` 0건이면 현행 규칙 100% 동일.
 
 ### C-06 GlobalDefine 키 목록 [HIGH]
 - confluence_raw.md에 GlobalDefine 키 있을 때
@@ -152,7 +152,7 @@ confluence_raw.md와 tc_design.md 분류 트리 비교 → 아래 10개 영역 �
 - 기획서에 없으면 SKIP
 - 누락 → HIGH
 
-**명시값 전달 대조 (2026-10-21)**: 핸드오프의 `design_evidence_audit.json`을 읽어 분석 A-5와 설계 GlobalDefine 표의 키·값·단위가 이어지는지 확인한다. 현재 `dxr_crossref.json`의 `branch=apply && approved===true`이고 출처가 있는 항목만 승인 대조 근거로 소비한다. `native_provenance`의 과거 승인, `approved:false`·locate·keep, 단순 파일 존재나 과거 분석의 “확정” 문구는 현재 승인 근거가 아니다.
+**명시값 전달 대조 (2026-10-21)**: 핸드오프의 `design_evidence_audit.json`을 읽어 분석 A-5와 설계 GlobalDefine 표의 키·값·단위가 이어지는지 확인한다. 현재 `brain_crossref.json`의 `branch=apply && approved===true`이고 출처가 있는 항목만 승인 대조 근거로 소비한다. `native_provenance`의 과거 승인, `approved:false`·locate·keep, 단순 파일 존재나 과거 분석의 “확정” 문구는 현재 승인 근거가 아니다.
 
 - `HIGH` 차이는 해당 위치·현재 승인 범위·원문을 확인하고 기존 설계 이슈 표에 기록한다. 동일 스코프의 명시값 불일치·키 누락은 수정 대상이며 **S1은 기계 HIGH가 있으면 기존 STEP 3을 강제**한다. 수정 뒤 최신 입력 해시로 감사를 다시 만들고, HIGH가 남으면 다음 단계로 넘기지 않는다.
 - `REVIEW`는 복수값·단위 불명확·예시·별칭·승인 충돌 등 **기계가 결론내리지 않은 항목**이다. 대조 근거의 적용 대상/버전/범위로 해소하거나 미정 질의를 유지한다. REVIEW를 자동 PASS나 임의 숫자 치환으로 처리하지 않는다.
@@ -333,7 +333,7 @@ CRITICAL > 0  →  STEP 3 설계 수정 (최대 1회 재실행)
 HIGH/MEDIUM/LOW 이슈는 design_review.md에 기록하되 STEP 3 트리거 조건 아님.
 단, **HIGH ≥ 1건이면 STEP 3 트리거** (설계 누락=TC 품질 직접영향이므로 작성 전 차단). → needs_fix=true.
 
-> **DXR 대조 연동 (별도 선행 스텝 — 검수 항목 아님, 상세=위 'DXR 대조 연동' 섹션)**: `crossref_brain=on` + `dxr_crossref.json` 존재 시 needs_fix는 **(대조 apply(approved:true) 또는 discover ≥1건)**으로도 true. `locate`/`apply(approved:false)`는 트리거 아니고 **STEP4 직전 `crossref_annotate.js`가 결정론 주입**(#9). `keep`은 전환 없음. **off/SKIP/파일 없으면 현행 규칙 100% 동일.**
+> **MYGAME 대조 연동 (별도 선행 스텝 — 검수 항목 아님, 상세=위 'MYGAME 대조 연동' 섹션)**: `crossref_brain=on` + `brain_crossref.json` 존재 시 needs_fix는 **(대조 apply(approved:true) 또는 discover ≥1건)**으로도 true. `locate`/`apply(approved:false)`는 트리거 아니고 **STEP4 직전 `crossref_annotate.js`가 결정론 주입**(#9). `keep`은 전환 없음. **off/SKIP/파일 없으면 현행 규칙 100% 동일.**
 
 ---
 
