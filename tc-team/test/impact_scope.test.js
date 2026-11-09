@@ -49,17 +49,17 @@ W(path.join(VAULT, 'a_ref', '중간 보스 HP바.md'), `# 중간 보스 HP바\n>
 W(path.join(VAULT, 'b_own', '부위파괴 시스템.md'), `# 부위파괴 시스템\n\n## 관련 시스템\n- [[Boss_0002]]\n\n- **page_id**: 311853067\n- **URL**: https://x/pages/311853067\n`);
 // 2026-09-05 회귀: 부모 컨테이너가 자식 목록에 자식 id 를 적었다(머리말 안이지만 출처 줄이 아니다)
 W(path.join(VAULT, 'a_ref', '버프_디버프.md'), `# 버프/디버프\n> Confluence: https://x/pages/111000001\n\n## 하위 문서\n- 버프/디버프 정의 (111000002)\n`);
-W(path.join(VAULT, 'b_own', '버프_디버프_정의.md'), `# 버프/디버프 정의\n> Confluence: https://x/pages/111000002\n`);
-// 머리말 산문 속 남의 id — 'Confluence' 가 든 줄이지만 출처 줄이 아니다(Vault 실물 「버프_디버프_아이콘_UI」)
-W(path.join(VAULT, 'a_ref', '버프_디버프_아이콘_UI.md'),
-  `# 버프 디버프 아이콘 UI\n> Confluence: https://x/pages/333000001\n> 📌 상위 규칙은 [[버프_디버프_정의]], CC 연출 우선순위는 Confluence 「상태이상 시스템」(443449460)에 있다.\n`);
+W(path.join(VAULT, 'b_own', '기능BD.md'), `# 버프/디버프 정의\n> Confluence: https://x/pages/111000002\n`);
+// 머리말 산문 속 남의 id — 'Confluence' 가 든 줄이지만 출처 줄이 아니다(Vault 실물 「기능AW」)
+W(path.join(VAULT, 'a_ref', '기능AW.md'),
+  `# 기능AW\n> Confluence: https://x/pages/333000001\n> 📌 상위 규칙은 [[기능BD]], CC 연출 우선순위는 Confluence 「상태이상 시스템」(443449460)에 있다.\n`);
 // 숫자 경계: 555666777 안에 55666777 이 들어 있다
 W(path.join(VAULT, 'a_ref', '경계 문서.md'), `# 경계 문서\n> Confluence: https://x/pages/555666777\n`);
 
 const nodes = ['아이템 Index 사용 및 구분 정책', '샘플보스 Index 사용 및 구분 정책', '아바타 Index 사용 및 구분 정책',
-  '부위파괴 시스템', 'Boss_0002', '중간 보스 HP바', 'HP바 UI', '버프_디버프_정의', '보스 CC 면역', '버프_디버프_아이콘_UI', '이펙트 목록'];
+  '부위파괴 시스템', 'Boss_0002', '중간 보스 HP바', 'HP바 UI', '기능BD', '보스 CC 면역', '기능AW', '이펙트 목록'];
 const edges = [['아이템 Index 사용 및 구분 정책', '샘플보스 Index 사용 및 구분 정책'], ['아이템 Index 사용 및 구분 정책', '아바타 Index 사용 및 구분 정책'],
-  ['부위파괴 시스템', 'Boss_0002'], ['중간 보스 HP바', 'HP바 UI'], ['버프_디버프_정의', '보스 CC 면역'], ['버프_디버프_아이콘_UI', '이펙트 목록']];
+  ['부위파괴 시스템', 'Boss_0002'], ['중간 보스 HP바', 'HP바 UI'], ['기능BD', '보스 CC 면역'], ['기능AW', '이펙트 목록']];
 W(GRAPH, JSON.stringify({ generated: 'fixture', nodes: nodes.map((id) => ({ id })), edges: edges.map(([s, t]) => ({ s, t, type: 'wikilink' })) }));
 
 function run(spec, id, extra = []) {
@@ -95,13 +95,13 @@ for (const [i, [name, line]] of FORMATS.entries()) {
 }
 
 t('부모 컨테이너가 자식 id 를 목록에 적어도 자식이 self 다 (2026-09-05 버프/디버프 정의 회귀)', () => {
-  assert.strictEqual(run('버프디버프', '111000002').self_node, '버프_디버프_정의');
+  assert.strictEqual(run('버프디버프', '111000002').self_node, '기능BD');
 });
 
 t("머리말 산문 속 남의 id 는 출처가 아니다 ('Confluence' 가 든 줄이어도)", () => {
   const j = run('상태이상_시스템', '443449460');
   assert.strictEqual(j.self_node, null, `self=${j.self_node}`);
-  assert.ok(warned(j, '본문 참조만 발견: 버프_디버프_아이콘_UI —'), j.warnings.join(' | '));
+  assert.ok(warned(j, '본문 참조만 발견: 기능AW —'), j.warnings.join(' | '));
 });
 
 t('id 는 숫자 경계로 맞춘다 — 짧은 id 가 긴 id 의 일부로 잡히지 않는다', () => {

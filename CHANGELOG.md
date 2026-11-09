@@ -8,6 +8,14 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.12] — 2026-11-09
+
+### Fixed
+- **v4.3.11 missed the files with Korean names.** The replacement listed files with `git ls-files`, which escapes non-ASCII paths, so the rule files (`skills/tc-team/rules/*.md`, including the learning ledgers) were never opened. The check that followed used the same list and reported nothing left. This release applies the same replacement to those files, plus the remaining feature names, class-skill spec titles and boss names found there (`기능AJ` … `기능BI`, `샘플보스B`/`샘플보스C`, `샘플몬스터`). The check now walks the folder directly.
+- No behaviour change: test results match v4.3.10.
+
+---
+
 ## [v4.3.11] — 2026-11-09
 
 ### Changed
