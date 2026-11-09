@@ -14,7 +14,7 @@ const { applyFixPlan } = require('../lib/apply_fix_plan.js');
 const { diff } = require('../lib/golden_diff.js');
 
 const NODE = process.execPath;
-const SPEC = '{PROJECT_ROOT}/team/specs/자동_사냥_기능';
+const SPEC = '{PROJECT_ROOT}/team/specs/기능AC';
 let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  ✓ ' + name); } catch (e) { fail++; console.log('  ✗ ' + name + ' — ' + e.message); } }
 function manifest(dir) {
@@ -23,7 +23,7 @@ function manifest(dir) {
   return m;
 }
 
-console.log('═══ tc-v3 Phase 0 스파이크 (실물 자동_사냥_기능) ═══\n');
+console.log('═══ tc-v3 Phase 0 스파이크 (실물 기능AC) ═══\n');
 
 if (!fs.existsSync(path.join(SPEC, 'confluence_raw.md')) || !fs.existsSync(path.join(SPEC, 'tc_snapshot.json'))) {
   console.log('실물 자산 부재 — 스파이크 스킵'); process.exit(0);

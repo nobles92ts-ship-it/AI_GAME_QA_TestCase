@@ -1,7 +1,7 @@
 'use strict';
 // s1_designer_maxout — S1 설계자(tc-team-designer) 호출에만 CLI 출력 상한 기본값 128000 을 싣는다
 //
-// 2026-09-11 스킬_강화_시스템(508행): 설계자(opus·effort max)가 한 턴 사고만으로 CLI 기본 상한 64000 을 넘겨
+// 2026-09-11 기능X(508행): 설계자(opus·effort max)가 한 턴 사고만으로 CLI 기본 상한 64000 을 넘겨
 // 5회 절단(stop_reason=max_tokens) 뒤 API Error 로 죽었다. 128000 재기동 시 최대 응답 85,077 로 통과.
 // 2026-09-12 오너 결정(a): opus-5 유지 + 설계자 호출 두 곳(STEP 1·STEP 3)에만 기본값. 명시 env 가 이긴다.
 // 검수·대조 호출과 v2 엔진(run-agent.sh 공유)은 CLI 기본 그대로 둔다.

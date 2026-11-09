@@ -35,7 +35,7 @@ GUARD="$UTIL/silent_exit_guard.sh"
 EVIDENCE_AUDIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && { pwd -W 2>/dev/null || pwd; })/design_evidence_audit.js"
 CLI_BASE='-p --permission-mode bypassPermissions'
 # 설계자(tc-team-designer) 호출 출력 상한 — 2026-09-12 오너 결정(a). CLI 기본 64000 은 대형 기획서에서
-# effort max 사고 한 턴만으로 넘친다(09-11 스킬_강화_시스템 508행: 64K 절단 5회 → 128K 재기동 최대 응답 85,077).
+# effort max 사고 한 턴만으로 넘친다(09-11 기능X 508행: 64K 절단 5회 → 128K 재기동 최대 응답 85,077).
 # 명시 env 가 이긴다. 검수·대조 호출과 v2 엔진(run-agent.sh 공유)은 CLI 기본 그대로 — 근거=next_run_verify 「S1 설계자가 CLI 출력 상한 64K 에 걸린다」
 DESIGNER_MAX_OUT="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-128000}"
 # S1 opus 자리(설계자 STEP 1 · 분석 공백 시 STEP 3 설계수정) 모델 — 2026-09-24 오너 결정: S1 만 claude-opus-5-5 (effort max 유지).

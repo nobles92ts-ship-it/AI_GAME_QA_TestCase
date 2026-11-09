@@ -7,7 +7,7 @@ let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  PASS ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + ' — ' + e.message); } }
 
 const doc = [
-  '# 자동 사냥 기능',
+  '# 기능AC',
   '',
   '> 메타: 저장자',
   '',
@@ -252,8 +252,8 @@ t('칸 규칙이 이미 있는 행에는 행 단위 규칙을 더하지 않는�
 });
 
 // ── 실제 confluence_raw 통합 스모크 ──
-t('실물 자동_사냥_기능/confluence_raw.md 파싱 정상', () => {
-  const p = '{PROJECT_ROOT}/team/specs/자동_사냥_기능/confluence_raw.md';
+t('실물 기능AC/confluence_raw.md 파싱 정상', () => {
+  const p = '{PROJECT_ROOT}/team/specs/기능AC/confluence_raw.md';
   if (!fs.existsSync(p)) { console.log('    (skip — 파일 없음)'); return; }
   const real = slice(fs.readFileSync(p, 'utf8'));
   assert.ok(real.sections.length >= 3, '실물 섹션 ' + real.sections.length);

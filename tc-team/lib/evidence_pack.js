@@ -26,7 +26,7 @@ const tab = arg('tab', '');
 // [왜] 이 봉투는 오래 verdict:'PASS' 하드코딩이었고 호출측(run_pipeline_full.sh)이 frc 를
 //      버렸다. finalize.sh 는 try/continue 정책이라 일부 FINAL 단계가 실패해도 exit 20 으로
 //      끝나고 체인은 "전 구간 완료"로 exit 0 한다 — 그 런의 봉투도 PASS 를 찍고 있었다.
-//      실물: 자동_사냥_기능_v3_20260816_034645.json (FINAL-0 ✗ 인데 verdict PASS)
+//      실물: 기능AC_v3_20260816_034645.json (FINAL-0 ✗ 인데 verdict PASS)
 const frcRaw = arg('frc', '');
 const frc = frcRaw === '' ? null : Number(frcRaw);
 const verdict = frc === 0 ? 'PASS' : 'PARTIAL';   // 스키마 허용값: PASS | WARN | FAIL | PARTIAL

@@ -2,7 +2,7 @@
 
 > 스펙 원본(승인 대기): `{WORK_ROOT}\tc-v3-redesign-plan.html` v1.3
 > 이 문서 = Phase 2 산출물(메인 세션 드라이버 절차) + 구축 현황(무엇이 빌드·QA됐고 무엇이 라이브 대기인지).
-> 작성 2026-07-11, 갱신 2026-07-12. 상태: **전 스테이지(S0~S7) 라이브 end-to-end 완주 검증** — 자동_사냥_기능을 v3로 재생성해 `자동_사냥_기능_v2` 탭 라이브 산출(v2 원탭 보존). 결정론 유틸 12종·70 테스트 GREEN.
+> 작성 2026-07-11, 갱신 2026-07-12. 상태: **전 스테이지(S0~S7) 라이브 end-to-end 완주 검증** — 기능AC을 v3로 재생성해 `기능AC_v2` 탭 라이브 산출(v2 원탭 보존). 결정론 유틸 12종·70 테스트 GREEN.
 
 ---
 
@@ -32,7 +32,7 @@ LLM 단계(S1 설계 / S3 F열 문장화 / S4 리뷰·판정)는 agent/Workflow 
 | `golden_diff.js` | ③ | 골든셋 구조 회귀 비교(구조 exact·F열 유사도) | 6 | 스파이크: 자기=pass·+1행=regression |
 | `design_gate.js` | S2 | direct_convert **격리** 게이트(중간산출물 삭제 회피) | (스파이크) | **격리 불변식 실증**: 실물 specs 전후 바이트 동일 |
 
-**테스트**: `node test/run_all.js` → 10 스위트 / **88 GREEN** (07-16 이관감사: eval_digest 동기화 가드 포함). 실물 자산=`team/specs/자동_사냥_기능`.
+**테스트**: `node test/run_all.js` → 10 스위트 / **88 GREEN** (07-16 이관감사: eval_digest 동기화 가드 포함). 실물 자산=`team/specs/기능AC`.
 
 ---
 
@@ -53,7 +53,7 @@ LLM 단계(S1 설계 / S3 F열 문장화 / S4 리뷰·판정)는 agent/Workflow 
 
 ## 4. 완성 현황 (라이브 end-to-end 검증 완료)
 
-**자동_사냥_기능 v3 재생성 실측 (2026-07-12)** — 전 스테이지 라이브 완주:
+**기능AC v3 재생성 실측 (2026-07-12)** — 전 스테이지 라이브 완주:
 | S | 실측 결과 |
 |---|---|
 | S1 | analysis/tc_design 해시 스킵(기존 v2 자산 무재분석 소비) ✓ |
@@ -62,7 +62,7 @@ LLM 단계(S1 설계 / S3 F열 문장화 / S4 리뷰·판정)는 agent/Workflow 
 | S4 | Workflow 3렌즈(구조4·품질19·원문대조10=33 findings) + 판정자 → 25 patches. **원문 추론 검출**(500ms 임의수치·부활 미정단정), **커버리지 누락**(유저 피격 R-6.1 add_row) ✓ |
 | S5 | apply_fix_plan 25건 0충돌 → 111행 → regroup(V-17 봉합) → content_gate 0위반 → tc_final.ok ✓ |
 | A/B | golden_diff: v3 = v2 대비 +2 QA(커버리지)·검증단계 개선·양쪽 위반0 (v3는 3렌즈 리뷰 완주, v2는 STEP5 사망) ✓ |
-| S6 | sheet_write: base 점유(exit3)→ **`자동_사냥_기능_v2` 라이브 생성**, v2 원탭 불가침 ✓ |
+| S6 | sheet_write: base 점유(exit3)→ **`기능AC_v2` 라이브 생성**, v2 원탭 불가침 ✓ |
 | S7 | update_dashboard(블록6)·add_project_info(K~O) ✓, read-back 정상 ✓ |
 
 **신규 코드 재확정**: C-12는 별도 유틸 불필요(S2 검수 agent + 기존 `coverage_gaps.js`가 정본) · S6 clear-and-rewrite = `sheet_write.js`로 구현.
@@ -73,7 +73,7 @@ LLM 단계(S1 설계 / S3 F열 문장화 / S4 리뷰·판정)는 agent/Workflow 
 - **기획 확인 요청서 산출물**: 플래그 행+원문 조인 → `pm_questions.json` → HTML 요청서(질문 11·blocking 9). 답변 회수 → fix_plan 1패스 확정 교체(→ ①의 위임 경고 해소 루프).
 - **S6 clear_and_rewrite 라이브 실증**: 소유 마커 경유 재기록(exit 3→삭제→재기록) — 129행 재업로드 + K~O/대시보드 복원 절차 포함 확인.
 - **v2 승계 전수 감사(07-12, run_pipeline.sh 482줄+완료처리+SSoT+메모리 룰 대조)**:
-  - **[A] 확정 누락(운영 룰·즉시)**: ①Slack 착수공지(send_slack_tc_request.js) — **07-14 근본 수정 완료**: run_pipeline.sh·run_pipeline_s1only.sh 라인125가 stale 공유 `.kickoff_items.json`(옛 배치 4건)을 재사용(`|| 가드`) → 옛 해시로 dedup 계산 + 벤치마크 잔존 'time-test suppress' 마커(`9511166d0bc2b2b2`)와 충돌 → **오억제**였음(미발송 원인). per-feature 항목파일(`$SPEC/.kickoff_item.json`) + 기능별 dedup 격리(`--dedup-dir $SPEC`)로 전환 + stale suppress 마커 제거. 중복발송·오억제 양방향 해소(장비/보스 실발송·재실행 스킵 검증, 백업 `.bak_slackfix_20260714`). ②완료 보고에 FINAL-6 이미지 매칭 안내 1줄 ③보고에 단계별 시간 포함 룰(시간 계측과 함께) ④`team/state.json` 상태 원장 미기록 — 모니터·알림 8종이 소비, 실제로 `주변_감지_기능_v2=failed`(07-09 v2 시도 사체) 스테일 발견→done 교정 완료. 드라이버 단일화 시 ①~④ 전부 내장.
+  - **[A] 확정 누락(운영 룰·즉시)**: ①Slack 착수공지(send_slack_tc_request.js) — **07-14 근본 수정 완료**: run_pipeline.sh·run_pipeline_s1only.sh 라인125가 stale 공유 `.kickoff_items.json`(옛 배치 4건)을 재사용(`|| 가드`) → 옛 해시로 dedup 계산 + 벤치마크 잔존 'time-test suppress' 마커(`9511166d0bc2b2b2`)와 충돌 → **오억제**였음(미발송 원인). per-feature 항목파일(`$SPEC/.kickoff_item.json`) + 기능별 dedup 격리(`--dedup-dir $SPEC`)로 전환 + stale suppress 마커 제거. 중복발송·오억제 양방향 해소(장비/보스 실발송·재실행 스킵 검증, 백업 `.bak_slackfix_20260714`). ②완료 보고에 FINAL-6 이미지 매칭 안내 1줄 ③보고에 단계별 시간 포함 룰(시간 계측과 함께) ④`team/state.json` 상태 원장 미기록 — 모니터·알림 8종이 소비, 실제로 `기능AD_v2=failed`(07-09 v2 시도 사체) 스테일 발견→done 교정 완료. 드라이버 단일화 시 ①~④ 전부 내장.
   - **[B] 콜드런 승계 대기(드라이버 단일화 범위 — 재사용 런에선 v2 자산 상속으로 무해)**: confluence fetch+500B 입력게이트 / STEP1 설계 생성+tc-학습.md 활성 패턴 주입(P-18~20 설계, P-01~17·21 재발감시 — v3 S3·S4 프롬프트에 현재 미주입) / STEP2 설계검수+coverage_gate(C-12)+needs_fix 라우팅 / tc-대조(crossref_brain) / 락·정지코드(10/13/14/15/16)·silent 가드·--resume-from / --local 모드 / **EVAL-1~20↔3렌즈 정렬 — 07-16 이관감사(M-023·019·024)로 편입 완료**: `docs/eval_digest.md` 신설(실물 14종 = EVAL-02~04·10~20 + 추후구현 정책, 렌즈별 섹션 — 나머지 6종 중 01·05·06·08·09는 결정론 코드 소유(traceability·재번호·regroup·골격=direct_convert(scripts/util, lib 밖)·content_gate), 07(중복)은 structure 렌즈+judge delete 소유. 동기화 가드=test/eval_digest.test.js) → S4가 $WORK로 cp(tc-학습.md도 존재 시 cp), 3렌즈 프롬프트가 담당 섹션 적용. S3 fmap 프롬프트에도 문장규칙 보강(사전상태 예외6종·주어화 금지·"또는" 금지). ⚠tc-학습 패턴 원문 주입 외 나머지 [B] 항목은 여전히 콜드런 대기.
   - **[C] 승계 확인 완료**: FINAL-1~5(4는 read-back QA 대체)·탭 접미사·create_gsheet 서식·FINAL-4 정규식(content_gate)+확장.
   - **[이관감사 07-16 · M-021] exclusions '추후구현' 제거**: traceability.js EXCLUSION_REASONS = 3종(타기획서·비TC성서술·중복규칙)으로 축소 — 추후구현은 **TC화 강제**(J='추후 구현'·H/I=N/A, v2 tc-생성.md:271 승계), 미커버 시 S5 add_row 봉합. SKILL S4③ 문구 동기화. ⚠기존 완료 런(장비 등)의 exclusions.json을 재검증하면 badExclusion으로 게이트 실패함(완료 런은 재실행 대상 아님 — 신규 런부터 적용). 근거: 감사 원장 `{WORK_ROOT}\_tc_migration_audit\inventory.md`.

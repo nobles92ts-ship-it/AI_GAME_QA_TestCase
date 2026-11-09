@@ -5,7 +5,7 @@ Claude 경로의 S0 는 `claude -p` 한 턴이 MCP 로 Confluence·시트를 읽
 여기는 같은 계약을 결정론으로 지킨다 — Codex 경로에 claude 가 남지 않게.
 
   1. Confluence 페이지 ID ← URL, 제목 ← REST (lib/confluence_fetch.py)
-  2. 기능명 = 제목 스네이크케이스 ("인벤토리 1차 개선" → "인벤토리_1차_개선"), 또는 --feature
+  2. 기능명 = 제목 스네이크케이스 ("기능U" → "기능U"), 또는 --feature
   3. 그 이름의 탭이 시트에 있으면 _v2, _v3 … (lib/list_tabs.js, 읽기 전용) — 탭을 못 읽으면 실패
   4. team/specs/<기능명>/ 에 confluence_raw.md(≥1KB) · sheet_info.txt(4필드)
   5. 마지막 줄: S0_DONE {"feature": ..., "sheet_id": ...}

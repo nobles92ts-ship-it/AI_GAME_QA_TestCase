@@ -1,7 +1,7 @@
 // design_tree_lines.js
 // tc_design.md '## 분류 그룹핑 트리' 의 **줄 모양 계약(SSoT)** — 이 파일 하나만 본다.
 //
-// 왜 있나 (2026-08-16 자동_사냥_기능_v3 실사고):
+// 왜 있나 (2026-08-16 기능AC_v3 실사고):
 //   같은 트리를 읽는 파서가 두 벌이었고 계약이 달랐다.
 //     · validate_tc_rows.js parseDesignTree — 줄을 trim 후 매칭 (들여쓰기 무관)
 //     · confidence_core.js  트리 루프       — 원본 줄에 `^\s+` / `^\s{2,}` 요구 (들여쓰기 필수)

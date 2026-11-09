@@ -71,7 +71,7 @@ const NUMBERED_STEP_RE = /^\s*\d+\.\s/;
 const TAG_SPLIT_RE = /\[(사전\s*조건|사전\s*상태|행동|기대\s*결과)\]/;
 // 기본기능 F열 — "영문 식별자를 쓸 거면 괄호 안에" (2026-09-03 오너 지시)
 //   ⚠ 2026-09-03 정정: 첫 구현은 "괄호 병기 전 행 필수"였는데 과했다.
-//     세공시스템개선_v2 실측 — 정상 17행 중 11행은 인용할 식별자가 아예 없다
+//     기능AE_v2 실측 — 정상 17행 중 11행은 인용할 식별자가 아예 없다
 //     (`확인 버튼 입력 시 세공이 진행되는지`). 전 행 강제는 65%를 헛되이 막고,
 //     통과시키려고 가짜 식별자를 붙이게 만든다. 규칙은 존재 강제가 아니라 **위치 강제**다.
 //   식별자 = 밑줄 포함(StatRoll_UI_StatMax) 또는 CamelCase 2혹 이상(CompoundProbTable).
@@ -581,7 +581,7 @@ function validateFull(filePath, opts = {}) {
 
     // V-04 검증단계 enum — 빈 값도 위반. 대상 = 실 TC 행(ID 또는 F 보유 — 헤더·빈 행은 adaptInput이 이미 스킵)
     //   E는 병합·표시 dedup 열이 아니다(create_gsheet가 전 행 기록) → fill-down 대상이 아니고 빈 칸은 결손이다.
-    //   2026-09-11 실측: 정예_던전_v2 수기 추가 13행이 빈 E로 통과 — E는 숨김 열(apply_format_tab HIDDEN_COLS)이라 사람이 못 보고 비운다.
+    //   2026-09-11 실측: 기능AI_v2 수기 추가 13행이 빈 E로 통과 — E는 숨김 열(apply_format_tab HIDDEN_COLS)이라 사람이 못 보고 비운다.
     if (r.E && !STAGE_ENUM.includes(r.E)) {
       violations.push({ sev: 'HIGH', rule: 'V-04', row: r.sheetRow, msg: `${loc} 검증단계 "${r.E}" — 허용값(정상/부정/예외) 외` });
     } else if (!r.E && (r.id || r.F)) {

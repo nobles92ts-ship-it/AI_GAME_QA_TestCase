@@ -56,7 +56,7 @@ function patchId(p) {
  *   J='추후 구현'          → H/I 모두 N/A (플랫폼 무관)
  *   그 외                  → 플랫폼 파생: PC 포함→H 미진행 / 모바일 포함→I 미진행, 미포함 열은 N/A
  * 2026-07-28: add_row가 이 파생을 하지 않아 J='추후 구현' 신규 행이 H/I='미진행'으로 들어가
- *   V-20 위반이 시트까지 도달했다(훈장시스템_v2 7건). content_gate는 H/I를 보지 않아 미검출.
+ *   V-20 위반이 시트까지 도달했다(기능AF_v2 7건). content_gate는 H/I를 보지 않아 미검출.
  */
 function derivedHI(j, g) {
   if (String(j || '').trim() === '추후 구현') return ['N/A', 'N/A'];

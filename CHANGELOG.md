@@ -8,6 +8,14 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.11] — 2026-11-09
+
+### Changed
+- **Real feature names from the project the rules were tuned on are replaced with neutral labels.** Learning ledgers, rule examples, comments and test fixtures named specific spec pages (feature folders such as an auto-hunt feature or a boss encounter). These are now `기능H` … `기능AI`, continuing the `기능A`–`기능G` labels used in earlier releases. A `_vN` version suffix is kept, so "same feature, later run" still reads correctly. Generic game words (inventory, mail, chat, PK, and so on) are left as they are.
+- No behaviour change: names are replaced consistently in code, rules and tests, and test results match v4.3.10.
+
+---
+
 ## [v4.3.10] — 2026-11-09
 
 ### Changed

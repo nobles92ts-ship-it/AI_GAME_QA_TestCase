@@ -179,7 +179,7 @@ for (const doc of docs) {
       const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       // 토큰은 **경로 글자만** 먹는다. 부정 문자셋으로 두면 한글·괄호·연산자를 삼켜
       //   `추가(코드+tests/run_tests.js` 같은 가짜 경로가 생긴다(2026-09-03 실측 1건).
-      //   한글은 **포함**한다 — `specs/소환권_아이템_기능_v5/…` 처럼 경로에 실제로 쓰인다.
+      //   한글은 **포함**한다 — `specs/기능T_v5/…` 처럼 경로에 실제로 쓰인다.
       const pathed = new RegExp(`[A-Za-z0-9_.~:$가-힣\-]*(?:[\\/][A-Za-z0-9_.~$가-힣\-]+)*[\\/]${esc}`).exec(line);
       if (pathed) {
         const tok = pathed[0];

@@ -24,7 +24,7 @@ t('7열 → 10열 조립: A 순번·H/I 파생', () => {
 
 // ── 왕복 등가성: 실물 10열 스냅샷 → 7열 투영 → 재조립 = 원본 (H/I 파생 정합) ──
 t('실물 왕복 등가성 (자동_사냥 스냅샷)', () => {
-  const p = '{PROJECT_ROOT}/team/specs/자동_사냥_기능/tc_snapshot.json';
+  const p = '{PROJECT_ROOT}/team/specs/기능AC/tc_snapshot.json';
   if (!fs.existsSync(p)) { console.log('    (skip)'); return; }
   const orig = JSON.parse(fs.readFileSync(p, 'utf8'));
   const rebuilt = buildSnapshot(to7col(orig.rows), orig.sheetName);

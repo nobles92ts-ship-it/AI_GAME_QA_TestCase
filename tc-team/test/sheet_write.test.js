@@ -21,48 +21,48 @@ t('빈 셀은 빈 문자열로', () => {
 
 t('베이스 탭 비어있으면 생성', () => {
   const created = [];
-  const res = resolveAndWrite(t => (created.push(t), { exit: 0 }), () => {}, { baseTab: '자동_사냥_기능', runId: 'r1', marker: null });
+  const res = resolveAndWrite(t => (created.push(t), { exit: 0 }), () => {}, { baseTab: '기능AC', runId: 'r1', marker: null });
   assert.ok(res.ok);
-  assert.strictEqual(res.tab, '자동_사냥_기능');
+  assert.strictEqual(res.tab, '기능AC');
   assert.strictEqual(res.action, 'created');
 });
 
 t('베이스 탭 점유(남의 것) → _v2로 bump', () => {
   const res = resolveAndWrite(
-    t => t === '자동_사냥_기능' ? { exit: 3 } : { exit: 0 },
+    t => t === '기능AC' ? { exit: 3 } : { exit: 0 },
     () => {},
-    { baseTab: '자동_사냥_기능', runId: 'r1', marker: null });
+    { baseTab: '기능AC', runId: 'r1', marker: null });
   assert.ok(res.ok);
-  assert.strictEqual(res.tab, '자동_사냥_기능_v2');
+  assert.strictEqual(res.tab, '기능AC_v2');
   assert.strictEqual(res.action, 'created');
 });
 
 t('_v2도 점유 → _v3', () => {
-  const taken = new Set(['자동_사냥_기능', '자동_사냥_기능_v2']);
-  const res = resolveAndWrite(t => taken.has(t) ? { exit: 3 } : { exit: 0 }, () => {}, { baseTab: '자동_사냥_기능', runId: 'r1', marker: null });
-  assert.strictEqual(res.tab, '자동_사냥_기능_v3');
+  const taken = new Set(['기능AC', '기능AC_v2']);
+  const res = resolveAndWrite(t => taken.has(t) ? { exit: 3 } : { exit: 0 }, () => {}, { baseTab: '기능AC', runId: 'r1', marker: null });
+  assert.strictEqual(res.tab, '기능AC_v3');
 });
 
 t('우리 소유 탭 존재(마커) → 삭제 후 재기록(clear_and_rewrite)', () => {
   const deleted = [];
   let deletedFlag = false;
   const res = resolveAndWrite(
-    t => (t === '자동_사냥_기능_v2' && !deletedFlag) ? { exit: 3 } : { exit: 0 },
+    t => (t === '기능AC_v2' && !deletedFlag) ? { exit: 3 } : { exit: 0 },
     t => { deleted.push(t); deletedFlag = true; },
-    { baseTab: '자동_사냥_기능', runId: 'r1', marker: { run_id: 'r1', tab: '자동_사냥_기능_v2' } });
+    { baseTab: '기능AC', runId: 'r1', marker: { run_id: 'r1', tab: '기능AC_v2' } });
   assert.ok(res.ok);
-  assert.strictEqual(res.tab, '자동_사냥_기능_v2');
+  assert.strictEqual(res.tab, '기능AC_v2');
   assert.strictEqual(res.action, 'clear_and_rewrite');
-  assert.deepStrictEqual(deleted, ['자동_사냥_기능_v2']);
+  assert.deepStrictEqual(deleted, ['기능AC_v2']);
 });
 
 t('다른 run의 마커는 재사용 안 함(내 것만 clear)', () => {
   // marker.run_id != runId → 마커 후보 제외, 베이스부터. 베이스 점유면 bump.
   const res = resolveAndWrite(
-    t => t === '자동_사냥_기능' ? { exit: 3 } : { exit: 0 },
+    t => t === '기능AC' ? { exit: 3 } : { exit: 0 },
     () => { throw new Error('남의 탭을 지우면 안 됨'); },
-    { baseTab: '자동_사냥_기능', runId: 'r2', marker: { run_id: 'r1', tab: '자동_사냥_기능' } });
-  assert.strictEqual(res.tab, '자동_사냥_기능_v2');
+    { baseTab: '기능AC', runId: 'r2', marker: { run_id: 'r1', tab: '기능AC' } });
+  assert.strictEqual(res.tab, '기능AC_v2');
 });
 
 t('검증 오류(exit 4) → 즉시 중단(시트 미변형)', () => {

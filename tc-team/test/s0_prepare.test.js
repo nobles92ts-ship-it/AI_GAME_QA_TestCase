@@ -19,7 +19,7 @@ const call = (expr) => {
 console.log('s0_prepare 테스트 (Codex 경로 S0)');
 
 t('제목 → 스네이크케이스 (Claude S0 규칙과 같은 예)', () => {
-  assert.strictEqual(call("s.feature_name('인벤토리 1차 개선')"), '인벤토리_1차_개선');
+  assert.strictEqual(call("s.feature_name('기능U')"), '기능U');
   assert.strictEqual(call("s.feature_name('  A/B: 테스트 [초안] ')"), 'A_B_테스트_초안');
 });
 

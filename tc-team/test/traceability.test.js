@@ -31,7 +31,7 @@ t('미커버 0 + 제외 사유 정상 → 게이트 PASS', () => {
 
 // ── 래퍼 관용 (2026-07-29 신설) ──
 // 원장은 LLM 산출이라 {coverage:[...]}/{exclusions:[...]} 형태로 오는 일이 잦다.
-// 예전엔 exclusions 래퍼가 곧장 TypeError로 체인을 세웠다(월드맵_2차_개선 런).
+// 예전엔 exclusions 래퍼가 곧장 TypeError로 체인을 세웠다(기능AA 런).
 t('coverage 래퍼 {coverage:[...]} 허용', () => {
   const r = buildLedger(rules, { coverage: [{ rule_id: 'R-2.1', tc_ids: [10] }] }, [{ rule_id: 'R-1.1', reason: '비TC성서술' }]);
   assert.strictEqual(r.summary.covered, 1, '래퍼가 벗겨지지 않음');

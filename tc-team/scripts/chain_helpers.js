@@ -215,7 +215,7 @@ if (cmd === 'extract-s3-rules') {
   //   항상 공백)와 대조하게 되어, 비고가 채워진 스펙에서 전량 오탐한다.
   //   [경위] 생성 양식이 개선되며 시트에 '링크' 열(J)이 추가돼 11열이 됐고, 비교기가 따라가지 못했다.
   //   비고가 전부 공백이던 스펙에서는 양쪽 다 공백이라 드러나지 않다가, 추후구현이 많은 스펙에서
-  //   표면화됐다 (2026-09-04 아바타_탈것_뽑기_연출: 104행 전량 오탐으로 S6 정지).
+  //   표면화됐다 (2026-09-04 기능N: 104행 전량 오탐으로 S6 정지).
   const fin = readJ(a[0]);
   const dump = readJ(a[1]);
   const finRows = fin.rows || fin;
@@ -225,7 +225,7 @@ if (cmd === 'extract-s3-rules') {
   let errCells = 0;
   // 시트는 동일 분류를 최상단 1회만 표기(dedup, tc-생성 V-07)하고 final.json은 전 행 채움(L4-02 계약).
   // → 덤프의 B/C/D를 fill-down으로 복원한 뒤 비교한다. (2026-07-28: 미적용 시 dedup 행마다 오탐,
-  //    훈장시스템_v2 첫 풀체인에서 1023건 오탐으로 발각 — S6이 항상 정지하던 결함)
+  //    기능AF_v2 첫 풀체인에서 1023건 오탐으로 발각 — S6이 항상 정지하던 결함)
   const carry = ['', '', ''];
   for (const r of (dump.rows || [])) {
     for (const c of r) if (typeof c === 'string' && (c.includes('#ERROR!') || c.includes('#REF!'))) errCells++;

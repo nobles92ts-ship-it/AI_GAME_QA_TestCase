@@ -172,7 +172,7 @@ t('실물 주변감지 v2 baseline — 신규 규칙이 무플래그 위임 1건
 
 // ── 실물 스냅샷 스모크 (자동_사냥 — v2 writer 산출, FINAL-4 통과했던 것) ──
 t('실물 tc_snapshot.json 게이트 통과(회귀 근거)', () => {
-  const p = '{PROJECT_ROOT}/team/specs/자동_사냥_기능/tc_snapshot.json';
+  const p = '{PROJECT_ROOT}/team/specs/기능AC/tc_snapshot.json';
   if (!fs.existsSync(p)) { console.log('    (skip — 파일 없음)'); return; }
   const snap = JSON.parse(fs.readFileSync(p, 'utf8'));
   const res = checkContent(snap.rows);
