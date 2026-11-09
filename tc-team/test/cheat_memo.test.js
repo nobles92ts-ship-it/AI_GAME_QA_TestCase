@@ -10,7 +10,7 @@ function t(name, fn) { try { fn(); pass++; } catch (e) { fail++; console.error('
 const P = (name, optional = false, item = false) => ({ name, type: 'int', optional, item });
 const cheats = [
   { id: 's:ClearTutorial', scope: 's', command: 'ClearTutorial', desc: '', params: [] },
-  { id: 'c:DX_KillPlayer', scope: 'c', command: 'DX_KillPlayer', desc: '', params: [] },
+  { id: 'c:KillPlayer', scope: 'c', command: 'KillPlayer', desc: '', params: [] },
   { id: 's:AddItem', scope: 's', command: 'AddItem', desc: '', params: [P('addItemIndex', false, true), P('itemCount', true)] },
   { id: 's:MoveMap', scope: 's', command: 'MoveMap', desc: '', params: [P('mapIndex'), P('x', true)] },
 ];
@@ -20,7 +20,7 @@ const items = new Map([['회복 물약(대)', ['202012001']], ['회복 물약(�
 
 t('인자 없는 치트 → 그대로 한 줄 (서버는 s 접두)', () => {
   assert.deepStrictEqual(cm.buildLine(byId('s:ClearTutorial'), [], items), { lines: ['s ClearTutorial'] });
-  assert.deepStrictEqual(cm.buildLine(byId('c:DX_KillPlayer'), [], items), { lines: ['DX_KillPlayer'] });
+  assert.deepStrictEqual(cm.buildLine(byId('c:KillPlayer'), [], items), { lines: ['KillPlayer'] });
 });
 t('아이템 이름이 하나에만 걸리면 ID 확정, 생략 인자는 비움', () => {
   assert.deepStrictEqual(cm.buildLine(byId('s:AddItem'), ['회복 물약(대)'], items), { lines: ['s AddItem 202012001'] });
@@ -48,7 +48,7 @@ t('resolve: g 로 조인(AI 가 돌려준 글자 무시) · 3개 상한 · 알�
     fs.writeFileSync(path.join(dir, 'cheat_groups.json'), JSON.stringify({ groups: [
       { g: 1, key: ['A', 'B', 'C'], first_tc: '001' }, { g: 2, key: ['A', 'B', 'D'], first_tc: '003' }] }));
     fs.writeFileSync(path.join(dir, '_cheat_picks.json'), JSON.stringify({ picks: [
-      { g: 2, key: ['엉뚱', '글자'], cheats: [{ id: 's:ClearTutorial' }, { id: 'c:!사망' }, { id: 's:AddItem', terms: ['회복 물약(대)'] }, { id: 'c:DX_KillPlayer' }] }] }));
+      { g: 2, key: ['엉뚱', '글자'], cheats: [{ id: 's:ClearTutorial' }, { id: 'c:!사망' }, { id: 's:AddItem', terms: ['회복 물약(대)'] }, { id: 'c:KillPlayer' }] }] }));
     const m = cm.resolve(dir, { dict: { source: 'fake', date: '2026-10-21', cheats }, itemNames: items });
     assert.deepStrictEqual(m.groups[0].lines, []);
     assert.deepStrictEqual(m.groups[1].lines, ['s ClearTutorial', 's AddItem 202012001'], '4번째는 상한 밖');
@@ -69,7 +69,7 @@ t('시트 맨 윗줄 찾기 — 빈 대·중·소는 위 값을 잇는다', () =
   assert.equal(top.get(JSON.stringify(['A', 'E', 'C'])), 5);
 });
 t('메모 계획: 사람 메모 보호 · 우리 낡은 메모 지움 · 같은 값이면 안 씀', () => {
-  const groups = [{ key: ['A', 'B', 'C'], lines: ['s ClearTutorial'] }, { key: ['A', 'B', 'D'], lines: ['DX_KillPlayer'] },
+  const groups = [{ key: ['A', 'B', 'C'], lines: ['s ClearTutorial'] }, { key: ['A', 'B', 'D'], lines: ['KillPlayer'] },
     { key: ['A', 'E', 'C'], lines: [] }];
   const notes = ['', '', '', '사람이 단 메모', '', cm.SIGNATURE + '\n옛 줄'];
   const p = cm.planNotes(sheet, notes, groups);
@@ -82,7 +82,7 @@ t('실사전(Command.xlsx): 아이템 지급·인자 없는 치트는 후보, �
   const d = cm.loadCheats('<GAMEDATA_ROOT>/ExcelTable');
   if (!d) { console.log('  (Command.xlsx 없음 — 건너뜀)'); return; }
   const f = id => d.cheats.find(c => c.id === id);
-  for (const id of ['s:ClearTutorial', 's:AddItem', 'c:DX_KillPlayer']) assert(f(id) && cm.pickable(f(id)), id);
+  for (const id of ['s:ClearTutorial', 's:AddItem', 'c:KillPlayer']) assert(f(id) && cm.pickable(f(id)), id);
   assert(f('s:MoveMap') && !cm.pickable(f('s:MoveMap')));
   assert(f('s:AddItem').params[0].item);
 });

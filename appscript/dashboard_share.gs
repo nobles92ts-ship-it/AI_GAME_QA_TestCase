@@ -1,5 +1,5 @@
 // ─── QA 대시보드 공유 Slack 전송 ───────────────────────────────────────────
-// 대시보드 M6 체크박스 → 대시보드 통합 집계(BVT 제외)를 dexar-qa 채널로 전송
+// 대시보드 M6 체크박스 → 대시보드 통합 집계(BVT 제외)를 your-qa-channel 채널로 전송
 // 용도: 시트를 열지 않고도 현재 QA 진행 현황을 채널에 공유
 // ⚠ tab_manager.gs와 전역 스코프 공유: SPREADSHEET_ID, DASHBOARD_TAB는
 //   tab_manager.gs 선언을 재사용 (재선언 금지)
@@ -13,7 +13,7 @@ const SHARE_LABEL_CELL  = 'M5';   // 대시보드 탭
 const SHARE_BUTTON_CELL = 'M6';
 const SHARE_STATUS_CELL = 'M7';
 
-const SLACK_CHANNEL = 'C0AH0FERQRY'; // dexar-qa (qa-widget과 동일)
+const SLACK_CHANNEL = 'YOUR_SLACK_CHANNEL_ID'; // your-qa-channel (qa-widget과 동일)
 const SLACK_TOKEN   = '__SLACK_TOKEN__'; // deploy_appscript.js가 배포 시 자동 치환
 
 // ─── 설치형 onEdit 트리거 핸들러 ───────────────────────────────────────────
@@ -54,7 +54,7 @@ function sendDashboardToSlack(ss) {
   const milestone = (String(ss.getName()).match(/(\d+차)/) || [])[1] || '';
 
   postToSlack(buildDashboardBlocks(stat, feats, milestone, url),
-              'DX QA 대시보드 — PASS ' + stat.pc.PASS + ' / FAIL ' + stat.pc.FAIL);
+              'QA 대시보드 — PASS ' + stat.pc.PASS + ' / FAIL ' + stat.pc.FAIL);
 }
 
 // ─── 탭별 현황 읽기 ────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ function buildDashboardBlocks(stat, feats, milestone, url) {
     + '📊 <' + url + '|TC 시트 열기>';
 
   const blocks = [
-    section('*📊 DX QA 대시보드 공유 — ' + ms + today + ' (' + dayName + ')*'),
+    section('*📊 QA 대시보드 공유 — ' + ms + today + ' (' + dayName + ')*'),
     section('✅ PASS  *' + fmt(stat.pc.PASS) + '*　　❌ FAIL  *' + fmt(stat.pc.FAIL)
           + '*　　🚧 BLOCK  *' + fmt(stat.pc.BLOCK) + '*　　⏳ 미진행  *' + fmt(stat.pc.pending)
           + '*　　🚫 N/A  *' + fmt(stat.pc.NA) + '*'),
@@ -279,7 +279,7 @@ function setupM6Button() {
   btn.clearContent();
   btn.insertCheckboxes();
   btn.setValue(false);
-  btn.setNote('체크 → 대시보드 통합 현황(BVT 제외)을 dexar-qa 채널로 전송');
+  btn.setNote('체크 → 대시보드 통합 현황(BVT 제외)을 your-qa-channel 채널로 전송');
 
   const status = dashboard.getRange(SHARE_STATUS_CELL);
   status.setValue('');

@@ -172,7 +172,7 @@ if (require.main === module) {
 
   const index = parseTableMap(fs.readFileSync(MAP, 'utf8'));
   const raw = fs.readFileSync(RAW, 'utf8');
-  const build = path.basename(path.dirname(path.dirname(path.resolve(TABLES))));   // …/DX_Trunk/CommonData/ExcelTable → DX_Trunk
+  const build = path.basename(path.dirname(path.dirname(path.resolve(TABLES))));   // …/Trunk/CommonData/ExcelTable → Trunk
   const date = new Date().toISOString().slice(0, 10);
   const { md, stats } = buildExtract(raw, index, readSheet, { maxRows: MAX_ROWS, build, date });
 
