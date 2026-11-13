@@ -26,7 +26,8 @@
  *
  * 적용 순서(계획 §4 — 결정론): 원본 tc_id 기준 edit → delete 표시 → add 앵커 삽입 → 삭제 반영 → 삽입 반영 → A열 재번호.
  *
- * CLI: node apply_fix_plan.js <snapshot.json> <fix_plan.json> <out.json> [--ledger <ledger.json>]
+ * CLI: node apply_fix_plan.js <snapshot.json> <fix_plan.json> <out.json> [--ledger <ledger.json>] [--idmap <idmap.json>]
+ *      --idmap: 옛→새 번호 표 {map, added, deleted, final_rows, final_digest} — regroup 뒤 번호 기준(id_space.js).
  *      종료코드: 0=적용(충돌 0) / 6=충돌 존재(부분 적용, 사람 확인) / 1=입력 오류
  */
 'use strict';
@@ -35,6 +36,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { to7col } = require('./sheet_write');
 const { regroupRows } = require('./regroup');
+const { rowsDigest } = require('./id_space');
 // S6 create_gsheet 가 탭을 만들기 전에 부르는 «그» 검사기를 sheet_write 와 같은 경로 해석으로 부른다 — 규칙을 베끼면 둘이 어긋난다.
 const UTIL = process.env.TCTEAM_UTIL_DIR || path.resolve(__dirname, '..', '..', 'scripts', 'util');
 const { validatePreWrite, hasBlocking } = require(path.join(UTIL, 'validate_tc_rows.js'));
@@ -160,10 +162,17 @@ function applyFixPlan(snapshot, plan, ledgerIn) {
     insOffset.set(ins.anchor, off);
     out.splice(at + off, 0, ins.row);
   }
+  // 옛→새 번호 표 (2026-11-06) — 재번호 «전»의 원 번호(삽입 행은 '')를 꼬리표(열 10)로 달고,
+  //   체인이 바로 뒤에 돌리는 regroup 과 «같은 함수»로 정렬해 최종 번호를 얻는다. 지문은 그 정렬 결과(10열)의 것.
+  const tagged = regroupRows(out.map(r => r.slice(0, 10).concat([r[COL.A]])));
+  const idmap = { map: {}, added: [], deleted: [...deletes], final_rows: tagged.length,
+    final_digest: rowsDigest(tagged.map(r => r.slice(0, 10))) };
+  for (const r of tagged) { if (r[10]) idmap.map[r[10]] = r[COL.A]; else idmap.added.push(r[COL.A]); }
+
   // A열 재번호 (연속 3자리) — 삽입·삭제로 시프트된 ID 정합
   out = out.map((r, i) => { const c = r.slice(); c[COL.A] = String(i + 1).padStart(3, '0'); return c; });
 
-  return { rows: out, ledger: { applied: [...ledgerSet] }, applied, skipped, conflicts, rejected };
+  return { rows: out, ledger: { applied: [...ledgerSet] }, applied, skipped, conflicts, rejected, idmap };
 }
 
 module.exports = { applyFixPlan, patchId, COL };
@@ -173,6 +182,8 @@ if (require.main === module) {
   const [snapPath, planPath, outPath] = process.argv.slice(2);
   const li = process.argv.indexOf('--ledger');
   const ledgerPath = li >= 0 ? process.argv[li + 1] : null;
+  const mi = process.argv.indexOf('--idmap');
+  const idmapPath = mi >= 0 ? process.argv[mi + 1] : null;
   if (!snapPath || !planPath || !outPath) {
     process.stderr.write('사용: apply_fix_plan.js <snapshot.json> <fix_plan.json> <out.json> [--ledger <ledger.json>]\n');
     process.exit(1);
@@ -190,6 +201,7 @@ if (require.main === module) {
   const tmp = outPath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(outSnap, null, 1)); fs.renameSync(tmp, outPath);
   if (ledgerPath) { const lt = ledgerPath + '.tmp'; fs.writeFileSync(lt, JSON.stringify(res.ledger, null, 1)); fs.renameSync(lt, ledgerPath); }
+  if (idmapPath) { const mt = idmapPath + '.tmp'; fs.writeFileSync(mt, JSON.stringify(res.idmap, null, 1)); fs.renameSync(mt, idmapPath); }
   for (const r of res.rejected) process.stderr.write(`[apply_fix_plan][pre-write 회귀 거부] ${r.tc_id} ${r.col} — ${r.violations.join(' / ')}\n`);
   process.stdout.write(JSON.stringify({
     ok: res.conflicts.length === 0, rows: res.rows.length,

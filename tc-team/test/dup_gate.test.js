@@ -89,5 +89,37 @@ t('jaccard/tokens 기본 동작', () => {
   assert.strictEqual(norm('  a  ,  b  '), 'a b');
 });
 
+t('도장 묶음: 같은 틀이 소분류 3곳 이상이면 stamps 1묶음 (양성)', () => {
+  const f = n => `퀘스트 ${n}의 스텝 1 진행 상태에서 앱을 강제 종료한 뒤 다시 접속하면 활성 퀘스트와 스텝이 복구 정책과 일치하는지 확인`;
+  const rows = [R('001', '메인', '1010010 화면', f(1010010), '예외'), R('002', '메인', '1010020 화면', f(1010020), '예외'),
+    R('003', '메인', '1010030 화면', f(1010030), '예외'), R('004', '메인', '1010040 화면', f(1010040), '예외')];
+  const res = checkDuplicates(rows, 0.85);
+  assert.strictEqual(res.stamps.length, 1);
+  assert.strictEqual(res.stamps[0].size, 4);
+  assert.strictEqual(res.stamps[0].classes, 4);
+  assert.deepStrictEqual(res.stamps[0].stages, ['예외']);
+  assert.strictEqual(res.exact.length, 0, '도장은 차단 대상(exact)이 아니다');
+});
+
+t('도장 묶음: 한 소분류 안의 축 전개는 stamps 아님 (음성)', () => {
+  const f = n => `일반 레벨1 ${n}구간에 진입한 상태에서 통로를 제외한 사냥 공간 면적을 합산하면 기준 면적 이상인지 확인`;
+  const rows = [1, 2, 3, 4].map(n => R('00' + n, '던전', '구간 화면', f(n)));
+  const res = checkDuplicates(rows, 0.85);
+  assert.ok(res.similar.length > 0, '유사 쌍은 잡혀야 함');
+  assert.strictEqual(res.stamps.length, 0, '소분류 1곳이라 도장 아님');
+});
+
+t('도장 묶음: 소분류 2곳짜리 짝은 stamps 아님 (BVA·소형/대형 보호)', () => {
+  const rows = [R('308', '보상', '툴팁', '훈장 보상 UI에서 훈장을 선택하면 툴팁이 출력되는지 확인'),
+    R('354', '보상', '목록', '보상 UI에서 훈장을 선택하면 훈장 툴팁이 출력되는지 확인')];
+  assert.strictEqual(checkDuplicates(rows, 0.85).stamps.length, 0);
+});
+
+t('도장 묶음: 유사가 없으면 빈 배열', () => {
+  const rows = [R('001', '슬롯', '화면', '장착하면 E 아이콘이 출력되는지 확인'),
+    R('002', '슬롯', '화면', '미보유 상태에서 딤드 처리되는지 확인')];
+  assert.deepStrictEqual(checkDuplicates(rows).stamps, []);
+});
+
 console.log(`\n결과: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

@@ -29,6 +29,9 @@ const DATA_HDR = '🔧 테스트 데이터 생성 요청';
 // (이전: 2026-09-04 BTS 열 신설로 구 L/M → M/N.) 이름으로 부른다 — 또 밀릴 때 숫자만 고치면 된다.
 // 패널 끝 열과의 간격은 test/sheet_layout_contract.test.js 가 지킨다.
 const HDR_COL = 17, BODY_COL = 18, START = 1; // R, S, 2행(0-base 1)
+// 2026-10-30 운영 결정: 기획확인 헤더 줄 옆 T 에 「기획 답변」 헤더 — 기획자가 T3~ 에 번호 줄 맞춰 답을 적게 유도.
+// T3~ 는 기획자 답이 사는 칸이라 재실행 때도 지우지 않는다(헤더 칸만 다시 쓴다).
+const ANS_HDR = '기획 답변', ANS_COL = 19; // T
 
 const NAVY = { red: 0.141, green: 0.231, blue: 0.322 };
 const BROWN = { red: 0.420, green: 0.290, blue: 0.102 };
@@ -82,6 +85,7 @@ async function applyLabeling(spreadsheetId, sheetName, labels) {
 
     // 재실행 대비: R2:S(넉넉히) 값 정리
     await sheets.spreadsheets.values.clear({ spreadsheetId, range: `'${sheetName}'!R${START + 1}:S${START + 60}` });
+    await sheets.spreadsheets.values.clear({ spreadsheetId, range: `'${sheetName}'!T${START + 1}` });
     if (!sections.length) {
         console.log('라벨 없음 — 기재 생략');
         return;
@@ -96,6 +100,12 @@ async function applyLabeling(spreadsheetId, sheetName, labels) {
     await sheets.spreadsheets.values.update({
         spreadsheetId, range: `'${sheetName}'!R${START + 1}`, valueInputOption: 'RAW', requestBody: { values: rows },
     });
+    const plan = sections.find(s => s.hdr === PLAN_HDR);
+    if (plan) {
+        await sheets.spreadsheets.values.update({
+            spreadsheetId, range: `'${sheetName}'!T${plan.hdrRow + 1}`, valueInputOption: 'RAW', requestBody: { values: [[ANS_HDR]] },
+        });
+    }
 
     // 서식 (순서 중요: 번호 칸 서식 먼저 → 헤더 줄이 덮음). 헤더 줄의 S 칸은 값·서식 모두 건드리지 않는다.
     const cellRange = (r1, r2, col) => ({ sheetId: gid, startRowIndex: r1, endRowIndex: r2, startColumnIndex: col, endColumnIndex: col + 1 });
@@ -105,6 +115,7 @@ async function applyLabeling(spreadsheetId, sheetName, labels) {
         reqs.push({ repeatCell: { range: cellRange(first, end, HDR_COL), cell: { userEnteredFormat: numFmt }, fields: FMT_FIELDS } });
         reqs.push({ repeatCell: { range: cellRange(s.hdrRow, first, HDR_COL), cell: { userEnteredFormat: hdrFmt(s.bg) }, fields: FMT_FIELDS } });
         reqs.push({ repeatCell: { range: cellRange(first, end, BODY_COL), cell: { userEnteredFormat: bodyFmt }, fields: FMT_FIELDS } });
+        if (s === plan) reqs.push({ repeatCell: { range: cellRange(s.hdrRow, first, ANS_COL), cell: { userEnteredFormat: hdrFmt(s.bg) }, fields: FMT_FIELDS } });
     });
     // ⚠ 열너비·테두리는 건드리지 않음 (불변 — 폭 소유자는 add_project_info.js)
 

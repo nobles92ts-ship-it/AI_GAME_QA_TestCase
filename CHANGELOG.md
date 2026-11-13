@@ -8,6 +8,22 @@ All notable changes to this project are documented here.
 
 ---
 
+## [v4.3.14] — 2026-11-13
+
+### Added
+- **Planner answers now build up in the analysis doc.** `tc-team/lib/answers_merge.js` appends each batch of planner answers to the latest-version `analysis.md` of that feature (Part D), so the newest version is always the most complete one. `answers_weave.js` applies LLM-proposed edits that fold those answers into the body (boundary values, open-item lists, key lists). It only applies the edits and makes no decisions of its own.
+- **`waiting_tcs.js`** lists TCs that are waiting on a planner answer, and flags a waiting TC whose question never reached the planner. Before this, a TC could keep "needs planner check" in its note after its question had been filtered out.
+- **`id_space.js`** re-maps `coverage.json` TC ids to the final TC numbers after S5 inserts or removes rows and regroup renumbers column A. Before this, coverage links could point at a different TC while every existence check still passed.
+
+### Changed
+- Rule files (`tc-분석`, `tc-설계`, `tc-대조`, `tc-리뷰`, `라벨링_기준`, `완료처리`) and the S1/full chain scripts are updated for the answer flow above. The duplicate gate, quality report, xlsx extraction and confidence scoring got fixes and more tests.
+- A company-only step that reassigns the QA ticket on the first TC run is skipped in the public build.
+
+### Tests
+- Fresh clone with `npm install`: all `tc-team` and `tc-team-ai` suites green, including a run with a clean Python (`PYTHONNOUSERSITE=1`).
+
+---
+
 ## [v4.3.13] — 2026-11-09
 
 ### Fixed

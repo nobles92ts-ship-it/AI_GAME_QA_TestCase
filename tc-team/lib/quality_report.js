@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { buildLedger, EXCLUSION_REASONS } = require('./traceability');
+const { rowsDigest } = require('./id_space');
 const { CHECKS, CHECK_NAMES, parseMetadata, executionRows } = require('./execution_metadata');
 const LENSES = ['structure', 'quality', 'crossref'];
 const percent = n => n === null ? '대상 없음' : (n * 100).toFixed(2) + '%';
@@ -18,6 +19,9 @@ function coverageView(input, rows, warnings) {
   const ledger = buildLedger(rules, input.coverage, input.exclusions || []);
   const ids = new Set(rows.map(r => idKey(r[0])));
   if (ids.size !== rows.length) throw new Error('최종 TC ID 중복');
+  // 번호 «존재»만 보면 끼우기로 밀린 번호도 통과한다(2026-11-06 — 8런 중 6런). S5 remap-coverage 가 남긴 지문과 대 본다.
+  if (!input.idspace) warnings.push('연결표 번호 기준 기록 없음(coverage_idspace.json) — 규칙→TC 연결이 최종 TC 번호 기준인지 확인 못 함');
+  else if (input.idspace.final_digest !== rowsDigest(rows)) warnings.push('연결표 번호 기준이 최종 TC와 다름 — S5 이후 최종본이 바뀌었다(행 ' + input.idspace.final_rows + '→' + rows.length + '). 규칙→TC 연결을 다시 맞춰야 한다');
   const mapped = ledger.mapped.map(r => {
     const invalid = r.tc_ids.filter(id => !ids.has(idKey(id)));
     if (invalid.length) warnings.push('존재하지 않는 TC 연결: ' + r.rule_id + ' → ' + invalid.join(', '));
@@ -143,7 +147,7 @@ function generate(spec, out = spec) {
   }
   const snapshot = read('tcteam_tc_final.json', true);
   const input = { feature: path.basename(spec), rows: Array.isArray(snapshot) ? snapshot : snapshot.rows,
-    slices: read('slices.json', true), coverage: read('coverage.json', true), exclusions: read('exclusions.json'),
+    slices: read('slices.json', true), coverage: read('coverage.json', true), exclusions: read('exclusions.json'), idspace: read('coverage_idspace.json'),
     design: read('tc_design.md', true, false), source: read('confluence_raw.md', true, false),
     lenses: Object.fromEntries(LENSES.map(k => [k, read('lens_' + k + '.json')])),
     labels: read('_labels.json'), dropped: read('_labels_dropped.json'), removed: read('_labels_removed.json'), patches: read('applied_patches.json'), input_hashes: hashes };

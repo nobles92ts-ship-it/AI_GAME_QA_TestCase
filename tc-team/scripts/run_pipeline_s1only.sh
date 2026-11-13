@@ -197,6 +197,8 @@ printf '[{"feature":"%s","confluence":"%s"}]\n' "$FEAT" "${CONF_URL:-}" > "$SPEC
 "$NODE" "$UTIL/send_slack_tc_request.js" --items "$SPEC/.kickoff_item.json" \
   --sheet "https://docs.google.com/spreadsheets/d/$SHEET_ID/edit" --dedup-dir "$SPEC" >>"$CHAIN_LOG" 2>&1 \
   && log "[SLACK] 착수 공지 OK" || log "[SLACK][경고] 실패 — 계속"
+# QA 일감 담당 갱신 — 사내 전용 단계(공개 배포본 미포함)
+:  # (사내 전용 — 공개 배포본은 건너뛴다)
 fi
 fi
 
@@ -249,6 +251,23 @@ else
   log "[STEP 0-사전] 스킵 (item_dict=$ITEMDICT)"
 fi
 
+# ── STEP 0-답변 (결정론 · 2026-11-06 오너 「v2·v3~v7 최신 것이 가장 완벽한 분석서가 되도록」) ──────────
+# 같은 기능(이름에서 초안_·_vN 을 뺀 것 + page id)을 앞서 돌린 판들의 기획자 답 → $SPEC/prior_answers.md.
+# 설계자가 새 analysis.md 의 C-1·C-2 에 확정 사양으로 녹인다(rules/tc-분석.md §기획 답변 승계). 없으면 조용히 스킵.
+# 실례: 기능BO 답 20건 · 초안_기능BL 답 13건 — 각 _v2 런이 하나도 몰랐다.
+PRIOR_LINE=""
+if [[ $START -le 1 ]]; then
+  AXD=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.answers_extra_dir||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+  AARGS=(collect "$SPEC"); [[ -n "$AXD" ]] && AARGS+=(--extra "$AXD")
+  if pout=$("$NODE" "$PROJECT_ROOT/tc-team/lib/answers_merge.js" "${AARGS[@]}" 2>&1); then
+    log "[STEP 0-답변] 이전 판 기획자 답 ${pout#prior }건"
+  else
+    log "[STEP 0-답변][경고] 수집 실패(비차단): $pout"
+  fi
+fi
+[[ -f "$SPEC/prior_answers.md" ]] && PRIOR_LINE="
+- 이전 판 기획자 답: $SPEC/prior_answers.md (있으면 반드시 Read — 확정 사양으로 analysis.md 에 녹인다. 규칙 SSoT=tc-분석.md §기획 답변 승계)"
+
 # ── STEP 1 설계 (opus) ───────────────────────────────────────────────────────
 if [[ $START -le 1 ]]; then
 log "[STEP 1] 설계자 모델 $TCTEAM_OPUS_MODEL (S1 opus 자리 · 되돌리기 env TCTEAM_OPUS_MODEL=claude-opus-5)"
@@ -259,7 +278,7 @@ HANDOFF="## HANDOFF
 - 기획서 원문 파일: $SPEC/confluence_raw.md
 - Confluence URL: ${CONF_URL:-} (참조용)
 - specs 경로: $SPEC
-- 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭에 아이템 유형을 일반명사로 쓸 때 대표 실아이템 병기. 규칙 SSoT=tc-설계.md §아이템 실명 병기. 없으면 현행대로 유형만 기재)
+- 아이템 실명 사전: $SPEC/item_dict.json (있으면 소비 — 재현스탭에 아이템 유형을 일반명사로 쓸 때 대표 실아이템 병기. 규칙 SSoT=tc-설계.md §아이템 실명 병기. 없으면 현행대로 유형만 기재)${PRIOR_LINE}
 
 ## 작업 지시
 confluence_raw.md 읽어 analysis.md + tc_design.md 생성 → 직변환 사전 게이트(tc-설계.md Step 11.5, exit 0 필수) $DRIVE_STEP
@@ -303,6 +322,8 @@ if [[ "$CROSSREF" == "on" ]]; then
   XTM=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(c.crossref_tablemap||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
   XMR=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));process.stdout.write(String(c.xlsx_extract_max_rows||200))}catch(e){process.stdout.write('200')}" 2>/dev/null)
   XEARGS=(--raw "$SPEC/confluence_raw.md" --tablemap "${XTM:-{WORK_ROOT}/<프로젝트>_관리/_테이블맵.md}" --out "$SPEC/xlsx_extract.md" --max-rows "${XMR:-200}")
+  # 대조 질문이 지목한 시트도 뜬다(2026-10-26) — 원문에만 기대면 tc_design·analysis 에만 나오는 시트가 빠졌다.
+  XEARGS+=(--extra "$SPEC/tc_design.md" --extra "$SPEC/analysis.md")
   [[ -n "$IDT" ]] && XEARGS+=(--tables "$IDT")
   "$NODE" "$PROJECT_ROOT/tc-team/lib/xlsx_extract.js" "${XEARGS[@]}" >>"$CHAIN_LOG" 2>&1
   xerc=$?
@@ -365,6 +386,7 @@ if [[ "$CROSSREF" == "on" ]]; then
 tc-대조.md §1.1 입력 범위대로 tc_design.md 「기획 확인 필요 항목」 전량 ∪ analysis.md C-1·B-2(같은 항목은 한 번만)를 제2의 뇌(MYGAME 위키 색인, ctx_search source=\"$XSRC\")에 대조 → brain_crossref.json 생성. 입력 항목마다 결과 1건(무적중도 keep).
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep).
 로컬 데이터테이블 값: $SPEC/xlsx_extract.md 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
+컬럼의 뜻(의미·단위·0/빈 칸의 뜻)을 묻는 항목은 <GAMEDATA_ROOT>/TableDocs 를 Grep 해 그 컬럼 줄이 답 전체면 apply(approved:true) — 「확인 안 됨」류 줄·값을 묻는 질문은 제외(tc-대조.md §1.2-2).
 §1.6 비파괴: 무적중·빈입력·뇌 미탑재·에러 = keep(또는 counts.in=0) 빈 JSON 저장 후 정상 종료. step_result.json 건드리지 말 것."
   # 작업 폴더를 XPROJ(게이트가 검사한 KB 의 프로젝트)로 못박는다 — 서브셸이라 체인의 작업 폴더는 그대로다.
   # 환경변수만으로는 안 된다: claude 가 띄운 context-mode 는 KB 를 claude 자신의 작업 폴더로 고른다.

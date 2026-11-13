@@ -238,13 +238,13 @@ t('필터: 전부 답이 있으면 빈 배열 — 패널 0건 (apply_labeling �
 
 // ── 배선 — finalize.sh --only 5 를 스텁으로 실제 실행 ──────────────────────────
 // 5a·대조 에이전트 = fixtures/stub_agent.js(LLM 없음) · 5b = apply_labeling 스텁(받은 라벨을 파일로 남김)
-function sandbox(crossref) {
+function sandbox(crossref, rows = TC_ROWS) {
   const root = tmp(), util = tmp();
   const feat = 'F';
   const spec = path.join(root, 'team', 'specs', feat);
   W(path.join(root, 'team', 'tc_config.json'), { crossref_brain: crossref, crossref_source: 'brain-corpus' });
-  W(path.join(spec, 'tcteam_tc_final.json'), { headers: HEAD, rows: TC_ROWS });
-  for (const f of ['crossref_delta_collect.js', 'crossref_delta_merge.js', 'crossref_labels_annotate.js']) {
+  W(path.join(spec, 'tcteam_tc_final.json'), { headers: HEAD, rows });
+  for (const f of ['crossref_delta_collect.js', 'crossref_delta_merge.js', 'crossref_labels_annotate.js', 'waiting_tcs.js']) {
     W(path.join(root, 'tc-team', 'lib', f), fs.readFileSync(path.join(LIB, f), 'utf8'));
   }
   for (const f of ['run-agent.sh', 'stub_agent.js', 'apply_labeling.js']) {
@@ -357,6 +357,35 @@ if (!BASH_OK) {
     assert.ok(res.applied, '5b 가 돌지 않았다');
     assert.ok(/\[S7-델타대조\]\[경고\] 패널 질의 2건 중 판정 0건/.test(res.out), res.out.slice(-1500));
     assert.deepStrictEqual(res.applied, PANEL, '판정을 못 찾았으면 아무것도 빼지 않는다');
+  });
+
+  // 2026-11-06 — 「테스트 무관」으로 질문이 빠지고 TC 는 「확정 정책과 일치」로 답을 기다린 채 남았다(기능BN TC 031 외).
+  const WAIT_ROWS = [...TC_ROWS, ['002', '리스트', '진입', '화면', '예외', '잠긴 던전 진입 뒤 재접속하면 확인된 복구 정책과 일치하는지 확인', 'PC', '미진행', '미진행', '기획 확인 필요']];
+  t('finalize --only 5: 답 기다리는 TC 가 없으면 5a 는 한 번만 돈다 — 대기 알림 없음', () => {
+    assert.ok(/답 기다리는 TC: 0건/.test(first.out), first.out.slice(-1500));
+    assert.strictEqual(fs.readFileSync(path.join(on.spec, '.5a_calls'), 'utf8').trim().split('\n').length, 1);
+    assert.ok(!fs.existsSync(path.join(on.spec, '.final5_waiting.txt')));
+    const p = fs.readFileSync(path.join(on.spec, '.5a_prompt.txt'), 'utf8');
+    assert.ok(p.includes(`"${fwd(on.spec)}/_waiting_tcs.json"`) && p.includes(`"${fwd(on.spec)}/_waiting_cover.json" Write`), '5a 프롬프트에 대기 TC 안내 없음');
+  });
+  t('finalize --only 5: 덮는 질문이 없는 대기 TC → 교정 라운드 1회로 채우면 알림 없이 5b 진행', () => {
+    const sb = sandbox('off', WAIT_ROWS);
+    const res = finalize5(sb, { STUB_COVER: JSON.stringify({ '002': '패널 2' }) });
+    assert.strictEqual(res.r.status, 0, res.out.slice(-1500));
+    assert.ok(/답 기다리는 TC: 1건/.test(res.out) && /질문 없이 답을 기다리는 TC 1건 — 교정 라운드 1/.test(res.out), res.out.slice(-1500));
+    assert.strictEqual(fs.readFileSync(path.join(sb.spec, '.5a_calls'), 'utf8').trim().split('\n').length, 2);
+    assert.ok(!fs.existsSync(path.join(sb.spec, '.final5_waiting.txt')), '교정으로 덮였는데 알림이 남았다');
+    assert.deepStrictEqual(res.applied, PANEL);
+  });
+  t('finalize --only 5: 교정 뒤에도 덮이지 않으면 완주 보고용 알림에 TC 번호가 남는다 — 런은 막지 않는다(양성 표본)', () => {
+    const sb = sandbox('off', WAIT_ROWS);
+    W(path.join(sb.spec, '_waiting_cover.json'), { 덮음: { '002': '패널 1' } });   // 지난 런 덮개 — 5a 전에 지워져야 한다
+    const res = finalize5(sb);
+    assert.strictEqual(res.r.status, 0, res.out.slice(-1500));
+    const f = path.join(sb.spec, '.final5_waiting.txt');
+    assert.ok(fs.existsSync(f), '덮이지 않은 대기 TC 가 조용히 지나갔다\n' + res.out.slice(-1500));
+    assert.ok(/패널에 질문이 없는 TC 1건 .*002/.test(fs.readFileSync(f, 'utf8')));
+    assert.deepStrictEqual(res.applied, PANEL, '알림이 패널 기재를 막았다');
   });
 }
 

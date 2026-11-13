@@ -178,7 +178,12 @@ _run_5a() {
 # ── FINAL-5: 기획 확인 라벨링 (5a 도출=agent 위임 / 5b 기재=스크립트) ─────────
 final_5() {
   # 지난 런의 배너·거르기 기록을 물려받지 않는다 — 5a 가 이번에 _labels_dropped.json 을 안 쓰면 지난 런 목록이 완주 보고에 거짓으로 실린다
-  rm -f "$SPEC/.final5_alert.txt" "$SPEC/.final5_notice.txt" "$SPEC/_labels_dropped.json"
+  rm -f "$SPEC/.final5_alert.txt" "$SPEC/.final5_notice.txt" "$SPEC/_labels_dropped.json" "$SPEC/_waiting_cover.json" "$SPEC/.final5_waiting.txt"
+  # 답을 기다리는 TC(비고 「기획 확인 필요」 + 기대값이 「확정 정책과 일치」류) — 5a 가 각 TC 마다 남은 질문을 대야 한다.
+  # 2026-11-06 표본 점검: 질문은 「테스트 무관」으로 빠지고 TC 는 답을 기다린 채 남았다(기능BN 11건).
+  local wout
+  wout=$("$NODE" "$LIB/waiting_tcs.js" extract "$SPEC" 2>&1) || say "FINAL-5a 답 기다리는 TC 추출 실패(비차단): $wout"
+  say "FINAL-5a 답 기다리는 TC: ${wout#waiting }건"
   say "FINAL-5a 기획확인 라벨 도출 (agent)"
   local p
   # 2026-10-02 거르기 배선(기능E_v2 실측: 5a 23건 → 오너 5건). 규칙서엔 「답이 있으면 묻지 마라」가
@@ -189,7 +194,8 @@ final_5() {
 3. 답 찾기는 아래에서 Grep 으로 한다(통째 읽기 금지 · 없는 파일은 건너뜀): \"$SPEC/confluence_raw.md\"(같은 기획서의 다른 절) · \"$SPEC/linked\"(참조 문서) · \"$SPEC/xlsx_extract.md\"(게임 데이터 — 키 이름 옆 설명 칸까지 읽는다).
 4. \"$SPEC/_labels.json\" Write: {\"기획확인\": [\"[태그] 질문 한 문장?\\n왜 필요한지 한 줄 (사람 말)\", ...]} — 거르기를 통과한 것만. 라벨링_기준.md §문장 형식 그대로. 화살표 접두 금지(구 형식 \\n→ 는 08-04 폐기). 테스트데이터 키는 생략(선택·수동 정책).
 5. \"$SPEC/_labels_dropped.json\" Write: {\"뺀질문\": [{\"질문\": \"후보 요지\", \"갈래\": \"답 있음|테스트 무관|묶음\", \"근거\": \"답이 있는 파일·절과 그 내용 한 줄 / 답 없이도 TC가 써지는 이유 / 합친 질문\"}]} — 거르기에서 뺀 후보 전부(없으면 빈 배열).
-이 두 파일 외 다른 파일 금지. 저장 후 \"LABELS_DONE\"만 출력."
+6. \"$SPEC/_waiting_tcs.json\" Read — 비고 「기획 확인 필요」에 기대값이 「확정 정책과 일치」류인 TC, 즉 **기획 답을 기다리는 TC**다. 이 TC 들이 기다리는 질문은 「테스트 무관」으로 빼지 마라(라벨링_기준.md 「거르기 3단계」 ② ⛔). TC 마다 \"$SPEC/_waiting_cover.json\" Write: {\"덮음\": {\"<TC ID>\": \"패널 N\"}} — N = 4번 _labels.json 기획확인 배열에서 그 TC 의 답을 묻는 질문 번호(1부터). 답이 원문에 이미 있으면 \"답 있음: <파일·절과 그 문구>\". 목록이 비어 있으면 {\"덮음\": {}}.
+이 세 파일 외 다른 파일 금지. 저장 후 \"LABELS_DONE\"만 출력."
   # 쿼터·인증 감지는 pipeline_retry.sh가 소유(rc 10=인증, 11=쿼터) — 있으면 경유한다.
   local arc=0
   _run_5a "$p"
@@ -220,6 +226,33 @@ $vout"
   # 구버전 validate_labels.js(이 필드 없음)로 롤백돼도 매칭 실패 → 0 유지(fail-safe).
   LABEL_BANNED=$(grep -o '금지 어휘 [0-9]\+' <<< "$vout" | head -1 | grep -o '[0-9]\+')
   LABEL_BANNED=${LABEL_BANNED:-0}
+  # 답을 기다리는 TC 가 전부 패널 질문(또는 인용된 답)에 덮였나 — 덮이지 않았으면 교정 라운드 1회, 그래도 남으면 완주 보고에 올린다.
+  # 덮개가 없는 TC = 질문이 사라져 답이 안 올 TC 다. 런은 막지 않는다(패널을 통째로 버리는 것보다 낫다).
+  local cout crc
+  cout=$("$NODE" "$LIB/waiting_tcs.js" check "$SPEC" 2>&1); crc=$?
+  if [[ $crc -eq 3 ]]; then
+    say "FINAL-5a 질문 없이 답을 기다리는 TC $(grep -c '^uncovered' <<< "$cout")건 — 교정 라운드 1"
+    _run_5a "$p
+
+⚠ 교정 라운드다. 아래 TC 들은 기획 답을 기다리는데(_waiting_tcs.json) 덮는 질문이 없다(_waiting_cover.json).
+그 TC 의 답을 묻는 질문을 _labels.json 에 되살리거나 새로 써서(뺀 질문에 있으면 그것을 되살린다) 덮개를 채워라. 원문에 답이 있으면 「답 있음: 문구」로 적어라. 다른 항목은 건드리지 마라.
+$cout"
+    vout=$("$NODE" "$UTIL/validate_labels.js" "$SPEC/_labels.json" 2>&1); vrc=$?
+    while IFS= read -r l; do [[ -n "$l" ]] && say "FINAL-5a(덮개 교정후) $l"; done <<< "$vout"
+    if [[ $vrc -eq 2 ]]; then
+      alert_5 "_labels.json 검증 실패 (덮개 교정 라운드 뒤 — 위 FINAL-5a 라인 참조) — 기획 확인 요청이 한 건도 기재되지 않았습니다"
+      RESULT[5]="✗"; return
+    fi
+    cout=$("$NODE" "$LIB/waiting_tcs.js" check "$SPEC" 2>&1); crc=$?
+  fi
+  if [[ $crc -eq 3 ]]; then
+    local ids; ids=$(grep '^uncovered' <<< "$cout" | cut -d' ' -f2 | tr '\n' ' ')
+    echo "🔎 기획 답을 기다리는데 패널에 질문이 없는 TC $(wc -w <<< "$ids")건 — 답이 오지 않아 판정할 수 없습니다. 질문을 더하거나 TC 기대값을 「실제 동작 기록」으로 바꿔 주세요: ${ids}(근거 _waiting_tcs.json · _waiting_cover.json)" \
+      > "$SPEC/.final5_waiting.txt"
+    say "FINAL-5a 질문 없는 대기 TC 남음: ${ids}"
+  elif [[ $crc -ne 0 ]]; then
+    say "FINAL-5a 대기 TC 검사 실패(비차단): $cout"
+  fi
   # 5a↔5b 사이 — MYGAME 델타 대조·주입 (2026-09-11 이관 · 규칙 tc-대조.md §1.1-a). 5a 가 방금 쓴 문장을
   # 그대로 질의 키로 뇌에 묻고, 답을 그 문장 끝에 붙인 뒤 5b 가 기재한다. 비차단 — 결과와 무관하게 5b 진행.
   # 구 자리(run_pipeline_full.sh, finalize 앞)는 _labels.json 이 태어나기 전이라 전 런 주입 0건이었다.

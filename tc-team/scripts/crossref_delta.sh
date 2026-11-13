@@ -46,6 +46,25 @@ crossref_delta() {
     XSRC2=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$XCFG','utf8'));process.stdout.write(c.crossref_source||'brain-corpus')}catch(e){process.stdout.write('brain-corpus')}" 2>/dev/null)
     log "[$ORIGIN-델타대조] 신규 기획확인 대조 시작 (source=$XSRC2)"
 
+    # ── 델타 질문으로 xlsx 다시 뜨기 (결정론 · 비차단) — 2026-10-27 ──────────────────
+    # S1 추출본은 S1 질문만 보고 떴다. 델타 질문은 그 뒤에 태어나 키 이름(Recover_TeleportItemUseCount 등)만 대는데,
+    # 그 시트(ConfigInfo)가 S1 추출본에 없어 값이 있는데도 「미지정」으로 사람에게 나갔다(기능BM_v2 S7).
+    # S1 xlsx_extract.md 는 건드리지 않고 따로 쓴다 — 본 대조가 이미 그 블록 제목을 출처로 적었다.
+    local XDX="$SPEC/xlsx_extract_delta_${ORIGIN}.md" XTM XMR XTB XDRC
+    "$NODE" -e "require('fs').rmSync('$XDX',{force:true})" 2>/dev/null || true
+    XTM=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$XCFG','utf8'));process.stdout.write(c.crossref_tablemap||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+    XMR=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$XCFG','utf8'));process.stdout.write(String(c.xlsx_extract_max_rows||200))}catch(e){process.stdout.write('200')}" 2>/dev/null)
+    XTB=$("$NODE" -e "try{const c=JSON.parse(require('fs').readFileSync('$XCFG','utf8'));process.stdout.write(c.item_dict_tables||'')}catch(e){process.stdout.write('')}" 2>/dev/null)
+    local XDARGS=(--keys "$XIN" --tablemap "${XTM:-{WORK_ROOT}/<프로젝트>_관리/_테이블맵.md}" --out "$XDX" --max-rows "${XMR:-200}")
+    [[ -n "$XTB" ]] && XDARGS+=(--tables "$XTB")
+    "$NODE" "$LIB/xlsx_extract.js" "${XDARGS[@]}" >>"$CHAIN_LOG" 2>&1
+    XDRC=$?
+    case $XDRC in
+      0) log "[$ORIGIN-델타대조] xlsx 델타 추출 — $(grep -c '^### ' "$XDX" 2>/dev/null || echo 0)시트 → $(basename "$XDX")" ;;
+      4) log "[$ORIGIN-델타대조] xlsx 델타 추출 스킵 — 질문이 부른 시트·맞는 행 0건 또는 원본 없음 (비차단)" ;;
+      *) log "[$ORIGIN-델타대조][경고] xlsx 델타 추출기 비정상 종료 rc=$XDRC — fail-safe 스킵(비차단)" ;;
+    esac
+
     local XHD="## HANDOFF
 - 기능명: $FEAT
 - specs 경로: $SPEC
@@ -56,7 +75,8 @@ crossref_delta() {
 $XIN 의 items 각 항목을 tc-대조.md 지침대로 제2의 뇌(MYGAME 위키 색인, ctx_search source=\"$XSRC2\")에 대조하라.
 입력 item 의 id 를 **그대로 유지**해 결과 items 에 담을 것 — 병합기가 id 로 멱등 처리한다.
 4분기(apply/locate/discover/keep) + 가드 전부 ON(스텁·(작성중)·애매·출처없음→keep).
-로컬 데이터테이블 값: $SPEC/xlsx_extract.md 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
+로컬 데이터테이블 값: $SPEC/xlsx_extract.md 와 $XDX(이번 델타 질문으로 다시 뜬 것 — 없으면 건너뜀) 를 먼저 Read — 필요한 시트 블록이 있으면 그 값으로 apply(approved:true)하고 source 에 블록 제목을 그대로 옮긴다. 없으면 locate(tc-대조.md §1.2-2).
+컬럼의 뜻(의미·단위·0/빈 칸의 뜻)을 묻는 항목은 <GAMEDATA_ROOT>/TableDocs 를 Grep 해 그 컬럼 줄이 답 전체면 apply(approved:true) — 「확인 안 됨」류 줄·값을 묻는 질문은 제외(tc-대조.md §1.2-2).
 §1.2-1 그대로 — 브레인은 발명하지 않는다(추출본에 없는 값을 유추하지 않는다). 확신 없으면 keep.
 §1.6 비파괴: 무적중·에러·뇌 미탑재 = 입력 전량을 keep 으로 채운 $XOUT 을 저장하고 정상 종료. 다른 파일은 건드리지 말 것."
 
