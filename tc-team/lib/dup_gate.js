@@ -12,6 +12,7 @@
  *      어떤 경우에도 정당하지 않다. exit 1 → 병합/차별화 후 재실행.
  *   ② 유사(토큰 자카드 ≥ threshold) = **후보 리포트**. BVA 상·하한처럼 정당한 유사가 많아 자동 판정 금지 —
  *      S4 판정자 입력으로 넘겨 사람/LLM이 병합 여부를 정한다.
+ *   ③ 도장 묶음(유사 쌍을 이은 묶음이 소분류 3곳 이상) = **후보 리포트**. 종료코드에 영향 없음(2026-11-13).
  *
  * 스코프: **QA 본문끼리만**(대분류 "기본기능" 제외). 기본기능 섹션은 기획자 검수용 재기술이라
  *   본문과의 중복이 설계상 의도된 것이다(tc-생성 기본기능 규칙 / eval_digest [공통] EVAL 제외 조항).
@@ -95,10 +96,52 @@ function checkDuplicates(rows, threshold = 0.85) {
   }
 
   similar.sort((a, b) => b.score - a.score);
-  return { exact, similar };
+  return { exact, similar, stamps: stampClusters(rows, similar) };
 }
 
-module.exports = { checkDuplicates, norm, tokens, jaccard };
+// ③ 도장 묶음 (2026-11-13) — 유사 쌍을 이어 붙인 묶음 중 **소분류 3곳 이상**에 걸친 것만 낸다. 비차단(리포트).
+//   배경: 유사는 쌍 목록이라 판정자가 읽을 수 없는 크기가 된다(1액트 dup_report_final.json 3.5MB).
+//   같은 틀 문장을 이름만 바꿔 여러 소분류에 찍은 「도장」은 쌍이 아니라 묶음으로 봐야 보인다.
+//   ⚠ 정당한 축 전개(구간별 기준값 등)도 잡힌다 — 그래서 위반이 아니라 후보다. 판정은 S4 EVAL-07.
+const STAMP_MIN_CLASSES = 3; // 고른 값 — 2곳은 BVA 상·하한·소형/대형 같은 정당한 짝이 대부분이라 뺀다
+function stampClusters(rows, similar) {
+  const byId = new Map(rows.map(r => [String(r[0]), r]));
+  const parent = new Map();
+  const find = x => {
+    let p = x;
+    while (parent.get(p) !== p) p = parent.get(p);
+    parent.set(x, p);
+    return p;
+  };
+  for (const s of similar) {
+    for (const id of s.tc_ids) if (!parent.has(id)) parent.set(id, id);
+    parent.set(find(s.tc_ids[0]), find(s.tc_ids[1]));
+  }
+  const clusters = new Map();
+  for (const id of parent.keys()) {
+    const root = find(id);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root).push(id);
+  }
+  const stamps = [];
+  for (const ids of clusters.values()) {
+    const members = ids.map(id => byId.get(id)).filter(Boolean);
+    const classes = new Set(members.map(r => `${r[1]}>${r[2]}>${r[3]}`));
+    if (classes.size < STAMP_MIN_CLASSES) continue;
+    stamps.push({
+      scope: members[0][1] === '기본기능' ? 'basic' : 'qa',
+      size: members.length,
+      classes: classes.size,
+      stages: [...new Set(members.map(r => r[4]))],
+      text: members[0][5],
+      tc_ids: members.map(r => String(r[0])),
+    });
+  }
+  stamps.sort((a, b) => b.size - a.size);
+  return stamps;
+}
+
+module.exports = { checkDuplicates, stampClusters, norm, tokens, jaccard };
 
 if (require.main === module) {
   const a = process.argv.slice(2);
@@ -128,6 +171,8 @@ if (require.main === module) {
     total: rows.length,
     exact: res.exact.length,
     similar: res.similar.length,
+    stamps: res.stamps.length,
+    stamp_rows: res.stamps.reduce((n, s) => n + s.size, 0),
     threshold,
   };
   if (out) fs.writeFileSync(out, JSON.stringify({ ...summary, ...res }, null, 1));
@@ -140,6 +185,12 @@ if (require.main === module) {
     console.log(`  [유사 후보] ${res.similar.length}쌍 (판정=S4, 상위 3)`);
     for (const s of res.similar.slice(0, 3)) {
       console.log(`    ${s.tc_ids.join('↔')} score=${s.score}${s.same_class ? ' 동일분류' : ''}`);
+    }
+  }
+  if (res.stamps.length) {
+    console.log(`  [도장 묶음] ${summary.stamps}개 · ${summary.stamp_rows}행 (같은 틀이 소분류 ${STAMP_MIN_CLASSES}곳 이상 — 판정=S4, 상위 3)`);
+    for (const s of res.stamps.slice(0, 3)) {
+      console.log(`    ${s.size}행·소분류 ${s.classes}곳 — ${String(s.text).slice(0, 60)}`);
     }
   }
   process.exit(res.exact.length ? 1 : 0);

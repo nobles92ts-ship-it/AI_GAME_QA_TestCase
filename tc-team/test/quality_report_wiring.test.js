@@ -14,7 +14,7 @@ function withFixture(fn) {
   try {
     const feature = '인증 fixture', spec = path.join(dir, 'team/specs', feature), lib = path.join(dir, 'tc-team/lib'), util = path.join(dir, 'scripts/util');
     for (const p of [spec, lib, util]) fs.mkdirSync(p, { recursive: true });
-    for (const n of ['quality_report.js', 'execution_metadata.js', 'traceability.js']) fs.copyFileSync(path.join(root, 'lib', n), path.join(lib, n));
+    for (const n of ['quality_report.js', 'execution_metadata.js', 'traceability.js', 'id_space.js']) fs.copyFileSync(path.join(root, 'lib', n), path.join(lib, n));
     const write = (n, value) => fs.writeFileSync(path.join(spec, n), typeof value === 'string' ? value : JSON.stringify(value));
     write('analysis.md', '기존 분석'); write('tc_design.md', '기존 설계'); write('confluence_raw.md', '원문 규칙');
     write('tcteam_tc_final.json', { rows: [['001', '대', '중', '소', '정상', '원문 규칙 확인', 'PC', '미진행', 'N/A', '']] });

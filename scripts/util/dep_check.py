@@ -302,6 +302,11 @@ def main():
                 # 플레이스홀더(<에이전트명>)·모델명(claude-sonnet-4 등) 방어
                 if not looks_like_agent(name):
                     continue
+                # 뇌 검색기(brain_search)에 넘기는 호출자 꼬리표 플래그는 에이전트 호출이 아니다(2026-11-13 tc-대조.md).
+                ls = text.rfind('\n', 0, m.start()) + 1
+                le = text.find('\n', m.end())
+                if 'brain_search' in text[ls:le if le >= 0 else len(text)]:
+                    continue
                 if name not in agent_files and f'agents/{name}.md' not in existing:
                     missing_agents[src_rel].add(name)
 

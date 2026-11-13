@@ -22,6 +22,13 @@ if (prompt.includes('FINAL-5a')) {
     if (!d) process.exit(4);
     fs.writeFileSync(d[1], JSON.stringify({ 뺀질문: JSON.parse(process.env.STUB_DROPPED) }, null, 2), 'utf8');
   }
+  // STUB_COVER : 있으면 **덮개 교정 라운드에서만** _waiting_cover.json 을 쓴다(첫 호출은 빼먹는 5a 를 흉내 — 2026-11-06)
+  if (process.env.STUB_COVER && prompt.includes('덮개를 채워라')) {
+    const c = prompt.match(/"([^"]+_waiting_cover\.json)" Write/);
+    if (!c) process.exit(5);
+    fs.writeFileSync(c[1], JSON.stringify({ 덮음: JSON.parse(process.env.STUB_COVER) }, null, 2), 'utf8');
+  }
+  fs.appendFileSync(path.join(path.dirname(m[1]), '.5a_calls'), '1\n');
   console.log('LABELS_DONE');
   process.exit(0);
 }

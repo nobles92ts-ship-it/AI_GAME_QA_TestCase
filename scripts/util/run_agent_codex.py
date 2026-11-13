@@ -142,8 +142,9 @@ def ctx_server_flags() -> list[str]:
     if not cli:
         die("context-mode CLI 를 못 찾음 — ctx_search 를 요구하는 에이전트는 돌릴 수 없다")
     proj = str(PROJECT_ROOT).replace("\\", "/")
+    args = ",".join(toml_str(arg) for arg in brain_index_sync.server_args(cli))
     return ["-c", f"mcp_servers.ctx.command={toml_str('node')}",
-            "-c", f"mcp_servers.ctx.args=[{toml_str(cli)}]",
+            "-c", f"mcp_servers.ctx.args=[{args}]",
             "-c", f"mcp_servers.ctx.cwd={toml_str(proj)}",
             "-c", f"mcp_servers.ctx.env={{CONTEXT_MODE_PROJECT_DIR={toml_str(proj)},CONTEXT_MODE_PLATFORM={toml_str('codex')}}}",
             "-c", "mcp_servers.ctx.startup_timeout_sec=60",
@@ -257,6 +258,9 @@ def main(argv: list[str]) -> int:
         child_options = {}
         if working_directory := call_cwd():
             child_options["cwd"] = str(working_directory)
+        if os.name == "nt":
+            # 창 없는 pythonw(예약 작업 루프)에서 부르면 codex.exe 에 새 콘솔 창이 붙어 화면에 뜬다(2026-11-09).
+            child_options["creationflags"] = subprocess.CREATE_NO_WINDOW
         start = time.perf_counter()
         try:
             r = subprocess.run(cmd, input=prompt, capture_output=True, text=True,

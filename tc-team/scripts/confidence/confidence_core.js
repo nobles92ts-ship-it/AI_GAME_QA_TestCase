@@ -207,7 +207,7 @@ function compute(SPEC, override) {
     .forEach((r) => { if (r[2]) allocByLeaf[r[2]] = { risk: r[3], note: r[8] || '' }; });
 
   // 3) 커버리지 매핑 → 기획서 섹션 앵커
-  const cmRows = sectionSlice('## 커버리지 매핑')
+  const cmRows = sectionSlice(/^## 커버리지 매핑표?$/)
     .filter((l) => /^\|\s*\d+\s*\|/.test(l))
     .map((l) => l.split('|').map((s) => s.trim()).filter((_, i) => i > 0))
     .map((r) => ({ item: r[1], src: r[2], point: r[3], keywords: (r[4] || '').split(',').map((s) => s.trim()).filter(Boolean), risk: r[5], promo: r[6] || '' }));
@@ -255,22 +255,22 @@ function compute(SPEC, override) {
   // S7 델타는 정규 런의 FINAL-0 보다 늦게 붙는다 — 재실행도 같은 입력을 보도록 뺀다(TUNING.excludeS7Delta).
   const unresolved = (crossref.items || []).filter((i) => (i.branch === 'keep' || i.branch === 'locate')
     && !(tuning.excludeS7Delta && i.origin === 'S7'));
-  const xrefByLeaf = {};
-  const anchorByLeaf = {};
+  const xrefByLeaf = new Map();
+  const anchorByLeaf = new Map();
   // 문장형 미정 항목은 그 문장이 나온 «자기 TC» 가 있는 소분류에만 붙인다 (isSentenceTerm 주석)
   const gStop = new Set([...STOP_BASE, ...G_GENERIC, ...autoStop]);
   const owns = sentenceOwner(gStop, tuning.sentenceOwnThreshold);
   const sentenceMode = (t) => tuning.sentenceOwnOnly && isSentenceTerm(t);
   leaves.forEach((lf) => {
     const hay = (lf.name + ' ' + lf.mid + ' ' + lf.major + ' ' + lf.items.map((x) => x.text).join(' ')).toLowerCase();
-    xrefByLeaf[lf.name] = unresolved.filter((u) => {
+    xrefByLeaf.set(lf, unresolved.filter((u) => {
       if (sentenceMode(u.term)) return lf.items.some((x) => owns(u.term, x.text));
       const hits = tokenize(u.term).filter((w) => matchTok(hay, w));
       return hits.some(isIdent) || hits.length >= 2;
-    });
+    }));
     const hitRows = cmRows.filter((r) => r.keywords.some((k) => k && hay.includes(k.toLowerCase())));
     const depths = hitRows.map((r) => (/^이전 기록/.test(r.src) ? 0 : r.src.split('-').length));
-    anchorByLeaf[lf.name] = { max: depths.length ? Math.max(...depths) : 0, srcs: [...new Set(hitRows.map((r) => r.src))], n: hitRows.length, rows: hitRows };
+    anchorByLeaf.set(lf, { max: depths.length ? Math.max(...depths) : 0, srcs: [...new Set(hitRows.map((r) => r.src))], n: hitRows.length, rows: hitRows });
   });
 
   // ── 소분류 단위 감점 (히트맵 리포트용) ────────────────────────────────
@@ -291,7 +291,7 @@ function compute(SPEC, override) {
       else reasons.push({ id: 'R2', d: 0, badge: true, detail: '소분류 전체가 이미지 판독 의존' });
     }
 
-    const xr = xrefByLeaf[lf.name] || [];
+    const xr = xrefByLeaf.get(lf) || [];
     const keeps = xr.filter((x) => x.branch === 'keep');
     const locs = xr.filter((x) => x.branch === 'locate');
     const xp = xrefPenalty(rules, keeps.length, locs.length);
@@ -307,7 +307,7 @@ function compute(SPEC, override) {
       reasons.push({ id: 'R5', d: -p, detail: `${g.length}건 (${[...new Set(g.map((x) => x.gen))].join(',')} / ${[...new Set(g.map((x) => x.stage))].join(',')})` });
     }
 
-    const a = anchorByLeaf[lf.name];
+    const a = anchorByLeaf.get(lf);
     if (a.max <= 1) { const p = pen('R6'); score -= p; reasons.push({ id: 'R6', d: -p, detail: a.n ? `최대 깊이 ${a.max} (§${a.srcs.join(', §')})` : '커버리지 매핑 앵커 미검출' }); }
 
     // R7 — 설계기법 적용 '배지'. 점수에는 영향이 없다.
@@ -358,7 +358,7 @@ function compute(SPEC, override) {
   // 실측(2026-07-30 1챕터): 이 상태에서 R3 발화 26.2%→0%, A 등급 73.8%→96% 로 조용히 관대해졌다.
   const diag = {
     unresolvedTerms: unresolved.length,
-    matchedLeaves: leaves.filter((lf) => (xrefByLeaf[lf.name] || []).length).length,
+    matchedLeaves: leaves.filter((lf) => (xrefByLeaf.get(lf) || []).length).length,
     // 문장형 미정 항목 중 자기 TC 를 못 찾은 것 — 어느 TC 에도 감점되지 않는다. 사라진 게 아니라 여기로 온다.
     sentenceTerms: unresolved.filter((u) => sentenceMode(u.term)).length,
     sentenceOrphans: unresolved.filter((u) => sentenceMode(u.term)

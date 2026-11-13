@@ -31,6 +31,37 @@ t('대·중분류와 리스크 마커가 리프에 전달된다', () => {
   assert.strictEqual(l.risk, 'LOW');
 });
 
+t('커버리지 매핑표 별칭은 정식 제목과 같은 why/앵커를 만들고 다음 섹션은 제외한다', () => {
+  const os = require('os'), fsx = require('fs');
+  const make = (alias) => {
+    const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-cm-heading-'));
+    fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+    const p = path.join(d, 'tc_design.md');
+    let md = fsx.readFileSync(p, 'utf8');
+    if (alias) md = md.replace('## 커버리지 매핑', '## 커버리지 매핑표');
+    md += '\n## 다음 섹션\n\n| 99 | 무관 행 | 9-9 | 누출 확인 | 배너 | HIGH |\n';
+    fsx.writeFileSync(p, md, 'utf8');
+    return d;
+  };
+  const canonicalDir = make(false), aliasDir = make(true);
+  try {
+    const canonical = computeItems(canonicalDir);
+    const alias = computeItems(aliasDir);
+    const target = (r) => r.items.find((i) => i.leaf.startsWith('우편 배너') && i.stage === '정상' && i.no === 1);
+    const c = target(canonical), a = target(alias);
+    assert.strictEqual(canonical.cmRows.length, 4);
+    assert.strictEqual(alias.cmRows.length, 4, '별칭 제목 아래 표를 읽지 못함');
+    assert.deepStrictEqual(alias.cmRows, canonical.cmRows, '별칭과 정식 제목의 매핑 행이 다름');
+    assert.deepStrictEqual(a.anchors, c.anchors);
+    assert.deepStrictEqual(a.why, c.why);
+    assert.deepStrictEqual(a.why, { src: '1-1', item: '배너 노출 규격', point: '상단 배너 표기', risk: 'HIGH' });
+    assert.ok(!JSON.stringify(alias.cmRows).includes('누출 확인'), '다음 ## 섹션의 표가 매핑에 섞임');
+  } finally {
+    fsx.rmSync(canonicalDir, { recursive: true, force: true });
+    fsx.rmSync(aliasDir, { recursive: true, force: true });
+  }
+});
+
 // ── 소분류 단위 감점 ────────────────────────────────────────────────────
 t('소분류 점수표 (감점 규칙별 1회씩)', () => {
   const want = [
@@ -497,6 +528,79 @@ t('기본기능 섹션은 매핑 대상이 아니다 (드리프트로도 안 잡
   t('문장형 — 스위치를 끄면 구 방식(흔한 단어로 옆 TC 에도 붙음)으로 돌아간다', () => {
     assert.ok(hasOwn(r3terms(off, '우편함', '부정', 1)), '구 방식 재현이 안 되면 sweep 비교가 무의미하다');
     assert.deepStrictEqual(off.diag.sentenceOrphans, []);
+  });
+}
+
+// ── 같은 소분류 표시명은 대·중분류 경로별로 분리한다 ─────────────────────
+{
+  const os = require('os'), fsx = require('fs');
+  const mk = (reverse) => {
+    const d = fsx.mkdtempSync(path.join(os.tmpdir(), 'conf-leaf-identity-'));
+    fsx.readdirSync(FIX).forEach((f) => fsx.copyFileSync(path.join(FIX, f), path.join(d, f)));
+    fsx.rmSync(path.join(d, 'confluence_raw.md'), { force: true });
+    const accept = [
+      '1. **퀘스트 시스템** (대분류)',
+      '   1.1 수락 흐름 (중분류)',
+      '       - 공유 화면 [LOW] [PC]',
+      '         → 정상-1: 마법석 각인 표식을 확인한다',
+      '         → 정상-2: 첫 번째 결과를 확인한다',
+    ].join('\n');
+    const reward = [
+      '2. **보상 시스템** (대분류)',
+      '   2.1 지급 흐름 (중분류)',
+      '       - 공유 화면 [LOW] [PC]',
+      '         → 정상-1: 귀환 보상 표식을 확인한다',
+      '         → 정상-2: 마지막 결과를 확인한다',
+    ].join('\n');
+    const tree = reverse ? `${reward}\n${accept}` : `${accept}\n${reward}`;
+    const md = [
+      '# leaf identity fixture',
+      '',
+      '## 분류 그룹핑 트리',
+      '',
+      tree,
+      '',
+      '## 커버리지 매핑',
+      '',
+      '| # | 기획 항목 | 출처 | 검증 포인트 | 키워드 | 리스크 |',
+      '|---|---|---|---|---|---|',
+      '| 1 | 마법석 각인 | 1-2-3 | 마법석 상태 | 마법석 | HIGH |',
+      '| 2 | 귀환 보상 | 4 | 보상 표시 | 보상 | LOW |',
+      '',
+      '## 종료',
+      '',
+    ].join('\n');
+    fsx.writeFileSync(path.join(d, 'tc_design.md'), md, 'utf8');
+    fsx.writeFileSync(path.join(d, 'brain_crossref.json'), JSON.stringify({ items: [{ term: '마법석 각인', branch: 'keep', source: 'fixture' }] }), 'utf8');
+    return d;
+  };
+  const summarize = (d) => {
+    const result = computeItems(d);
+    const leafSummary = result.scored.map((lf) => ({
+      key: [lf.major, lf.mid, lf.name].join('|'),
+      score: lf.score,
+      r3: (lf.reasons.find((r) => r.id === 'R3') || {}).terms || [],
+      anchor: lf.anchor.srcs,
+    })).sort((a, b) => a.key.localeCompare(b.key));
+    const item = (mid, no) => result.items.find((x) => x.mid === mid && x.no === no);
+    return { result, leafSummary, acceptFallback: item('수락 흐름', 2), rewardFallback: item('지급 흐름', 2) };
+  };
+  const aDir = mk(false), bDir = mk(true);
+  const a = summarize(aDir), b = summarize(bDir);
+  fsx.rmSync(aDir, { recursive: true, force: true });
+  fsx.rmSync(bDir, { recursive: true, force: true });
+  t('동일 leaf 이름 — 순서를 바꿔도 full identity별 R3/앵커/점수가 같다', () => {
+    assert.deepStrictEqual(a.leafSummary, b.leafSummary);
+    const accept = a.leafSummary.find((x) => x.key === '퀘스트 시스템|수락 흐름|공유 화면');
+    const reward = a.leafSummary.find((x) => x.key === '보상 시스템|지급 흐름|공유 화면');
+    assert.deepStrictEqual(accept.r3, ['마법석 각인']);
+    assert.deepStrictEqual(reward.r3, []);
+    assert.deepStrictEqual(accept.anchor, ['1-2-3']);
+    assert.deepStrictEqual(reward.anchor, ['4']);
+    assert.deepStrictEqual(a.acceptFallback.anchors, ['1-2-3']);
+    assert.strictEqual(a.acceptFallback.why.src, '1-2-3');
+    assert.deepStrictEqual(a.rewardFallback.anchors, ['4']);
+    assert.strictEqual(a.rewardFallback.why.src, '4');
   });
 }
 

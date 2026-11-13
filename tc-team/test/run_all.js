@@ -13,6 +13,7 @@ const suites = [
   'snapshot_local.test.js',
   'regroup.test.js',
   'traceability.test.js',
+  'id_space.test.js',
   'quality_report.test.js',
   'quality_report_wiring.test.js',
   'dup_gate.test.js',
@@ -38,6 +39,9 @@ const suites = [
   's0_prepare.test.js',
   'impact_scope.test.js',
   'cheat_memo.test.js',
+  'waiting_tcs.test.js',
+  'answers_merge.test.js',
+  'answers_weave.test.js',
   'phase0_spike.js',
 ];
 let allPass = true;

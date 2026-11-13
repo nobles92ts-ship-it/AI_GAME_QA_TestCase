@@ -17,8 +17,20 @@
  * ⚠ 큰 시트는 통째로 뜨지 않는다. `--max-rows` 초과 시 기획서의 값 토큰(`X=Y` 의 Y, 식별자)과
  *   **칸이 정확히 같은** 행만 남긴다. 맞는 행이 0이면 위치만 적는다 — 근처 행을 대신 싣지 않는다(§1.2-1).
  *
+ * `--extra` (2026-10-26): 기획서 원문만 보면 **대조 질문이 지목한 시트가 빠진다.** 과거 88런 대조 표본 12건 중
+ *   Host·원본으로 답이 나오는 5건이 전부 "추출본 없음 / 그 시트 블록 없음"으로 locate 됐다 — 시트 이름이
+ *   tc_design.md 「기획 확인 필요 항목」·analysis.md C-1 에만 있었다. 대조 입력과 같은 두 파일을 함께 읽어
+ *   시트 지목·값 토큰을 넓힌다. 없는 파일은 건너뛴다(비차단).
+ *
+ * `--keys` (2026-10-27): 델타 대조(S4·S7) 질문은 S1 추출 **뒤에** 태어난다. 기능BM_v2 S7 —
+ *   `Recover_TeleportItemUseCount` 등 키 이름을 대며 물은 15건(97건 중)의 값이 ConfigInfo 에 있었는데,
+ *   질문에 시트 이름은 없고 키 이름만 있어 S1 추출본에 그 시트가 없었다. 델타 입력(crossref_delta_in_*.json)의
+ *   문장에서 ① 시트 이름 ② 식별자(`A_B` · CamelCase)를 뽑아, 시트 이름이 불린 시트와 **칸이 식별자와 정확히 같은 행**만 뜬다.
+ *   원문(--raw) 은 보지 않는다 — S1 추출본은 그대로 두고 따로 쓴다(블록 제목=출처가 S1 그대로 유효).
+ *
  * 사용: node xlsx_extract.js --raw <confluence_raw.md> --tablemap <_테이블맵.md> --out <xlsx_extract.md>
- *                            [--tables <dir>] [--max-rows 200]
+ *                            [--extra <tc_design.md>] [--extra <analysis.md>] [--tables <dir>] [--max-rows 200]
+ *       node xlsx_extract.js --keys <crossref_delta_in_S7.json> --tablemap <…> --out <xlsx_extract_delta_S7.md> [--tables] [--max-rows]
  * exit 0=생성 / 4=원본 테이블·테이블맵·xlsx 모듈 없음, 또는 참조 시트 0건(스킵·비차단) / 2=인자·입력 오류
  */
 
@@ -53,12 +65,14 @@ const wordHit = (text, word) => new RegExp(`(^|[^A-Za-z0-9_])${escapeRe(word)}(?
  * 딸려 오던 것(실측 57.5KB) 방지. 그래도 파일 단위 포함을 두는 이유: 기획서가 GoodsCategory 을 지목하고
  * 실제 값(Value2)은 GoodsInfo 에 있는 경우가 있다(기능A 1회 충전량). `#` 시트 제외.
  */
-function findReferencedSheets(raw, index) {
+function findReferencedSheets(raw, index, extra = '') {
+  // 파일 단위 포함은 기획서 원문에서만 — tc_design 은 `<파일>.xlsx` 를 많이 적어서 extra 까지 보면
+  // 파일의 나머지 시트가 통째로 딸려 왔다(과거 75기능 재현: 54KB → 10MB). extra 는 시트 이름을 직접 부른 것만 받는다.
   const namedFiles = new Set((raw.match(/[A-Za-z_][A-Za-z0-9_]*\.xlsx/g) || []));
   const out = [];
   for (const [sheet, meta] of index) {
     if (sheet.startsWith('#')) continue;
-    const named = wordHit(raw, sheet);
+    const named = wordHit(raw, sheet) || (extra !== '' && wordHit(extra, sheet));
     if (named || namedFiles.has(meta.file)) out.push({ sheet, file: meta.file, rows: meta.rows, named });
   }
   return out;
@@ -93,7 +107,10 @@ const cell = c => cellStr(c).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').slice(
 
 function renderSheet({ file, sheet, rows, sel, build, date }) {
   const head = rows[0] || [];
-  const width = head.length;
+  // 끝 빈 열은 자른다 — EnumInfo 는 시트 범위가 XFD(16,384열)까지 잡혀 3행 블록이 344KB 였다(2026-10-27)
+  const shown = [head, rows[1] || [], ...(sel.mode === 'none' ? [] : sel.data)];
+  let width = 0;
+  for (const r of shown) for (let i = r.length - 1; i >= width; i--) if (cellStr(r[i]) !== '') { width = i + 1; break; }
   const line = r => `| ${Array.from({ length: width }, (_, i) => cell(r[i])).join(' | ')} |`;
   const title = `### ${file} > ${sheet} (${sel.total}행, ${build}, ${date})`;
   const note = {
@@ -109,9 +126,11 @@ function renderSheet({ file, sheet, rows, sel, build, date }) {
 }
 
 /** 순수 조립부 — readSheet(file, sheet) 는 2차원 배열 또는 null 을 돌려준다(테스트에서 주입). */
-function buildExtract(raw, index, readSheet, { maxRows, build, date }) {
+function buildExtract(raw, index, readSheet, { maxRows, build, date, extra = '' }) {
+  // 값 토큰은 원문에서만 — tc_design 의 영문 낱말까지 쓰면 큰 시트(EnumInfo 1,600행 등)의 «맞는 행»이 불어나
+  // 추출본이 수 MB 로 커졌다(과거 재현 7기능 +1MB). extra 의 몫은 «작은 시트를 이름으로 부르기»다.
   const tokens = extractValueTokens(raw);
-  const refs = findReferencedSheets(raw, index);
+  const refs = findReferencedSheets(raw, index, extra);
   const blocks = [];
   const missing = [];
   let written = 0;
@@ -134,7 +153,43 @@ function buildExtract(raw, index, readSheet, { maxRows, build, date }) {
   return { md: [header, ...blocks].join('\n\n') + '\n', stats: { referenced: refs.length, written, missing } };
 }
 
-module.exports = { parseTableMap, findReferencedSheets, extractValueTokens, selectRows, renderSheet, buildExtract, DATA_ROW };
+/** 델타 질문의 식별자 — `Recover_TeleportItemUseCount`(밑줄) · `RecoverBaseCost`(CamelCase). 한글 낱말·숫자는 안 받는다. */
+function extractKeyTokens(text) {
+  return new Set(text.match(/\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|\b[A-Z][A-Za-z0-9]*[a-z][A-Za-z0-9]*\b/g) || []);
+}
+
+/**
+ * 델타 질문 → 추출본. 시트 이름이 불린 시트(named)는 buildExtract 와 같은 규칙, 나머지는 식별자와 칸이 같은 행만.
+ * 맞는 행이 0인 시트는 싣지 않는다(시트를 지목한 적이 없으니 «행 0건» 블록도 소음이다).
+ */
+function buildKeyExtract(text, index, readSheet, { maxRows, build, date }) {
+  const tokens = extractKeyTokens(text);
+  const blocks = [];
+  let named = 0, hit = 0;
+  for (const [sheet, meta] of index) {
+    if (sheet.startsWith('#')) continue;
+    const isNamed = wordHit(text, sheet);
+    if (!isNamed && tokens.size === 0) continue;
+    const rows = readSheet(meta.file, sheet);
+    if (!rows) continue;
+    const sel = selectRows(rows, { maxRows, tokens, named: isNamed });
+    if (!isNamed && sel.mode === 'none') continue;
+    blocks.push(renderSheet({ file: meta.file, sheet, rows, sel, build, date }));
+    isNamed ? named++ : hit++;
+  }
+  const header = [
+    '# xlsx_extract (델타) — 델타 대조 질문이 부른 데이터테이블 원본 추출본',
+    '',
+    `> 생성 ${date} · 빌드 ${build} · 결정론 추출(lib/xlsx_extract.js --keys). **판정은 하지 않았다.** S1 추출본(xlsx_extract.md)과 따로 쓴다.`,
+    '> 시트 이름이 불린 시트는 S1 과 같은 규칙, 그 밖은 질문 속 식별자(`A_B`·CamelCase)와 **칸이 정확히 같은 행만** 실었다. 블록 제목을 `source` 에 그대로 옮긴다.',
+    '',
+    `식별자 ${tokens.size} · 이름으로 불린 시트 ${named} · 식별자로 맞은 시트 ${hit}`,
+    '',
+  ].join('\n');
+  return { md: [header, ...blocks].join('\n\n') + '\n', stats: { tokens: tokens.size, named, hit } };
+}
+
+module.exports = { parseTableMap, findReferencedSheets, extractValueTokens, extractKeyTokens, selectRows, renderSheet, buildExtract, buildKeyExtract, DATA_ROW };
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 if (require.main === module) {
@@ -145,12 +200,14 @@ if (require.main === module) {
   const OUT = opt('--out');
   const TABLES = opt('--tables', '<GAMEDATA_ROOT>/ExcelTable');
   const MAX_ROWS = Number(opt('--max-rows', '200'));
+  const KEYS = opt('--keys');
 
-  if (!RAW || !MAP || !OUT || !Number.isInteger(MAX_ROWS) || MAX_ROWS < 1) {
-    console.error('사용: node xlsx_extract.js --raw <confluence_raw.md> --tablemap <_테이블맵.md> --out <xlsx_extract.md> [--tables <dir>] [--max-rows N]');
+  if ((!RAW && !KEYS) || !MAP || !OUT || !Number.isInteger(MAX_ROWS) || MAX_ROWS < 1) {
+    console.error('사용: node xlsx_extract.js (--raw <confluence_raw.md> | --keys <crossref_delta_in.json>) --tablemap <_테이블맵.md> --out <xlsx_extract.md> [--tables <dir>] [--max-rows N]');
     process.exit(2);
   }
-  if (!fs.existsSync(RAW)) { console.error(`[xlsx_extract] 기획서 원문 없음: ${RAW}`); process.exit(2); }
+  const SRC = KEYS || RAW;
+  if (!fs.existsSync(SRC)) { console.error(`[xlsx_extract] 입력 없음: ${SRC}`); process.exit(2); }
   // 원본·색인이 없는 머신(집 PC·CI)에서는 조용히 스킵 — 파이프라인을 막지 않는다.
   if (!fs.existsSync(MAP) || !fs.existsSync(TABLES)) {
     console.error(`[xlsx_extract] 테이블맵/원본 테이블 없음 — 스킵: ${fs.existsSync(MAP) ? TABLES : MAP}`);
@@ -171,10 +228,28 @@ if (require.main === module) {
   };
 
   const index = parseTableMap(fs.readFileSync(MAP, 'utf8'));
-  const raw = fs.readFileSync(RAW, 'utf8');
   const build = path.basename(path.dirname(path.dirname(path.resolve(TABLES))));   // …/Trunk/CommonData/ExcelTable → Trunk
   const date = new Date().toISOString().slice(0, 10);
-  const { md, stats } = buildExtract(raw, index, readSheet, { maxRows: MAX_ROWS, build, date });
+
+  if (KEYS) {
+    let text;
+    try { text = (JSON.parse(fs.readFileSync(KEYS, 'utf8')).items || []).map(i => i.term || '').join('\n'); }
+    catch (e) { console.error(`[xlsx_extract] 델타 입력 JSON 읽기 실패: ${KEYS}`); process.exit(2); }
+    const { md, stats } = buildKeyExtract(text, index, readSheet, { maxRows: MAX_ROWS, build, date });
+    if (stats.named + stats.hit === 0) {
+      console.error(`[xlsx_extract] 델타 질문이 부른 시트·맞는 행 0건(식별자 ${stats.tokens}) — 스킵(추출본 미생성)`);
+      process.exit(4);
+    }
+    fs.mkdirSync(path.dirname(OUT), { recursive: true });
+    fs.writeFileSync(OUT, md, 'utf8');
+    console.error(`[xlsx_extract] 델타 생성 — 식별자 ${stats.tokens} / 이름 ${stats.named} / 행일치 ${stats.hit} · ${(Buffer.byteLength(md) / 1024).toFixed(1)}KB → ${OUT}`);
+    process.exit(0);
+  }
+
+  const extras = argv.flatMap((a, i) => (a === '--extra' && argv[i + 1] ? [argv[i + 1]] : [])).filter(p => fs.existsSync(p));
+  const raw = fs.readFileSync(RAW, 'utf8');
+  const extra = extras.map(p => fs.readFileSync(p, 'utf8')).join('\n\n');
+  const { md, stats } = buildExtract(raw, index, readSheet, { maxRows: MAX_ROWS, build, date, extra });
 
   if (stats.referenced === 0) {
     console.error('[xlsx_extract] 기획서가 지목한 테이블 시트 0건 — 스킵(추출본 미생성)');

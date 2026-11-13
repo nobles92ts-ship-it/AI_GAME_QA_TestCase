@@ -45,11 +45,25 @@ HIGHER_PRECEDENCE = (
 
 
 def newest_cli() -> str:
-    pattern = os.path.join(
+    root = os.path.join(
         context_mode_home(), "plugins", "cache", "context-mode",
-        "context-mode", "*", "cli.bundle.mjs")
-    hits = sorted(glob.glob(pattern))
+        "context-mode")
+    hits = [path for entry in ("cli.bundle.mjs", "server.mjs")
+            for path in glob.glob(os.path.join(root, "*", entry))
+            if os.path.isfile(path)]
+    def order(path):
+        version = os.path.basename(os.path.dirname(path))
+        numeric = tuple(int(part) for part in version.split(".") if part.isdigit())
+        return numeric, os.path.basename(path) == "server.mjs"
+    hits.sort(key=order)
     return hits[-1] if hits else ""
+
+
+def server_args(cli: str) -> list[str]:
+    """v2 publishes server.mjs and resolves the project from agent + cwd."""
+    if os.path.basename(cli) == "server.mjs":
+        return [os.path.abspath(cli), "--agent", "codex" if is_codex() else "claude-code"]
+    return [cli]
 
 
 class Stdio:
@@ -67,10 +81,13 @@ class Stdio:
         # 부모 셸의 platform 식별자가 색인 홈을 바꾸지 않도록 엔진과 맞춘다.
         env["CONTEXT_MODE_PLATFORM"] = "codex" if is_codex() else "claude-code"
         env["CONTEXT_MODE_PROJECT_DIR"] = project_dir
+        if os.path.basename(cli) == "server.mjs" and not is_codex():
+            env["CLAUDE_PROJECT_DIR"] = project_dir
+        options = {"cwd": project_dir} if os.path.basename(cli) == "server.mjs" else {}
         self.p = subprocess.Popen(
-            [node, cli], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            [node, *server_args(cli)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, env=env, text=True,
-            encoding="utf-8", bufsize=1)
+            encoding="utf-8", bufsize=1, **options)
 
     def send(self, obj):
         self.p.stdin.write(json.dumps(obj) + "\n")
@@ -138,6 +155,9 @@ def main() -> int:
     for blk in res["result"].get("content", []):
         if blk.get("type") == "text":
             txt += blk.get("text", "")
+    if res["result"].get("isError"):
+        print(json.dumps({"ok": False, "error": txt[:300]}, ensure_ascii=False))
+        return 1
     print(json.dumps({"ok": True, "project_dir": a.project_dir, "source": a.source,
                       "bundle": a.bundle, "result": txt[:300]}, ensure_ascii=False))
     return 0

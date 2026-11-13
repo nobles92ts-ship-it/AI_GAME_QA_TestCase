@@ -34,8 +34,8 @@ class RuntimePathsTest(unittest.TestCase):
         self.expand.start()
         self.addCleanup(self.expand.stop)
 
-    def cli(self, home, version):
-        path = home / "plugins/cache/context-mode/context-mode" / version / "cli.bundle.mjs"
+    def cli(self, home, version, entry="cli.bundle.mjs"):
+        path = home / "plugins/cache/context-mode/context-mode" / version / entry
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("// offline fixture", encoding="utf-8")
         return str(path)
@@ -64,7 +64,8 @@ class RuntimePathsTest(unittest.TestCase):
         runner_path = Path(__file__).resolve().parents[2] / "scripts/util/run_agent_codex.py"
         spec = importlib.util.spec_from_file_location("runtime_path_test_runner", runner_path)
         runner = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(runner)
+        with patch.object(sys, "path", [str(runner_path.parent), *sys.path]):
+            spec.loader.exec_module(runner)
         return runner
 
     def test_default_claude_keeps_legacy_home_cli_hash_and_status(self):
@@ -109,6 +110,66 @@ class RuntimePathsTest(unittest.TestCase):
         os.environ["TCTEAM_ENGINE"] = "codex"
         self.cli(self.home / ".claude", "1.0.89")
         self.assertEqual(sync.newest_cli(), "")
+
+    def test_codex_v2_server_entry_uses_numeric_version_order(self):
+        os.environ["TCTEAM_ENGINE"] = "codex"
+        profile = self.home / ".codex"
+        self.cli(profile, "1.0.169")
+        self.cli(profile, "2.1.7", "server.mjs")
+        newest = self.cli(profile, "2.1.10", "server.mjs")
+        self.assertEqual(sync.newest_cli(), newest)
+
+    def test_codex_v2_entry_wins_over_legacy_in_same_version(self):
+        os.environ["TCTEAM_ENGINE"] = "codex"
+        profile = self.home / ".codex"
+        self.cli(profile, "2.1.7")
+        server = self.cli(profile, "2.1.7", "server.mjs")
+        self.assertEqual(sync.newest_cli(), server)
+
+    def test_codex_v2_search_and_sync_use_agent_argument_and_project_cwd(self):
+        os.environ["TCTEAM_ENGINE"] = "codex"
+        server = self.cli(self.home / ".codex", "2.1.7", "server.mjs")
+        flags = self.runner().ctx_server_flags()
+        config = tomllib.loads("\n".join(flags[1::2]))["mcp_servers"]["ctx"]
+        self.assertEqual(config["args"], [server, "--agent", "codex"])
+        project = "{PROJECT_ROOT}"
+        with patch.object(sync.subprocess, "Popen") as popen:
+            sync.Stdio("node", server, project)
+        self.assertEqual(popen.call_args.args[0], ["node", server, "--agent", "codex"])
+        self.assertEqual(popen.call_args.kwargs["cwd"], project)
+
+    def test_v2_relative_entry_is_resolved_before_project_cwd_change(self):
+        os.environ["TCTEAM_ENGINE"] = "codex"
+        server = self.cli(self.home / ".codex", "2.1.7", "server.mjs")
+        relative = os.path.relpath(server)
+        with patch.object(sync.subprocess, "Popen") as popen:
+            sync.Stdio("node", relative, "{PROJECT_ROOT}")
+        self.assertEqual(popen.call_args.args[0], ["node", server, "--agent", "codex"])
+
+    def test_v2_claude_server_keeps_its_required_project_environment(self):
+        server = self.cli(self.home / ".claude", "2.1.7", "server.mjs")
+        project = "{PROJECT_ROOT}"
+        with patch.object(sync.subprocess, "Popen") as popen:
+            sync.Stdio("node", server, project)
+        self.assertEqual(popen.call_args.args[0], ["node", server, "--agent", "claude-code"])
+        self.assertEqual(popen.call_args.kwargs["env"]["CLAUDE_PROJECT_DIR"], project)
+
+    def test_index_tool_error_is_not_reported_as_success(self):
+        bundle = self.home / "bundle.md"
+        bundle.write_text("offline fixture", encoding="utf-8")
+        server = self.cli(self.home / ".codex", "2.1.7", "server.mjs")
+        denied = {"result": {"isError": True, "content": [
+            {"type": "text", "text": "Path is outside the project"}]}}
+        output = io.StringIO()
+        argv = ["sync", "--project-dir", str(self.home), "--source", "fixture",
+                "--bundle", str(bundle), "--cli", server]
+        with patch.object(sync, "Stdio") as client, patch.object(sys, "argv", argv), \
+                contextlib.redirect_stdout(output):
+            client.return_value.read.side_effect = [{"result": {}}, denied]
+            code = sync.main()
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(output.getvalue()),
+                         {"ok": False, "error": "Path is outside the project"})
 
     def test_codex_drops_storage_overrides_like_search_child(self):
         project = "{PROJECT_ROOT}"

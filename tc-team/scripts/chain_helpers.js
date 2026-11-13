@@ -16,6 +16,7 @@
  *   assemble-coverage <workdir>                  cov_chunk_*.json → coverage.json + exclusions.json
  *   validate-json <file> <kind>                  findings|fixplan|coverage|exclusions|labels 구조 검증
  *   readback-diff <final.json> <dump.json>       S6 read-back: A~G+J 0-diff + #ERROR 검사 exit 0/1
+ *   remap-coverage <workdir> <idmap.json>        S5 적용·regroup 뒤 coverage.json 옛 번호 → 최종 번호 (지문 대조 · fail-closed)
  *   seal-coverage <workdir>                      봉합 후 coverage.json에 신규 tc_id 결정론 병합
  *   final-report <spec> <workdir> <feature>      final_report.txt 작성 (탭·행수·단계시간·FINAL-6)
  *
@@ -208,7 +209,7 @@ if (cmd === 'extract-s3-rules') {
 
 } else if (cmd === 'readback-diff') {
   // final.json rows: 10열 [A..J] (인덱스 0..9). dump: read_gsheet_data.js 출력 {rows:[[...]]}.
-  // tc_id(A열, 숫자 3자리) 조인으로 A~G + 비고 비교 — 헤더/패널 행 오프셋에 강건.
+  // tc_id(A열, 숫자 3자리 이상) 조인으로 A~G + 비고 비교 — 헤더/패널 행 오프셋에 강건.
   // ⚠ final과 시트는 열 수가 다르다: 시트는 11열(… I=모바일결과, J=링크, K=비고)이고
   //   final의 10번째(인덱스 9)는 sheet_write PICK7=[1,2,3,4,5,6,9]가 비고로 보내는 값이다.
   //   → 비고는 final 9 ↔ 시트 10 으로 대응시켜야 한다. 같은 인덱스(9)끼리 비교하면 시트의 J(링크,
@@ -219,7 +220,9 @@ if (cmd === 'extract-s3-rules') {
   const fin = readJ(a[0]);
   const dump = readJ(a[1]);
   const finRows = fin.rows || fin;
-  const isId = (v) => typeof v === 'string' && /^\d{3}$/.test(v.trim());
+  // S5 padStart(3) emits three digits only until the sheet exceeds 999 rows;
+  // keep the ID as text (including leading zeroes) but accept all standard widths.
+  const isId = (v) => typeof v === 'string' && /^\d{3,}$/.test(v.trim());
   const norm = (v) => String(v == null ? '' : v).replace(/\r\n/g, '\n').trim();
   const dumpById = new Map();
   let errCells = 0;
@@ -255,6 +258,30 @@ if (cmd === 'extract-s3-rules') {
   if (dumpById.size !== finRows.length) { console.log(`행수 불일치: 시트 ${dumpById.size} ≠ 최종본 ${finRows.length}`); diffs++; }
   if (diffs) { console.log(`read-back diff ${diffs}건`); process.exit(1); }
   console.log('0-diff ok (' + finRows.length + '행)');
+
+} else if (cmd === 'remap-coverage') {
+  // S5 apply_fix_plan(--idmap) + regroup 뒤: coverage.json 의 S4(스냅샷) 번호를 최종 번호로 고친다 (2026-11-06).
+  //   ① 표가 만든 «예상 최종본» 지문 = 실제 tcteam_tc_final.json 지문이어야 고친다 — 다르면 원장 손대지 않고 exit 1.
+  //   ② 표에도 삭제 목록에도 없는 번호가 있으면 exit 1(원장이 이 스냅샷 것이 아니다).
+  //   ③ 지운 TC 로만 덮이던 규칙은 tc_ids 가 비어 미커버가 된다 — 뒤이은 traceability 봉합 루프가 다시 전개한다.
+  //   성공하면 coverage_idspace.json 에 최종 지문을 남긴다 — quality_report 가 «같은 번호 기준인지» 대 본다.
+  const { rowsDigest, remapCoverage } = require('../lib/id_space');
+  const [W, mapPath] = a;
+  if (!W || !mapPath) die('사용: remap-coverage <workdir> <idmap.json>');
+  const idmap = readJ(mapPath);
+  const fin = readJ(path.join(W, 'tcteam_tc_final.json'));
+  const finRows = fin.rows || fin;
+  const dg = rowsDigest(finRows);
+  if (dg !== idmap.final_digest) die(`remap-coverage: 최종본 지문 불일치 — 표 ${String(idmap.final_digest).slice(0, 12)} / 실제 ${dg.slice(0, 12)} (행 ${idmap.final_rows}/${finRows.length}). apply 와 remap 사이에 최종본이 바뀌었다 — 원장은 고치지 않았다`);
+  const covPath = path.join(W, 'coverage.json');
+  const res = remapCoverage(readJ(covPath), idmap);
+  if (res.unknown.length) die('remap-coverage: 번호 표에 없는 tc_id ' + res.unknown.length + '개 — ' + JSON.stringify(res.unknown.slice(0, 5)) + ' (원장이 이 스냅샷 기준이 아니다) — 원장은 고치지 않았다');
+  const moved = Object.entries(idmap.map).filter(([o, n]) => o !== n).length;
+  fs.writeFileSync(covPath + '.tmp', JSON.stringify(res.coverage, null, 1)); fs.renameSync(covPath + '.tmp', covPath);
+  const sp = path.join(W, 'coverage_idspace.json');
+  fs.writeFileSync(sp + '.tmp', JSON.stringify({ final_digest: dg, final_rows: finRows.length, source: path.basename(mapPath) }, null, 1));
+  fs.renameSync(sp + '.tmp', sp);
+  console.log(`remap-coverage ok — 번호 바뀐 TC ${moved} · 지운 TC 연결 ${res.dropped.length} · 비게 된 규칙 ${res.emptied.length}${res.emptied.length ? ' (' + res.emptied.join(', ') + ')' : ''}`);
 
 } else if (cmd === 'seal-coverage') {
   // 봉합 add_row 적용 후: coverage_seal.json의 f 전문을 tcteam_tc_final.json에서 찾아
@@ -338,6 +365,23 @@ if (cmd === 'extract-s3-rules') {
     // 없으면 정상(구 런·5a 실패). 있는데 못 읽으면 뺀 질문을 아무도 못 본다 — 조용히 넘기지 않는다.
     if (e.code !== 'ENOENT') dropped5 = `⚠ 질문 단계(5a) 거르기 기록(_labels_dropped.json)을 읽지 못했습니다 — 뺀 질문을 확인할 수 없습니다 (${e.message})`;
   }
+  // 기획 답을 기다리는데 패널에 질문이 없는 TC(finalize.sh FINAL-5a · lib/waiting_tcs.js · 2026-11-06) — 교정 라운드 뒤에도 남은 것만 온다.
+  let waiting5 = '';
+  try { waiting5 = fs.readFileSync(path.join(SPEC, '.final5_waiting.txt'), 'utf8').trim(); } catch (e) { /* 없으면 정상 */ }
+  // 도장 묶음(lib/dup_gate.js stamps · 2026-11-13) — 같은 틀 문장이 소분류 3곳 이상에 찍힌 묶음. 위반이 아니라 훑어볼 숫자라 notice 자리.
+  //   배경: 최신 20런 7,502행 중 도장형 456행이 chain.log 유사 쌍 목록에만 묻혀 아무도 못 봤다.
+  let stamps = '';
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(W, 'dup_report_final.json'), 'utf8'));
+    if (Array.isArray(d.stamps) && d.stamps.length) {
+      const top = d.stamps.slice(0, 3).map(s => `   · ${s.size}행·소분류 ${s.classes}곳 — ${String(s.text).slice(0, 70)}`);
+      stamps = [
+        `🔎 도장 묶음 ${d.stamps.length}개 · ${d.stamps.reduce((n, s) => n + s.size, 0)}행 — 같은 틀 문장이 소분류 3곳 이상에 반복됩니다. 정당한 전개일 수 있으니 한 번 훑어 주세요.`,
+        ...top,
+        '   전체: dup_report_final.json 의 stamps',
+      ].join('\n');
+    }
+  } catch (e) { /* 없거나 구 형식(stamps 없음)이면 줄 없음 — 리포트용이라 조용히 넘긴다 */ }
   let quality = '';
   try {
     if (fs.existsSync(path.join(W, '.quality_report_alert.txt'))) throw new Error('생성 실패 알림 확인');
@@ -357,6 +401,8 @@ if (cmd === 'extract-s3-rules') {
     quality,
     cheatNotice,
     notice5,
+    waiting5,
+    stamps,
     dropped5,
     removed5,
     '',

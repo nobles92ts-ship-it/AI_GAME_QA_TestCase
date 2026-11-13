@@ -544,8 +544,9 @@ if [[ $ST -le 5 ]]; then
   #   남으면 같은 패치를 「이미 적용」으로 건너뛰어 S4 수정·봉합 행이 조용히 빠진다(실발현 기능V_v2 08-11 —
   #   exit 0 으로 끝나 skipped 숫자 말고는 신호가 없었다). 원장·봉합 산출을 비우고, 봉합이 제자리에서 고친
   #   coverage.json 을 S4 조립본으로 되돌린다. 테스트 = 사내 회귀 테스트(실데이터 픽스처라 공개 배포본 미포함)
-  rm -f "$WORK/applied_patches.json" "$WORK/applied_patches_seal.json" "$WORK/fix_plan_seal.json" "$WORK/coverage_seal.json" 2>/dev/null
-  for f in applied_patches.json applied_patches_seal.json fix_plan_seal.json coverage_seal.json; do
+  rm -f "$WORK/applied_patches.json" "$WORK/applied_patches_seal.json" "$WORK/fix_plan_seal.json" "$WORK/coverage_seal.json" \
+        "$WORK/idmap_s5.json" "$WORK/idmap_seal.json" "$WORK/coverage_idspace.json" 2>/dev/null
+  for f in applied_patches.json applied_patches_seal.json fix_plan_seal.json coverage_seal.json idmap_s5.json idmap_seal.json coverage_idspace.json; do
     [[ -e "$WORK/$f" ]] && stop_integrity "S5 원장 초기화 실패 — $f 가 지워지지 않았다(잠김·디렉터리?). 남은 원장은 S4 수정을 건너뛰게 하고, 남은 봉합 산출은 봉합 에이전트가 못 써도 검증을 통과해 지난 봉합이 적용된다"
   done
   if [[ -f "$WORK/coverage_s4.json" && -f "$WORK/exclusions_s4.json" ]]; then
@@ -557,8 +558,11 @@ if [[ $ST -le 5 ]]; then
     log "[S5][경고] S4 커버리지 원장 사본·청크 없음 — coverage.json 을 그대로 쓴다(지난 봉합 흔적이 남았을 수 있다)"
   fi
   log "[S5] fix_plan 적용"
-  "$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_snapshot.json" "$WORK/fix_plan.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches.json" >>"$CHAIN_LOG" 2>&1 || fail "S5 apply_fix_plan 실패"
+  "$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_snapshot.json" "$WORK/fix_plan.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches.json" --idmap "$WORK/idmap_s5.json" >>"$CHAIN_LOG" 2>&1 || fail "S5 apply_fix_plan 실패"
   "$NODE" "$LIB/regroup.js" "$WORK/tcteam_tc_final.json" "$WORK/tcteam_tc_final.json" >>"$CHAIN_LOG" 2>&1 || fail "S5 regroup 실패"
+  # 원장 번호 맞추기 (2026-11-06): S4 원장은 스냅샷 번호다. 끼우기·지우기·regroup 뒤 번호로 고치지 않으면
+  #   연결이 다른 TC 를 가리킨 채 통과한다(최근 8런 중 6런 실측 · 09-24 감사 P3-b). 지문 불일치·모르는 번호 = 멈춤.
+  vhelp remap-coverage "$WORK" "$WORK/idmap_s5.json" || stop_integrity "S5 커버리지 원장 번호 맞추기 실패 — chain.log 의 remap-coverage 줄 확인"
   "$NODE" "$LIB/content_gate.js" "$WORK/tcteam_tc_final.json" >>"$CHAIN_LOG" 2>&1 || stop_integrity "S5 content_gate 위반 — fix_plan 산출 확인 필요"
   # 완전 동일 중복 차단 (2026-07-28): S4 판정자가 dup_report의 exact를 처리하지 않으면 여기서 막는다.
   #   유사쌍은 정당한 분리일 수 있어 차단하지 않는다 — exact(F열 완전 일치)만 게이트.
@@ -588,8 +592,10 @@ PEOF
     P=${P//__UNCOV__/$UNCOV}; P=${P//__WORK__/$WORK}
     run_llm "S5-봉합" sonnet "$P" || fail "S5 봉합 에이전트 실패"
     "$NODE" "$HELPERS" validate-json "$WORK/fix_plan_seal.json" fixplan >/dev/null 2>&1 || stop_integrity "S5 봉합 fix_plan 검증 실패"
-    "$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_tc_final.json" "$WORK/fix_plan_seal.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches_seal.json" >>"$CHAIN_LOG" 2>&1 || stop_integrity "S5 봉합 적용 실패"
+    "$NODE" "$LIB/apply_fix_plan.js" "$WORK/tcteam_tc_final.json" "$WORK/fix_plan_seal.json" "$WORK/tcteam_tc_final.json" --ledger "$WORK/applied_patches_seal.json" --idmap "$WORK/idmap_seal.json" >>"$CHAIN_LOG" 2>&1 || stop_integrity "S5 봉합 적용 실패"
     "$NODE" "$LIB/regroup.js" "$WORK/tcteam_tc_final.json" "$WORK/tcteam_tc_final.json" >>"$CHAIN_LOG" 2>&1 || fail "S5 봉합 regroup 실패"
+    # 봉합 행도 같은 소분류 «중간»에 끼므로 뒤 번호가 밀린다 — 신규 번호 병합(seal-coverage) «전»에 기존 번호부터 맞춘다
+    vhelp remap-coverage "$WORK" "$WORK/idmap_seal.json" || stop_integrity "S5 봉합 뒤 커버리지 원장 번호 맞추기 실패 — chain.log 의 remap-coverage 줄 확인"
     "$NODE" "$LIB/content_gate.js" "$WORK/tcteam_tc_final.json" >>"$CHAIN_LOG" 2>&1 || stop_integrity "S5 봉합 후 content_gate 위반"
     vhelp seal-coverage "$WORK" || stop_integrity "S5 봉합 coverage 병합 실패(f 전문 미매칭)"
     SEALED=1
